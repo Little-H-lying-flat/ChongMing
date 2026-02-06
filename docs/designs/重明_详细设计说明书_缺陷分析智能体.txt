@@ -1,0 +1,642 @@
+重明 (ChongMing) 详细设计说明书：缺陷分析智能体 (Defect Analyzer Agent)
+所属层级：智能层 (Intelligence Layer) - 分析侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+缺陷分析智能体 (Defect Analyzer Agent) 是重明架构中负责 "诊" (Diagnose) 和 "愈" (Heal) 的核心组件。它像一位资深的测试专家，不仅能发现问题，还能深入分析根因、评估影响、提供修复建议。
+
+其核心设计哲学是 "Root-Cause-Driven, Knowledge-Accumulated" (根因驱动，知识沉淀)：
+- 根因分析：AI 推理缺陷的根本原因（代码/设计/需求/环境）
+- 影响评估：分析缺陷影响的模块范围
+- 智能关联：基于向量检索匹配历史相似缺陷
+- 知识沉淀：修复后的经验自动入库
+
+1.2 核心职责
+- 根因分析 (Root Cause Analysis)：推理缺陷产生的根本原因
+- 影响范围评估 (Impact Assessment)：分析受影响的模块和功能
+- 修复建议 (Fix Suggestion)：提供具体的修复方案
+- 相似缺陷匹配 (Similar Defect Matching)：基于 Milvus 检索历史缺陷
+- 预防措施 (Prevention Measures)：提供预防类似问题的建议
+- 缺陷关联 (Defect Correlation)：自动关联测试失败与已知缺陷
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 输入层 (Input Layer)
+        FAILURE[测试失败记录]
+        TRACE[执行轨迹 Trace]
+        CODE[相关代码上下文]
+    end
+    
+    subgraph Defect Analyzer Agent
+        subgraph Context Collector [上下文收集层]
+            FAILURE --> COLLECTOR[失败信息收集器]
+            TRACE --> COLLECTOR
+            CODE --> COLLECTOR
+            COLLECTOR --> CONTEXT[完整上下文]
+        end
+        
+        subgraph Root Cause Analyzer [根因分析层]
+            CONTEXT --> LLM1[Qwen3-Max]
+            LLM1 --> RCA[根因分析报告]
+        end
+        
+        subgraph Impact Assessor [影响评估层]
+            RCA --> LLM2[Qwen3-Max]
+            LLM2 --> IMPACT[影响范围报告]
+        end
+        
+        subgraph Similar Matcher [相似匹配层]
+            CONTEXT --> EMBED[向量嵌入]
+            EMBED --> MILVUS[(Milvus)]
+            MILVUS --> SIMILAR[相似缺陷列表]
+        end
+        
+        subgraph Fix Suggester [修复建议层]
+            RCA --> LLM3[Qwen3-Max]
+            SIMILAR --> LLM3
+            LLM3 --> FIX[修复建议]
+            LLM3 --> PREVENT[预防措施]
+        end
+        
+        subgraph Knowledge Base [知识沉淀层]
+            FIX --> KB[(缺陷知识库)]
+            PREVENT --> KB
+        end
+    end
+    
+    subgraph 输出层 (Output Layer)
+        RCA --> REPORT[缺陷分析报告]
+        IMPACT --> REPORT
+        FIX --> REPORT
+        PREVENT --> REPORT
+    end
+
+2.2 核心类图
+
+- DefectAnalyzerAgent: 智能体入口，编排分析流程
+- ContextCollector: 上下文收集器
+- RootCauseAnalyzer: 根因分析器
+- ImpactAssessor: 影响评估器
+- SimilarDefectMatcher: 相似缺陷匹配器 (Milvus)
+- FixSuggester: 修复建议生成器
+- DefectKnowledgeBase: 缺陷知识库
+
+3. 上下文收集层 (Context Collector)
+
+3.1 收集信息类型
+
+| 信息类型 | 内容 | 来源 |
+|---------|------|------|
+| 失败信息 | 错误消息、堆栈跟踪 | 测试执行器 |
+| 执行轨迹 | 操作步骤、截图、网络请求 | Trace Log |
+| 代码上下文 | 相关源代码片段 | Git 仓库 |
+| 环境信息 | 浏览器版本、系统配置 | 执行环境 |
+| 历史记录 | 该用例历史通过/失败记录 | 报告数据库 |
+
+3.2 上下文组装
+
+class ContextCollector:
+    async def collect(self, failure: TestFailure) -> DefectContext:
+        # 1. 基础失败信息
+        basic_info = {
+            "test_case_id": failure.tc_id,
+            "test_case_name": failure.tc_name,
+            "error_message": failure.error,
+            "stack_trace": failure.stack_trace,
+            "failed_step": failure.step_index,
+            "timestamp": failure.timestamp
+        }
+        
+        # 2. 执行轨迹
+        trace = await self.trace_store.get(failure.execution_id)
+        
+        # 3. 相关代码上下文 (如果可用)
+        code_context = None
+        if failure.source_file:
+            code_context = await self.code_fetcher.get_context(
+                file=failure.source_file,
+                line=failure.line_number,
+                context_lines=20
+            )
+        
+        # 4. 历史记录
+        history = await self.history_store.get_recent(
+            tc_id=failure.tc_id, 
+            limit=10
+        )
+        
+        # 5. 环境信息
+        env_info = failure.environment
+        
+        return DefectContext(
+            basic_info=basic_info,
+            trace=trace,
+            code_context=code_context,
+            history=history,
+            environment=env_info
+        )
+
+4. 根因分析层 (Root Cause Analyzer)
+
+4.1 缺陷分类体系
+
+根因类型 (Root Cause Categories):
+
+├── 代码缺陷 (Code Defect)
+│   ├── 逻辑错误 (Logic Error)
+│   ├── 边界处理 (Boundary Handling)
+│   ├── 空指针 (Null Reference)
+│   ├── 并发问题 (Concurrency Issue)
+│   └── 资源泄露 (Resource Leak)
+│
+├── 设计缺陷 (Design Defect)
+│   ├── 接口设计不合理 (Poor Interface Design)
+│   ├── 状态管理问题 (State Management)
+│   └── 耦合过紧 (Tight Coupling)
+│
+├── 需求缺陷 (Requirement Defect)
+│   ├── 需求不明确 (Ambiguous Requirement)
+│   ├── 需求遗漏 (Missing Requirement)
+│   └── 需求冲突 (Conflicting Requirements)
+│
+├── 环境问题 (Environment Issue)
+│   ├── 配置错误 (Configuration Error)
+│   ├── 网络问题 (Network Issue)
+│   ├── 依赖服务异常 (Dependency Failure)
+│   └── 资源不足 (Resource Exhaustion)
+│
+└── 测试问题 (Test Issue)
+    ├── 测试数据问题 (Test Data Issue)
+    ├── 测试脚本错误 (Test Script Error)
+    └── 时序问题 (Timing Issue)
+
+4.2 根因分析 Prompt
+
+class RootCauseAnalyzer:
+    async def analyze(self, context: DefectContext) -> RootCauseReport:
+        prompt = f"""
+你是一位资深的软件质量专家。请分析以下测试失败的根本原因。
+
+【测试用例信息】
+- 用例ID: {context.basic_info['test_case_id']}
+- 用例名称: {context.basic_info['test_case_name']}
+- 失败步骤: 第 {context.basic_info['failed_step']} 步
+
+【错误信息】
+{context.basic_info['error_message']}
+
+【堆栈跟踪】
+{context.basic_info['stack_trace']}
+
+【执行轨迹摘要】
+{self._summarize_trace(context.trace)}
+
+【相关代码片段】
+{context.code_context if context.code_context else '不可用'}
+
+【历史执行记录】
+最近10次执行：{self._format_history(context.history)}
+
+【环境信息】
+{json.dumps(context.environment, ensure_ascii=False)}
+
+请输出 JSON 格式的根因分析报告：
+{{
+  "root_cause_category": "代码缺陷|设计缺陷|需求缺陷|环境问题|测试问题",
+  "root_cause_subcategory": "具体子类型",
+  "root_cause_description": "根因的详细描述",
+  "evidence": ["支撑该结论的证据1", "证据2"],
+  "confidence": 0.0-1.0,
+  "reasoning": "分析推理过程"
+}}
+"""
+        response = await self.llm.generate(prompt, model="qwen3-max")
+        return self._parse_response(response)
+
+4.3 根因分析示例
+
+输入：
+- 错误信息: "Element not found: [data-testid='submit-btn']"
+- 执行轨迹: 登录成功 → 导航到表单页 → 填写表单 → 点击提交 (失败)
+- 历史记录: 最近5次全部失败
+
+输出：
+{
+  "root_cause_category": "代码缺陷",
+  "root_cause_subcategory": "逻辑错误",
+  "root_cause_description": "提交按钮的 data-testid 属性被意外删除或修改。从历史记录看，该用例从2月5日开始持续失败，推测是当天的前端代码提交导致。",
+  "evidence": [
+    "错误明确指出元素选择器找不到目标",
+    "该用例在2月5日前连续通过，之后连续失败",
+    "登录和表单填写步骤正常，仅提交按钮定位失败"
+  ],
+  "confidence": 0.9,
+  "reasoning": "根据错误类型和历史趋势，这是一个典型的前端代码变更导致的元素定位失败问题"
+}
+
+5. 影响范围评估 (Impact Assessment)
+
+5.1 影响维度
+
+| 维度 | 说明 | 评估方法 |
+|------|------|---------|
+| 功能影响 | 受影响的功能模块 | 分析用例覆盖的业务功能 |
+| 用户影响 | 受影响的用户群体 | 分析功能的用户使用频率 |
+| 依赖影响 | 依赖该功能的其他模块 | 分析用例依赖图 |
+| 业务影响 | 对业务流程的影响程度 | 结合业务优先级评估 |
+
+5.2 影响评估器
+
+class ImpactAssessor:
+    async def assess(self, root_cause: RootCauseReport, 
+                     context: DefectContext) -> ImpactReport:
+        # 1. 分析受影响的功能模块
+        affected_modules = await self._analyze_modules(context)
+        
+        # 2. 分析依赖关系
+        dependent_cases = await self._find_dependents(context.basic_info['test_case_id'])
+        
+        # 3. 评估业务影响
+        business_impact = await self._assess_business_impact(
+            modules=affected_modules,
+            root_cause=root_cause
+        )
+        
+        return ImpactReport(
+            affected_modules=affected_modules,
+            dependent_test_cases=dependent_cases,
+            user_impact=self._estimate_user_impact(affected_modules),
+            business_impact=business_impact,
+            severity=self._calculate_severity(business_impact)
+        )
+
+5.3 影响报告示例
+
+{
+  "affected_modules": [
+    {"name": "订单提交", "impact_level": "high"},
+    {"name": "支付流程", "impact_level": "high"},
+    {"name": "订单列表", "impact_level": "medium"}
+  ],
+  "dependent_test_cases": [
+    "TC_ORDER_002 (订单支付)",
+    "TC_ORDER_003 (订单取消)",
+    "TC_ORDER_004 (订单退款)"
+  ],
+  "user_impact": {
+    "affected_user_percentage": 80,
+    "description": "所有需要下单的用户都会受到影响"
+  },
+  "business_impact": {
+    "level": "critical",
+    "description": "核心交易流程中断，直接影响营收"
+  },
+  "severity": "P0"
+}
+
+6. 相似缺陷匹配 (Similar Defect Matching)
+
+6.1 基于 Milvus 的向量检索
+
+class SimilarDefectMatcher:
+    def __init__(self):
+        self.milvus = MilvusClient(host="localhost", port=19530)
+        self.collection = "defect_knowledge"
+        self.embedding_model = "text-embedding-3-small"
+    
+    async def find_similar(self, context: DefectContext, top_k: int = 5) -> list:
+        # 1. 构建查询文本
+        query_text = f"""
+        错误类型: {context.basic_info['error_message'][:200]}
+        失败步骤: {context.trace[-1] if context.trace else ''}
+        """
+        
+        # 2. 向量化
+        query_vector = self.embedding_model.encode(query_text)
+        
+        # 3. Milvus 检索
+        results = self.milvus.search(
+            collection_name=self.collection,
+            data=[query_vector],
+            anns_field="embedding",
+            limit=top_k,
+            output_fields=["defect_id", "title", "root_cause", "fix_solution"]
+        )
+        
+        return [
+            SimilarDefect(
+                defect_id=hit.entity.get("defect_id"),
+                title=hit.entity.get("title"),
+                root_cause=hit.entity.get("root_cause"),
+                fix_solution=hit.entity.get("fix_solution"),
+                similarity=hit.score
+            )
+            for hit in results[0]
+        ]
+
+6.2 Milvus Schema 设计
+
+{
+  "collection_name": "defect_knowledge",
+  "fields": [
+    {"name": "defect_id", "type": "VARCHAR", "max_length": 64},
+    {"name": "title", "type": "VARCHAR", "max_length": 256},
+    {"name": "error_pattern", "type": "VARCHAR", "max_length": 1024},
+    {"name": "root_cause", "type": "VARCHAR", "max_length": 2048},
+    {"name": "fix_solution", "type": "VARCHAR", "max_length": 2048},
+    {"name": "prevention", "type": "VARCHAR", "max_length": 2048},
+    {"name": "embedding", "type": "FLOAT_VECTOR", "dim": 1536}
+  ],
+  "index": {
+    "field": "embedding",
+    "type": "HNSW",
+    "params": {"M": 16, "efConstruction": 256}
+  }
+}
+
+7. 修复建议生成 (Fix Suggestion)
+
+7.1 修复建议器
+
+class FixSuggester:
+    async def suggest(self, root_cause: RootCauseReport, 
+                      similar_defects: list[SimilarDefect]) -> FixSuggestion:
+        # 构建 Prompt，注入历史修复经验
+        similar_fixes = "\n".join([
+            f"- {d.title}: {d.fix_solution}" 
+            for d in similar_defects[:3]
+        ])
+        
+        prompt = f"""
+你是一位资深的软件开发专家。请根据以下缺陷分析，提供具体的修复建议。
+
+【根因分析】
+类型: {root_cause.root_cause_category} / {root_cause.root_cause_subcategory}
+描述: {root_cause.root_cause_description}
+
+【相似历史缺陷的修复方案】
+{similar_fixes if similar_fixes else '无相关历史记录'}
+
+请输出 JSON 格式的修复建议：
+{{
+  "immediate_fix": {{
+    "description": "紧急修复方案",
+    "steps": ["步骤1", "步骤2"],
+    "code_changes": [
+      {{"file": "文件路径", "change": "修改内容"}}
+    ],
+    "estimated_effort": "小时数"
+  }},
+  "long_term_fix": {{
+    "description": "长期优化方案",
+    "steps": ["步骤1", "步骤2"]
+  }},
+  "prevention_measures": [
+    "预防措施1",
+    "预防措施2"
+  ],
+  "test_recommendations": [
+    "建议增加的测试用例"
+  ]
+}}
+"""
+        response = await self.llm.generate(prompt, model="qwen3-max")
+        return self._parse_response(response)
+
+7.2 修复建议示例
+
+{
+  "immediate_fix": {
+    "description": "恢复提交按钮的 data-testid 属性",
+    "steps": [
+      "定位到 src/components/OrderForm.vue 文件",
+      "找到提交按钮组件",
+      "添加 data-testid='submit-btn' 属性"
+    ],
+    "code_changes": [
+      {
+        "file": "src/components/OrderForm.vue",
+        "change": "<button class='submit'>提交</button> → <button class='submit' data-testid='submit-btn'>提交</button>"
+      }
+    ],
+    "estimated_effort": "0.5 小时"
+  },
+  "long_term_fix": {
+    "description": "建立前端组件的测试属性规范",
+    "steps": [
+      "制定 data-testid 命名规范文档",
+      "添加 ESLint 规则检查关键组件必须有 data-testid",
+      "在 CI 中增加检查步骤"
+    ]
+  },
+  "prevention_measures": [
+    "所有可交互组件必须添加 data-testid 属性",
+    "代码审查时检查测试属性的完整性",
+    "添加 pre-commit hook 检测测试属性删除"
+  ],
+  "test_recommendations": [
+    "增加回归测试检验关键元素的 data-testid 存在性"
+  ]
+}
+
+8. 缺陷自动关联 (Defect Correlation)
+
+8.1 关联策略
+
+| 策略 | 描述 | 置信度 |
+|------|------|--------|
+| 精确匹配 | 错误消息完全相同 | 高 |
+| 模式匹配 | 错误模式相似 | 中 |
+| 向量相似 | 语义相似度 > 0.9 | 中 |
+| 时间关联 | 相同时间段内批量失败 | 低 |
+
+8.2 自动关联流程
+
+class DefectCorrelator:
+    async def correlate(self, failure: TestFailure) -> CorrelationResult:
+        # 1. 精确匹配：查找相同错误消息的已知缺陷
+        exact_match = await self.defect_db.find_by_error(failure.error)
+        if exact_match:
+            return CorrelationResult(
+                defect_id=exact_match.id,
+                confidence=0.95,
+                match_type="exact"
+            )
+        
+        # 2. 向量相似匹配
+        similar = await self.similar_matcher.find_similar(failure, top_k=1)
+        if similar and similar[0].similarity > 0.9:
+            return CorrelationResult(
+                defect_id=similar[0].defect_id,
+                confidence=similar[0].similarity,
+                match_type="semantic"
+            )
+        
+        # 3. 无匹配，创建新缺陷
+        return CorrelationResult(
+            defect_id=None,
+            confidence=0,
+            match_type="none",
+            suggest_create_new=True
+        )
+
+9. 知识沉淀层 (Knowledge Base)
+
+9.1 知识入库流程
+
+缺陷修复完成
+       ↓
+   提取修复经验
+       ↓
+   向量化存储到 Milvus
+       ↓
+   更新缺陷知识库
+
+class DefectKnowledgeBase:
+    async def save_resolution(self, defect: Defect, resolution: Resolution):
+        # 1. 构建知识文档
+        knowledge_doc = {
+            "defect_id": defect.id,
+            "title": defect.title,
+            "error_pattern": defect.error_pattern,
+            "root_cause": resolution.root_cause,
+            "fix_solution": resolution.fix_steps,
+            "prevention": resolution.prevention_measures,
+            "resolved_at": datetime.now()
+        }
+        
+        # 2. 向量化
+        text = f"{defect.title} {defect.error_pattern} {resolution.root_cause}"
+        embedding = self.embedding_model.encode(text)
+        knowledge_doc["embedding"] = embedding
+        
+        # 3. 存入 Milvus
+        await self.milvus.insert(
+            collection_name="defect_knowledge",
+            data=[knowledge_doc]
+        )
+
+10. API 接口设计
+
+10.1 分析缺陷
+
+POST /api/v1/defect-analyzer/analyze
+{
+  "execution_id": "EXEC_001",
+  "test_case_id": "TC_ORDER_001",
+  "failure_info": {
+    "error": "Element not found: [data-testid='submit-btn']",
+    "stack_trace": "..."
+  }
+}
+
+响应：
+{
+  "analysis_id": "ANALYSIS_001",
+  "root_cause": {...},
+  "impact": {...},
+  "similar_defects": [...],
+  "fix_suggestion": {...}
+}
+
+10.2 关联已知缺陷
+
+POST /api/v1/defect-analyzer/correlate
+{
+  "failure_id": "FAIL_001"
+}
+
+10.3 保存修复经验
+
+POST /api/v1/defect-analyzer/save-knowledge
+{
+  "defect_id": "BUG_001",
+  "resolution": {
+    "root_cause": "...",
+    "fix_steps": "...",
+    "prevention": "..."
+  }
+}
+
+11. 前端界面设计
+
++------------------------------------------------------------------+
+| 🔍 缺陷分析报告                         TC_ORDER_001 - 订单提交   |
++------------------------------------------------------------------+
+|                                                                  |
+| 【根因分析】                                                     |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │ 类型: 代码缺陷 / 逻辑错误                     置信度: 90%   │  |
+| │                                                             │  |
+| │ 描述: 提交按钮的 data-testid 属性被意外删除                 │  |
+| │                                                             │  |
+| │ 证据:                                                       │  |
+| │ • 元素选择器明确找不到目标                                  │  |
+| │ • 用例从2月5日开始持续失败                                  │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| 【影响范围】                                     严重度: P0      |
+| • 订单提交 (高)  • 支付流程 (高)  • 订单列表 (中)               |
+| • 影响用例: TC_ORDER_002, TC_ORDER_003, TC_ORDER_004            |
+|                                                                  |
+| 【相似历史缺陷】                                                 |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │ BUG_2025_089 - 登录按钮 data-testid 丢失       相似度: 95% │  |
+| │ 修复方案: 恢复 data-testid 属性，添加 ESLint 规则          │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| 【修复建议】                                                     |
+| 紧急修复: 在 OrderForm.vue 中添加 data-testid="submit-btn"      |
+| 预计工时: 0.5 小时                                               |
+|                                                                  |
+| [复制修复方案]  [关联已知缺陷]  [创建新缺陷]                     |
++------------------------------------------------------------------+
+
+12. LLM 选型配置
+
+| 子模块 | 推荐模型 | 理由 |
+|-------|---------|------|
+| 根因分析 | Qwen3-Max | 需要复杂推理能力 |
+| 影响评估 | Qwen3-Max | 需要理解业务逻辑 |
+| 修复建议 | Qwen3-Max | 需要代码理解能力 |
+| 向量嵌入 | text-embedding-3-small | 语义检索 |
+
+13. 部署说明
+
+13.1 Milvus 部署
+
+# docker-compose.yml
+services:
+  milvus:
+    image: milvusdb/milvus:v2.3.0
+    ports:
+      - "19530:19530"
+    volumes:
+      - ./milvus_data:/var/lib/milvus
+
+13.2 配置
+
+defect_analyzer:
+  llm:
+    model: qwen3-max
+    temperature: 0.1
+  
+  milvus:
+    host: localhost
+    port: 19530
+    collection: defect_knowledge
+  
+  embedding:
+    model: text-embedding-3-small
+  
+  similarity_threshold: 0.85
+
+End of Design Document

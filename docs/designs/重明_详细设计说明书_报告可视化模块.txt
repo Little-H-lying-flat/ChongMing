@@ -1,0 +1,393 @@
+重明 (ChongMing) 详细设计说明书：报告可视化模块 (Report Visualization Module)
+所属层级：输出层 (Output Layer) - 报告与分析
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+报告可视化模块 (Report Visualization Module) 是重明架构中负责 "呈" (Present) 和 "析" (Analyze) 的输出组件。它将测试执行结果转化为直观、美观、可交互的报告，帮助团队快速定位问题。
+
+其核心设计哲学是 "Data-Driven, Visual-First" (数据驱动，视觉优先)：
+- 一目了然：通过图表和颜色编码，快速识别测试健康度
+- 深度钻取：支持从总览到详情的逐层下钻
+- 历史对比：支持跨时间维度的趋势分析
+
+1.2 核心职责
+- 数据聚合 (Data Aggregation)：收集各引擎执行结果，统一数据格式
+- 可视化渲染 (Visualization Rendering)：生成图表、时间线、截图对比
+- 报告生成 (Report Generation)：支持 HTML、PDF、Allure 格式输出
+- 趋势分析 (Trend Analysis)：历史数据分析，识别质量趋势
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 数据源
+        LEFT[左瞳引擎日志]
+        RIGHT[右瞳引擎日志]
+        TURBO[涡轮引擎日志]
+    end
+    
+    subgraph Report Visualization Module
+        LEFT --> COLLECTOR[日志收集器]
+        RIGHT --> COLLECTOR
+        TURBO --> COLLECTOR
+        
+        COLLECTOR --> STORE[报告数据库]
+        
+        STORE --> AGGREGATOR[数据聚合器]
+        
+        AGGREGATOR --> CHARTS[图表生成器]
+        AGGREGATOR --> TIMELINE[时间线生成器]
+        AGGREGATOR --> VRT[VRT 对比器]
+        AGGREGATOR --> TREND[趋势分析器]
+        
+        CHARTS --> RENDERER[报告渲染器]
+        TIMELINE --> RENDERER
+        VRT --> RENDERER
+        TREND --> RENDERER
+        
+        RENDERER --> HTML[HTML 报告]
+        RENDERER --> ALLURE[Allure 报告]
+        RENDERER --> PDF[PDF 报告]
+    end
+
+2.2 核心数据模型
+
+=== TestRunSummary (测试执行摘要) ===
+
+{
+  "run_id": "RUN_20260206_001",
+  "started_at": "2026-02-06T10:00:00Z",
+  "ended_at": "2026-02-06T10:15:32Z",
+  "duration_seconds": 932,
+  "status": "completed",
+  "summary": {
+    "total": 50,
+    "passed": 45,
+    "failed": 3,
+    "skipped": 2,
+    "pass_rate": 90.0
+  },
+  "by_engine": {
+    "left_pupil": {"total": 20, "passed": 19, "failed": 1},
+    "right_pupil": {"total": 25, "passed": 22, "failed": 3},
+    "turbo": {"total": 5, "passed": 4, "failed": 1}
+  }
+}
+
+=== TestCaseResult (用例执行结果) ===
+
+{
+  "tc_id": "TC_UI_LOGIN_001",
+  "run_id": "RUN_20260206_001",
+  "name": "用户登录正向测试",
+  "engine": "right_pupil",
+  "status": "failed",
+  "duration_ms": 5420,
+  "started_at": "2026-02-06T10:02:15Z",
+  "steps": [
+    {
+      "step_id": 1,
+      "action": "open",
+      "status": "passed",
+      "duration_ms": 1200,
+      "screenshot": "screenshots/step_1.png"
+    },
+    {
+      "step_id": 2,
+      "action": "input",
+      "status": "passed",
+      "duration_ms": 350
+    },
+    {
+      "step_id": 3,
+      "action": "click",
+      "status": "failed",
+      "error": "Element not found: som_id:5",
+      "screenshot": "screenshots/step_3_error.png",
+      "duration_ms": 3000
+    }
+  ],
+  "error_message": "Step 3 failed: Element not found",
+  "artifacts": {
+    "trace_log": "logs/tc_001.json",
+    "video": "videos/tc_001.webm"
+  }
+}
+
+3. 可视化组件设计
+
+3.1 仪表盘总览 (Dashboard)
+
++------------------------------------------------------------------+
+|  📊 测试执行仪表盘                         2026-02-06 10:15:32   |
++------------------------------------------------------------------+
+|                                                                  |
+|  通过率                    执行时长                 用例统计      |
+|  ┌────────────────┐   ┌────────────────┐   ┌────────────────┐   |
+|  │     90%        │   │   15m 32s      │   │  50 用例       │   |
+|  │   ██████████   │   │                │   │  ████████████  │   |
+|  │   ████████░░   │   │   ⬆️ +12% 较昨天 │   │  45 ✅  3 ❌   │   |
+|  └────────────────┘   └────────────────┘   └────────────────┘   |
+|                                                                  |
++------------------------------------------------------------------+
+|  引擎分布                          失败用例 Top 5                 |
+|  ┌──────────────────────┐    ┌────────────────────────────────┐  |
+|  │  左瞳 ████████░░ 95% │    │ 1. TC_UI_LOGIN_001  ❌ 超时    │  |
+|  │  右瞳 ████████░░ 88% │    │ 2. TC_API_ORDER_003 ❌ 500错误 │  |
+|  │  涡轮 ████████░░ 80% │    │ 3. TC_UI_SEARCH_002 ❌ 元素丢失│  |
+|  └──────────────────────┘    └────────────────────────────────┘  |
+|                                                                  |
++------------------------------------------------------------------+
+
+3.2 执行时间线 (Execution Timeline)
+
+┌────────────────────────────────────────────────────────────────┐
+│ 10:00  10:02  10:04  10:06  10:08  10:10  10:12  10:14  10:16 │
+│ ───────────────────────────────────────────────────────────── │
+│                                                               │
+│ TC_001 ██████████████████ ✅                                  │
+│ TC_002      ████████████████████ ✅                           │
+│ TC_003           ████████████ ❌ (点击失败)                   │
+│ TC_004                 ██████████████████ ✅                  │
+│ TC_005                       ████████████████████████ ✅      │
+│                                                               │
+│ 🔴 失败点: 10:04:15 - TC_003 步骤3执行失败                    │
+└────────────────────────────────────────────────────────────────┘
+
+3.3 VRT 截图对比 (Visual Regression Testing)
+
++------------------------+------------------------+
+|       基准截图         |       当前截图          |
+|   (Baseline)           |   (Current)            |
+| ┌────────────────────┐ | ┌────────────────────┐ |
+| │                    │ | │        DIFF        │ |
+| │   [登录页面]       │ | │   [登录页面]       │ |
+| │                    │ | │  ▓▓▓▓ (差异区域)   │ |
+| │                    │ | │                    │ |
+| └────────────────────┘ | └────────────────────┘ |
++------------------------+------------------------+
+|              差异度: 3.2%  ✅ 在阈值内            |
++--------------------------------------------------+
+
+3.4 趋势分析图 (Trend Analysis)
+
+通过率趋势 (最近7天)
+100% ┤                    ╭──╮
+ 95% ┤          ╭───╮   ╭─╯  ╰──╮
+ 90% ┤    ╭────╯   ╰──╯        ╰─╮
+ 85% ┤───╯                       ╰──
+ 80% ┤
+     └────┬────┬────┬────┬────┬────┬────
+          1/31  2/1  2/2  2/3  2/4  2/5  2/6
+
+4. Allure 集成方案
+
+4.1 数据适配器
+
+重明执行日志转换为 Allure 标准格式：
+
+class AllureAdapter:
+    def convert_tc_result(self, result: TestCaseResult) -> dict:
+        return {
+            "uuid": result.tc_id,
+            "historyId": self._generate_history_id(result),
+            "name": result.name,
+            "status": self._map_status(result.status),
+            "stage": "finished",
+            "start": self._to_timestamp(result.started_at),
+            "stop": self._to_timestamp(result.ended_at),
+            "steps": [
+                self._convert_step(step) for step in result.steps
+            ],
+            "attachments": self._collect_attachments(result),
+            "labels": [
+                {"name": "engine", "value": result.engine},
+                {"name": "suite", "value": result.suite_name}
+            ]
+        }
+    
+    def _convert_step(self, step) -> dict:
+        return {
+            "name": f"{step.action}: {step.target}",
+            "status": self._map_status(step.status),
+            "start": step.started_at,
+            "stop": step.ended_at,
+            "attachments": [
+                {"name": "screenshot", "source": step.screenshot, "type": "image/png"}
+            ] if step.screenshot else []
+        }
+
+4.2 生成流程
+
+1. 执行完成后，TraceLog 写入 JSON
+2. AllureAdapter 转换为 Allure 格式
+3. 写入 allure-results 目录
+4. 调用 allure generate 生成 HTML 报告
+
+generate_allure_report():
+    # 1. 转换数据
+    for tc in test_results:
+        allure_data = adapter.convert_tc_result(tc)
+        write_json(f"allure-results/{tc.id}-result.json", allure_data)
+    
+    # 2. 生成报告
+    subprocess.run(["allure", "generate", "allure-results", "-o", "allure-report"])
+
+5. 前端组件设计
+
+5.1 技术栈
+- 框架: React + TypeScript
+- 图表库: Recharts (轻量、声明式)
+- 样式: Tailwind CSS
+- 状态管理: Zustand
+
+5.2 核心组件
+
+// DashboardSummary.tsx - 仪表盘摘要卡片
+interface DashboardProps {
+  summary: TestRunSummary;
+}
+
+const DashboardSummary: React.FC<DashboardProps> = ({ summary }) => {
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      <MetricCard 
+        title="通过率" 
+        value={`${summary.summary.pass_rate}%`}
+        trend={+12}
+        icon={<CheckCircle />}
+      />
+      <MetricCard 
+        title="执行时长" 
+        value={formatDuration(summary.duration_seconds)}
+        icon={<Clock />}
+      />
+      <MetricCard 
+        title="用例统计" 
+        value={`${summary.summary.total} 用例`}
+        subtitle={`${summary.summary.passed} ✅ ${summary.summary.failed} ❌`}
+        icon={<FileText />}
+      />
+    </div>
+  );
+};
+
+// PassRateTrend.tsx - 通过率趋势图
+const PassRateTrend: React.FC<{ data: TrendData[] }> = ({ data }) => {
+  return (
+    <ResponsiveContainer width="100%" height={300}>
+      <LineChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="date" />
+        <YAxis domain={[0, 100]} />
+        <Tooltip />
+        <Line 
+          type="monotone" 
+          dataKey="passRate" 
+          stroke="#10B981" 
+          strokeWidth={2}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+};
+
+// VrtComparison.tsx - VRT 对比组件
+const VrtComparison: React.FC<VrtProps> = ({ baseline, current, diff }) => {
+  return (
+    <div className="flex gap-4">
+      <ImagePanel title="基准截图" src={baseline} />
+      <ImagePanel title="当前截图" src={current} />
+      <DiffPanel diffPercent={diff.percentage} withinThreshold={diff.passed} />
+    </div>
+  );
+};
+
+6. API 接口设计
+
+6.1 报告查询接口
+
+GET /api/v1/reports
+- 参数: page, limit, date_from, date_to
+- 返回: 报告列表
+
+GET /api/v1/reports/{run_id}
+- 返回: 单次执行详情
+
+GET /api/v1/reports/{run_id}/cases/{tc_id}
+- 返回: 用例执行详情（含截图、日志）
+
+GET /api/v1/trends
+- 参数: period (7d, 30d, 90d)
+- 返回: 趋势数据
+
+6.2 报告导出接口
+
+POST /api/v1/reports/{run_id}/export
+- 参数: format (html, pdf, allure)
+- 返回: 下载链接
+
+7. 数据存储
+
+7.1 数据库选型
+- 结构化数据: PostgreSQL (报告元数据、统计)
+- 文件存储: 本地文件系统 / MinIO (截图、视频、日志)
+
+7.2 数据表设计
+
+CREATE TABLE test_runs (
+    id VARCHAR(50) PRIMARY KEY,
+    started_at TIMESTAMP,
+    ended_at TIMESTAMP,
+    status VARCHAR(20),
+    total_cases INT,
+    passed_cases INT,
+    failed_cases INT,
+    skipped_cases INT,
+    pass_rate DECIMAL(5,2)
+);
+
+CREATE TABLE test_case_results (
+    id SERIAL PRIMARY KEY,
+    run_id VARCHAR(50) REFERENCES test_runs(id),
+    tc_id VARCHAR(100),
+    name VARCHAR(200),
+    engine VARCHAR(20),
+    status VARCHAR(20),
+    duration_ms INT,
+    error_message TEXT,
+    trace_log_path VARCHAR(500),
+    video_path VARCHAR(500)
+);
+
+CREATE TABLE test_step_results (
+    id SERIAL PRIMARY KEY,
+    tc_result_id INT REFERENCES test_case_results(id),
+    step_id INT,
+    action VARCHAR(50),
+    status VARCHAR(20),
+    duration_ms INT,
+    screenshot_path VARCHAR(500),
+    error_detail TEXT
+);
+
+8. 部署说明
+
+8.1 依赖服务
+- PostgreSQL 14+: 报告数据存储
+- Allure CLI 2.20+: Allure 报告生成
+- MinIO (可选): 大规模截图存储
+
+8.2 环境变量
+
+REPORT_DB_URL=postgresql://user:pass@localhost:5432/chongming
+REPORT_STORAGE_PATH=/data/reports
+ALLURE_CLI_PATH=/usr/bin/allure
+
+End of Design Document

@@ -1,0 +1,401 @@
+# 重明 (ChongMing) Docker Compose 部署配置
+# 版本：v2.0
+# 日期：2026-02-06
+
+version: "3.8"
+
+# ==================== 网络配置 ====================
+networks:
+  chongming-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ==================== 卷配置 ====================
+volumes:
+  postgres_data:
+  redis_data:
+  chromadb_data:
+  milvus_data:
+  omniparser_models:
+  test_assets:
+  recordings:
+  reports:
+  logs:
+
+# ==================== 服务定义 ====================
+services:
+
+  # ========== 核心服务 ==========
+  
+  # API 网关
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.api
+    image: chongming/api-gateway:${VERSION:-latest}
+    container_name: chongming-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://chongming:${DB_PASSWORD:-chongming123}@postgres:5432/chongming
+      - REDIS_URL=redis://redis:6379/0
+      - QWEN_API_KEY=${QWEN_API_KEY}
+      - QWEN_BASE_URL=${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8001
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+      - OMNIPARSER_URL=http://omniparser:7861
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - test_assets:/app/test_assets
+      - recordings:/app/recordings
+      - reports:/app/reports
+      - logs:/app/logs
+    depends_on:
+      - postgres
+      - redis
+      - chromadb
+      - milvus
+    networks:
+      - chongming-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 前端 UI
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: chongming/frontend:${VERSION:-latest}
+    container_name: chongming-ui
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - chongming-net
+
+  # ========== Celery Workers ==========
+  
+  # UI 测试 Worker
+  worker-ui:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    image: chongming/worker:${VERSION:-latest}
+    container_name: chongming-worker-ui
+    restart: unless-stopped
+    command: celery -A app.celery worker -Q ui_queue -n worker-ui@%h --concurrency=4
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    volumes:
+      - recordings:/app/recordings
+      - /dev/shm:/dev/shm  # Playwright 共享内存
+    depends_on:
+      - redis
+      - api-gateway
+    networks:
+      - chongming-net
+
+  # API 测试 Worker
+  worker-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    image: chongming/worker:${VERSION:-latest}
+    container_name: chongming-worker-api
+    restart: unless-stopped
+    command: celery -A app.celery worker -Q api_queue -n worker-api@%h --concurrency=8
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      - redis
+      - api-gateway
+    networks:
+      - chongming-net
+
+  # 性能测试 Worker (Turbo)
+  worker-turbo:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.turbo
+    image: chongming/worker-turbo:${VERSION:-latest}
+    container_name: chongming-worker-turbo
+    restart: unless-stopped
+    command: celery -A app.celery worker -Q turbo_queue -n worker-turbo@%h --concurrency=2
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      - redis
+    networks:
+      - chongming-net
+
+  # 设计生成 Worker
+  worker-design:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    image: chongming/worker:${VERSION:-latest}
+    container_name: chongming-worker-design
+    restart: unless-stopped
+    command: celery -A app.celery worker -Q design_queue -n worker-design@%h --concurrency=4
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - QWEN_API_KEY=${QWEN_API_KEY}
+    depends_on:
+      - redis
+      - chromadb
+    networks:
+      - chongming-net
+
+  # Celery Beat 定时任务
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    image: chongming/worker:${VERSION:-latest}
+    container_name: chongming-celery-beat
+    restart: unless-stopped
+    command: celery -A app.celery beat --loglevel=info
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    depends_on:
+      - redis
+    networks:
+      - chongming-net
+
+  # Celery Flower 监控
+  flower:
+    image: mher/flower:2.0
+    container_name: chongming-flower
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - FLOWER_BASIC_AUTH=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    depends_on:
+      - redis
+    networks:
+      - chongming-net
+
+  # ========== 数据库 ==========
+  
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: chongming-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=chongming
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-chongming123}
+      - POSTGRES_DB=chongming
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - chongming-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chongming"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: chongming-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - chongming-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ========== 向量数据库 ==========
+  
+  # ChromaDB (项目知识库)
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chongming-chromadb
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    networks:
+      - chongming-net
+
+  # Milvus (缺陷知识库)
+  milvus:
+    image: milvusdb/milvus:v2.3.0
+    container_name: chongming-milvus
+    restart: unless-stopped
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      - etcd
+      - minio
+    networks:
+      - chongming-net
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: chongming-etcd
+    restart: unless-stopped
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+    command: etcd --advertise-client-urls=http://127.0.0.1:2379 --listen-client-urls http://0.0.0.0:2379
+    volumes:
+      - ./volumes/etcd:/etcd
+    networks:
+      - chongming-net
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: chongming-minio
+    restart: unless-stopped
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    command: minio server /data --console-address ":9001"
+    volumes:
+      - ./volumes/minio:/data
+    networks:
+      - chongming-net
+
+  # ========== AI 服务 ==========
+  
+  # OmniParser (视觉识别)
+  omniparser:
+    image: chongming/omniparser:latest
+    container_name: chongming-omniparser
+    restart: unless-stopped
+    ports:
+      - "7861:7861"
+    volumes:
+      - omniparser_models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - chongming-net
+
+  # ========== Locust 性能测试 ==========
+  
+  locust-master:
+    image: locustio/locust:2.20
+    container_name: chongming-locust-master
+    restart: unless-stopped
+    ports:
+      - "8089:8089"
+    command: -f /locust/locustfile.py --master
+    volumes:
+      - ./locust:/locust
+    networks:
+      - chongming-net
+
+  locust-worker:
+    image: locustio/locust:2.20
+    container_name: chongming-locust-worker
+    restart: unless-stopped
+    command: -f /locust/locustfile.py --worker --master-host=locust-master
+    volumes:
+      - ./locust:/locust
+    depends_on:
+      - locust-master
+    networks:
+      - chongming-net
+    deploy:
+      replicas: 4
+
+  # ========== 监控 ==========
+  
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: chongming-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    networks:
+      - chongming-net
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: chongming-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+    networks:
+      - chongming-net
+
+  # ========== Nginx 反向代理 ==========
+  nginx:
+    image: nginx:alpine
+    container_name: chongming-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./deploy/nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - api-gateway
+      - frontend
+    networks:
+      - chongming-net

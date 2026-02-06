@@ -1,0 +1,598 @@
+重明 (ChongMing) 详细设计说明书：分发器 (Dispatcher)
+所属层级：调度层 (Orchestration Layer) - 路由侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+分发器 (Dispatcher) 是重明架构中负责 "分" (Route) 和 "调" (Coordinate) 的核心组件。它是神经设计层与执行层之间的智能交换机，根据测试用例的模式和特征，将任务精准路由到对应的执行引擎。
+
+其核心设计哲学是 "Mode-Aware, Engine-Matched" (模式感知，引擎匹配)：
+- 模式识别：解析 TC-IR 的执行模式 (UI/API/HYBRID)
+- 智能路由：将任务分发到最匹配的执行引擎
+- 协同编排：协调多引擎混合执行场景
+- 状态追踪：维护任务执行状态和结果收集
+
+1.2 核心职责
+- 模式解析 (Mode Parsing)：识别 TC-IR 的执行模式
+- 引擎选择 (Engine Selection)：匹配最佳执行引擎
+- 任务路由 (Task Routing)：分发任务到目标引擎
+- 混合编排 (Hybrid Orchestration)：协调多引擎混合执行
+- 状态同步 (State Synchronization)：维护执行上下文
+
+1.3 架构位置
+
+┌─────────────────────────────────────────────────────────────────┐
+│                          重明架构                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌───────────────────┐                                          │
+│  │   神经设计层       │  TC-IR 输出                              │
+│  │   (Neural Design) │────────────┐                             │
+│  └───────────────────┘            │                             │
+│                                   ▼                             │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                    分发器 (Dispatcher)                   │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐   │   │
+│  │  │ UI Mode  │  │ API Mode │  │ HYBRID Mode          │   │   │
+│  │  └────┬─────┘  └────┬─────┘  └──────────┬───────────┘   │   │
+│  └───────│─────────────│───────────────────│───────────────┘   │
+│          │             │                   │                    │
+│          ▼             ▼                   ▼                    │
+│  ┌───────────┐  ┌───────────┐      ┌─────────────────┐         │
+│  │ 右瞳引擎  │  │ 左瞳引擎  │      │ 混合执行编排器  │         │
+│  │ (UI)      │  │ (API)     │      │ (Hybrid)        │         │
+│  └───────────┘  └───────────┘      └─────────────────┘         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 输入层 (Input Layer)
+        TCIR[TC-IR 用例集]
+        CONFIG[执行配置]
+    end
+    
+    subgraph Dispatcher
+        subgraph Parser [解析层]
+            TCIR --> MODEPARSER[模式解析器]
+            MODEPARSER --> UI_TC[UI 用例]
+            MODEPARSER --> API_TC[API 用例]
+            MODEPARSER --> HYBRID_TC[混合用例]
+        end
+        
+        subgraph Router [路由层]
+            UI_TC --> SELECTOR[引擎选择器]
+            API_TC --> SELECTOR
+            HYBRID_TC --> SELECTOR
+            SELECTOR --> RIGHT[右瞳引擎队列]
+            SELECTOR --> LEFT[左瞳引擎队列]
+            SELECTOR --> HYBRID[混合编排队列]
+        end
+        
+        subgraph Executor [执行层]
+            RIGHT --> RIGHT_ENGINE[右瞳引擎]
+            LEFT --> LEFT_ENGINE[左瞳引擎]
+            HYBRID --> ORCHESTRATOR[混合编排器]
+            ORCHESTRATOR --> RIGHT_ENGINE
+            ORCHESTRATOR --> LEFT_ENGINE
+        end
+        
+        subgraph Collector [收集层]
+            RIGHT_ENGINE --> RESULT[结果收集器]
+            LEFT_ENGINE --> RESULT
+            RESULT --> AGGREGATOR[结果聚合器]
+        end
+    end
+    
+    subgraph 输出层 (Output Layer)
+        AGGREGATOR --> REPORT[执行报告]
+        AGGREGATOR --> TRACE[Trace Log]
+    end
+
+2.2 核心类图
+
+- Dispatcher: 分发器入口，编排全流程
+- ModeParser: 模式解析器
+- EngineSelector: 引擎选择器
+- TaskRouter: 任务路由器
+- HybridOrchestrator: 混合模式编排器
+- ResultCollector: 结果收集器
+- ContextManager: 上下文管理器
+
+3. 模式解析层 (Mode Parser Layer)
+
+3.1 执行模式定义
+
+| 模式 | 描述 | 执行引擎 | 适用场景 |
+|------|------|---------|---------|
+| UI | 纯 UI 操作 | 右瞳引擎 | 前端功能、视觉验证 |
+| API | 纯 API 调用 | 左瞳引擎 | 接口测试、数据验证 |
+| HYBRID | UI + API 混合 | 协同编排 | 端到端、复杂业务流程 |
+| LOAD | 性能压测 | 涡轮引擎 | 压力测试、性能验证 |
+
+3.2 模式解析器
+
+class ModeParser:
+    def parse(self, tc_ir: TCIR) -> ExecutionPlan:
+        # 1. 显式模式声明
+        if tc_ir.mode:
+            return ExecutionPlan(
+                mode=tc_ir.mode,
+                steps=self._classify_steps(tc_ir.steps)
+            )
+        
+        # 2. 自动模式推断
+        mode = self._infer_mode(tc_ir.steps)
+        return ExecutionPlan(
+            mode=mode,
+            steps=self._classify_steps(tc_ir.steps)
+        )
+    
+    def _infer_mode(self, steps: list[Step]) -> str:
+        has_ui = any(s.type in ["click", "input", "navigate", "hover"] for s in steps)
+        has_api = any(s.type in ["call_api", "verify_response"] for s in steps)
+        
+        if has_ui and has_api:
+            return "HYBRID"
+        elif has_ui:
+            return "UI"
+        elif has_api:
+            return "API"
+        else:
+            return "UI"  # 默认 UI 模式
+    
+    def _classify_steps(self, steps: list) -> ClassifiedSteps:
+        ui_steps = []
+        api_steps = []
+        
+        for step in steps:
+            if step.type in ["click", "input", "navigate", "hover", "scroll"]:
+                ui_steps.append(UIStep(step))
+            elif step.type in ["call_api", "verify_response", "extract"]:
+                api_steps.append(APIStep(step))
+        
+        return ClassifiedSteps(ui=ui_steps, api=api_steps)
+
+3.3 模式推断规则
+
+TC-IR 步骤分析
+       ↓
+┌──────────────────────────────────────┐
+│ 包含 UI 操作 (click/input/navigate)? │
+└────────────┬────────────┬────────────┘
+             │是          │否
+             ▼            ▼
+┌────────────────┐  ┌─────────────────┐
+│包含 API 调用?  │  │ 包含 API 调用?  │
+└────┬─────┬─────┘  └────┬──────┬─────┘
+     │是   │否           │是    │否
+     ▼     ▼             ▼      ▼
+  HYBRID   UI           API   默认 UI
+
+4. 引擎选择层 (Engine Selector Layer)
+
+4.1 引擎能力矩阵
+
+| 能力 | 右瞳引擎 | 左瞳引擎 | 涡轮引擎 |
+|------|---------|---------|---------|
+| UI 操作 | ✅ | ❌ | ❌ |
+| API 调用 | ❌ | ✅ | ✅ |
+| 视觉验证 | ✅ | ❌ | ❌ |
+| Schema 验证 | ❌ | ✅ | ❌ |
+| 并发压测 | ❌ | ❌ | ✅ |
+| 数据合成 | ❌ | ❌ | ✅ |
+
+4.2 引擎选择器
+
+class EngineSelector:
+    def select(self, plan: ExecutionPlan) -> EngineAssignment:
+        if plan.mode == "UI":
+            return EngineAssignment(
+                primary_engine="right_pupil",
+                fallback_engine=None
+            )
+        
+        elif plan.mode == "API":
+            return EngineAssignment(
+                primary_engine="left_pupil",
+                fallback_engine=None
+            )
+        
+        elif plan.mode == "HYBRID":
+            return EngineAssignment(
+                primary_engine="hybrid_orchestrator",
+                sub_engines={
+                    "ui": "right_pupil",
+                    "api": "left_pupil"
+                }
+            )
+        
+        elif plan.mode == "LOAD":
+            return EngineAssignment(
+                primary_engine="turbo",
+                fallback_engine=None
+            )
+
+5. 任务路由层 (Task Router Layer)
+
+5.1 路由策略
+
+class TaskRouter:
+    def __init__(self):
+        self.engines = {
+            "right_pupil": RightPupilEngine(),
+            "left_pupil": LeftPupilEngine(),
+            "turbo": TurboEngine()
+        }
+        self.queues = {
+            "right_pupil": asyncio.Queue(),
+            "left_pupil": asyncio.Queue(),
+            "turbo": asyncio.Queue()
+        }
+    
+    async def route(self, tc_ir: TCIR) -> RoutingResult:
+        # 1. 解析模式
+        plan = self.mode_parser.parse(tc_ir)
+        
+        # 2. 选择引擎
+        assignment = self.engine_selector.select(plan)
+        
+        # 3. 创建执行任务
+        task = ExecutionTask(
+            tc_ir=tc_ir,
+            plan=plan,
+            assignment=assignment
+        )
+        
+        # 4. 路由到队列
+        if plan.mode == "HYBRID":
+            return await self._route_hybrid(task)
+        else:
+            await self.queues[assignment.primary_engine].put(task)
+            return RoutingResult(
+                engine=assignment.primary_engine,
+                task_id=task.id
+            )
+
+5.2 路由表配置
+
+routing_config:
+  default_engine: "right_pupil"
+  
+  rules:
+    - match:
+        mode: "UI"
+      route_to: "right_pupil"
+    
+    - match:
+        mode: "API"
+      route_to: "left_pupil"
+    
+    - match:
+        mode: "HYBRID"
+      route_to: "hybrid_orchestrator"
+    
+    - match:
+        mode: "LOAD"
+      route_to: "turbo"
+    
+    - match:
+        tags: ["visual_regression"]
+      route_to: "right_pupil"
+      config:
+        enable_vrt: true
+
+6. 混合编排层 (Hybrid Orchestrator Layer)
+
+6.1 设计目标
+
+处理 UI + API 混合场景，例如：
+1. UI 操作后验证 API 数据变化
+2. API 准备数据后 UI 验证展示
+3. UI 和 API 交替执行的复杂流程
+
+6.2 混合编排器
+
+class HybridOrchestrator:
+    def __init__(self):
+        self.right_pupil = RightPupilEngine()
+        self.left_pupil = LeftPupilEngine()
+        self.context = SharedContext()
+    
+    async def execute(self, task: ExecutionTask) -> ExecutionResult:
+        results = []
+        
+        for step in task.tc_ir.steps:
+            # 确定步骤执行引擎
+            engine = self._select_engine_for_step(step)
+            
+            # 注入共享上下文
+            step_with_context = self._inject_context(step, self.context)
+            
+            # 执行步骤
+            if engine == "right_pupil":
+                result = await self.right_pupil.execute_step(step_with_context)
+            else:
+                result = await self.left_pupil.execute_step(step_with_context)
+            
+            # 更新共享上下文
+            self._update_context(result, self.context)
+            
+            results.append(result)
+            
+            # 失败处理
+            if not result.success and task.fail_fast:
+                break
+        
+        return ExecutionResult(
+            tc_id=task.tc_ir.id,
+            steps=results,
+            success=all(r.success for r in results)
+        )
+
+6.3 上下文共享
+
+class SharedContext:
+    """UI 和 API 引擎之间共享的执行上下文"""
+    
+    def __init__(self):
+        self._store = {}
+        self._cookies = {}
+        self._tokens = {}
+    
+    def set(self, key: str, value: any, scope: str = "global"):
+        self._store[f"{scope}:{key}"] = value
+    
+    def get(self, key: str, scope: str = "global") -> any:
+        return self._store.get(f"{scope}:{key}")
+    
+    def set_token(self, name: str, value: str):
+        """API 登录后存储 Token，供 UI 引擎使用"""
+        self._tokens[name] = value
+    
+    def get_token(self, name: str) -> str:
+        return self._tokens.get(name)
+    
+    def sync_cookies(self, cookies: dict):
+        """UI 登录后同步 Cookie，供 API 引擎使用"""
+        self._cookies.update(cookies)
+
+6.4 混合执行示例
+
+场景: API 登录 → UI 验证欢迎页
+
+TC-IR:
+{
+  "mode": "HYBRID",
+  "steps": [
+    {"type": "call_api", "action": "POST /login", "extract": {"token": "$.data.token"}},
+    {"type": "navigate", "target": "/dashboard"},
+    {"type": "verify", "target": "欢迎信息", "expected": "visible"}
+  ]
+}
+
+执行流程:
+1. [左瞳引擎] 调用 POST /login，提取 token
+2. [上下文同步] token 存入 SharedContext
+3. [右瞳引擎] 导航到 /dashboard (自动注入 Cookie)
+4. [右瞳引擎] 验证欢迎信息可见
+
+7. 上下文管理 (Context Management)
+
+7.1 上下文类型
+
+| 上下文类型 | 生命周期 | 共享范围 | 示例 |
+|-----------|---------|---------|------|
+| 全局上下文 | 整个执行 | 所有用例 | 环境变量、全局配置 |
+| 套件上下文 | 测试套件 | 同套件用例 | 登录 Token |
+| 用例上下文 | 单个用例 | 用例内步骤 | 临时变量 |
+| 步骤上下文 | 单个步骤 | 当前步骤 | 提取数据 |
+
+7.2 上下文管理器
+
+class ContextManager:
+    def __init__(self):
+        self.global_context = GlobalContext()
+        self.suite_contexts = {}
+        self.case_contexts = {}
+    
+    def get_context(self, scope: str, id: str = None) -> Context:
+        if scope == "global":
+            return self.global_context
+        elif scope == "suite":
+            return self.suite_contexts.setdefault(id, SuiteContext())
+        elif scope == "case":
+            return self.case_contexts.setdefault(id, CaseContext())
+    
+    def inject_variables(self, step: Step, contexts: list[Context]) -> Step:
+        """将上下文变量注入步骤"""
+        for ctx in contexts:
+            for key, value in ctx.items():
+                step = step.replace(f"${{{key}}}", str(value))
+        return step
+
+8. 结果收集层 (Result Collector Layer)
+
+8.1 结果收集器
+
+class ResultCollector:
+    def __init__(self):
+        self.results = {}
+        self.events = asyncio.Queue()
+    
+    async def collect(self, engine: str, task_id: str, result: StepResult):
+        # 存储结果
+        key = f"{engine}:{task_id}"
+        if key not in self.results:
+            self.results[key] = []
+        self.results[key].append(result)
+        
+        # 发送事件通知
+        await self.events.put(ResultEvent(
+            engine=engine,
+            task_id=task_id,
+            step_index=len(self.results[key]),
+            status=result.status,
+            duration=result.duration
+        ))
+    
+    def get_results(self, task_id: str) -> list[StepResult]:
+        results = []
+        for key, value in self.results.items():
+            if task_id in key:
+                results.extend(value)
+        return results
+
+8.2 结果聚合
+
+class ResultAggregator:
+    def aggregate(self, task: ExecutionTask, results: list[StepResult]) -> AggregatedResult:
+        return AggregatedResult(
+            tc_id=task.tc_ir.id,
+            tc_name=task.tc_ir.name,
+            mode=task.plan.mode,
+            engines_used=self._extract_engines(results),
+            total_steps=len(results),
+            passed_steps=sum(1 for r in results if r.status == "passed"),
+            failed_steps=sum(1 for r in results if r.status == "failed"),
+            skipped_steps=sum(1 for r in results if r.status == "skipped"),
+            total_duration_ms=sum(r.duration for r in results),
+            status="passed" if all(r.status == "passed" for r in results) else "failed",
+            failure_details=self._extract_failures(results)
+        )
+
+9. API 接口设计
+
+9.1 分发任务
+
+POST /api/v1/dispatcher/dispatch
+{
+  "tc_ids": ["TC_001", "TC_002", "TC_003"],
+  "config": {
+    "parallel": true,
+    "fail_fast": false
+  }
+}
+
+响应：
+{
+  "execution_id": "EXEC_001",
+  "routing_info": [
+    {"tc_id": "TC_001", "engine": "right_pupil", "mode": "UI"},
+    {"tc_id": "TC_002", "engine": "left_pupil", "mode": "API"},
+    {"tc_id": "TC_003", "engine": "hybrid_orchestrator", "mode": "HYBRID"}
+  ]
+}
+
+9.2 查询路由状态
+
+GET /api/v1/dispatcher/status/{execution_id}
+
+9.3 获取引擎状态
+
+GET /api/v1/dispatcher/engines
+
+响应：
+{
+  "engines": [
+    {"name": "right_pupil", "status": "healthy", "queue_size": 3},
+    {"name": "left_pupil", "status": "healthy", "queue_size": 5},
+    {"name": "turbo", "status": "idle", "queue_size": 0}
+  ]
+}
+
+10. 前端界面设计
+
++------------------------------------------------------------------+
+| 📡 分发器控制台                                                   |
++------------------------------------------------------------------+
+|                                                                  |
+| 引擎状态                                                         |
+| ┌───────────────┬───────────────┬───────────────┐               |
+| │  右瞳引擎 🟢  │  左瞳引擎 🟢  │  涡轮引擎 🟡  │               |
+| │  队列: 3      │  队列: 5      │  队列: 0      │               |
+| │  执行中: 2    │  执行中: 3    │  空闲          │               |
+| └───────────────┴───────────────┴───────────────┘               |
+|                                                                  |
+| 任务路由                                                         |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │ TC_001 [UI]     → 右瞳引擎   执行中 ████████░░ 80%         │  |
+| │ TC_002 [API]    → 左瞳引擎   排队中                        │  |
+| │ TC_003 [HYBRID] → 混合编排   执行中 ██████░░░░ 60%         │  |
+| │ TC_004 [UI]     → 右瞳引擎   已完成 ✅                     │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| 路由统计                                                         |
+| UI: 45%  │  API: 35%  │  HYBRID: 15%  │  LOAD: 5%               |
++------------------------------------------------------------------+
+
+11. 配置说明
+
+dispatcher:
+  # 引擎配置
+  engines:
+    right_pupil:
+      enabled: true
+      max_concurrent: 5
+      timeout_ms: 60000
+    
+    left_pupil:
+      enabled: true
+      max_concurrent: 10
+      timeout_ms: 30000
+    
+    turbo:
+      enabled: true
+      max_concurrent: 1
+      timeout_ms: 600000
+  
+  # 路由配置
+  routing:
+    default_mode: "UI"
+    auto_detect: true
+  
+  # 混合模式配置
+  hybrid:
+    context_sharing: true
+    step_timeout_ms: 30000
+  
+  # 重试配置
+  retry:
+    max_attempts: 2
+    delay_ms: 1000
+
+12. 与其他模块集成
+
+12.1 与神经设计层集成
+
+神经设计层生成 TC-IR
+       ↓
+   分发器接收
+       ↓
+   模式解析 → 引擎选择 → 任务路由
+
+12.2 与执行引擎集成
+
+分发器 ──┬──→ 右瞳引擎 (UI)
+         ├──→ 左瞳引擎 (API)
+         ├──→ 涡轮引擎 (LOAD)
+         └──→ 混合编排器 (HYBRID)
+
+12.3 与并行调度器集成
+
+分发器负责单任务路由，并行调度器负责多任务并发：
+
+并行调度器
+    │
+    ├── 批次 1: [TC_001, TC_002] → 分发器 → 各引擎
+    ├── 批次 2: [TC_003, TC_004] → 分发器 → 各引擎
+    └── 批次 3: [TC_005]         → 分发器 → 各引擎
+
+End of Design Document

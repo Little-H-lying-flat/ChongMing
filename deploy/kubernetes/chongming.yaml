@@ -1,0 +1,943 @@
+# 重明 (ChongMing) Kubernetes 部署清单
+# 版本：v2.0
+# 日期：2026-02-06
+
+---
+# ==================== Namespace ====================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chongming
+  labels:
+    app.kubernetes.io/name: chongming
+    app.kubernetes.io/version: "2.0"
+
+---
+# ==================== ConfigMap ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chongming-config
+  namespace: chongming
+data:
+  DATABASE_HOST: "postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "chongming"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  CHROMADB_HOST: "chromadb"
+  CHROMADB_PORT: "8000"
+  MILVUS_HOST: "milvus"
+  MILVUS_PORT: "19530"
+  OMNIPARSER_URL: "http://omniparser:7861"
+  LOG_LEVEL: "INFO"
+
+---
+# ==================== Secrets ====================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: chongming-secrets
+  namespace: chongming
+type: Opaque
+stringData:
+  DATABASE_PASSWORD: "chongming123"
+  QWEN_API_KEY: "${QWEN_API_KEY}"
+  FLOWER_PASSWORD: "admin123"
+  GRAFANA_PASSWORD: "admin123"
+
+---
+# ==================== API Gateway ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: chongming
+  labels:
+    app: api-gateway
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: chongming/api-gateway:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: chongming-config
+            - secretRef:
+                name: chongming-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: test-assets
+              mountPath: /app/test_assets
+            - name: recordings
+              mountPath: /app/recordings
+      volumes:
+        - name: test-assets
+          persistentVolumeClaim:
+            claimName: test-assets-pvc
+        - name: recordings
+          persistentVolumeClaim:
+            claimName: recordings-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: chongming
+spec:
+  selector:
+    app: api-gateway
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# ==================== Frontend ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: chongming
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: chongming/frontend:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: chongming
+spec:
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
+
+---
+# ==================== Celery Worker - UI ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-ui
+  namespace: chongming
+  labels:
+    app: worker-ui
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker-ui
+  template:
+    metadata:
+      labels:
+        app: worker-ui
+    spec:
+      containers:
+        - name: worker-ui
+          image: chongming/worker:latest
+          command: ["celery", "-A", "app.celery", "worker", "-Q", "ui_queue", "-n", "worker-ui@%h", "--concurrency=4"]
+          envFrom:
+            - configMapRef:
+                name: chongming-config
+            - secretRef:
+                name: chongming-secrets
+          env:
+            - name: CELERY_BROKER_URL
+              value: "redis://redis:6379/1"
+            - name: CELERY_RESULT_BACKEND
+              value: "redis://redis:6379/2"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          volumeMounts:
+            - name: recordings
+              mountPath: /app/recordings
+            - name: dev-shm
+              mountPath: /dev/shm
+      volumes:
+        - name: recordings
+          persistentVolumeClaim:
+            claimName: recordings-pvc
+        - name: dev-shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+
+---
+# ==================== Celery Worker - API ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-api
+  namespace: chongming
+  labels:
+    app: worker-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker-api
+  template:
+    metadata:
+      labels:
+        app: worker-api
+    spec:
+      containers:
+        - name: worker-api
+          image: chongming/worker:latest
+          command: ["celery", "-A", "app.celery", "worker", "-Q", "api_queue", "-n", "worker-api@%h", "--concurrency=8"]
+          envFrom:
+            - configMapRef:
+                name: chongming-config
+            - secretRef:
+                name: chongming-secrets
+          env:
+            - name: CELERY_BROKER_URL
+              value: "redis://redis:6379/1"
+            - name: CELERY_RESULT_BACKEND
+              value: "redis://redis:6379/2"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+
+---
+# ==================== Celery Worker - Turbo ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-turbo
+  namespace: chongming
+  labels:
+    app: worker-turbo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-turbo
+  template:
+    metadata:
+      labels:
+        app: worker-turbo
+    spec:
+      containers:
+        - name: worker-turbo
+          image: chongming/worker-turbo:latest
+          command: ["celery", "-A", "app.celery", "worker", "-Q", "turbo_queue", "-n", "worker-turbo@%h", "--concurrency=2"]
+          env:
+            - name: CELERY_BROKER_URL
+              value: "redis://redis:6379/1"
+            - name: CELERY_RESULT_BACKEND
+              value: "redis://redis:6379/2"
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "4000m"
+              memory: "8Gi"
+
+---
+# ==================== Celery Worker - Design ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-design
+  namespace: chongming
+  labels:
+    app: worker-design
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker-design
+  template:
+    metadata:
+      labels:
+        app: worker-design
+    spec:
+      containers:
+        - name: worker-design
+          image: chongming/worker:latest
+          command: ["celery", "-A", "app.celery", "worker", "-Q", "design_queue", "-n", "worker-design@%h", "--concurrency=4"]
+          envFrom:
+            - configMapRef:
+                name: chongming-config
+            - secretRef:
+                name: chongming-secrets
+          env:
+            - name: CELERY_BROKER_URL
+              value: "redis://redis:6379/1"
+            - name: CELERY_RESULT_BACKEND
+              value: "redis://redis:6379/2"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+
+---
+# ==================== Celery Beat ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: chongming
+  labels:
+    app: celery-beat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      containers:
+        - name: celery-beat
+          image: chongming/worker:latest
+          command: ["celery", "-A", "app.celery", "beat", "--loglevel=info"]
+          env:
+            - name: CELERY_BROKER_URL
+              value: "redis://redis:6379/1"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+---
+# ==================== PostgreSQL ====================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: chongming
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "chongming"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: chongming-secrets
+                  key: DATABASE_PASSWORD
+            - name: POSTGRES_DB
+              value: "chongming"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 50Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: chongming
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None
+
+---
+# ==================== Redis ====================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: chongming
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command: ["redis-server", "--appendonly", "yes", "--maxmemory", "1gb", "--maxmemory-policy", "allkeys-lru"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: chongming
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+  clusterIP: None
+
+---
+# ==================== ChromaDB ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chromadb
+  namespace: chongming
+  labels:
+    app: chromadb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chromadb
+  template:
+    metadata:
+      labels:
+        app: chromadb
+    spec:
+      containers:
+        - name: chromadb
+          image: chromadb/chroma:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: IS_PERSISTENT
+              value: "TRUE"
+            - name: ANONYMIZED_TELEMETRY
+              value: "FALSE"
+          volumeMounts:
+            - name: chromadb-data
+              mountPath: /chroma/chroma
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+      volumes:
+        - name: chromadb-data
+          persistentVolumeClaim:
+            claimName: chromadb-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromadb
+  namespace: chongming
+spec:
+  selector:
+    app: chromadb
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# ==================== Milvus ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: milvus
+  namespace: chongming
+  labels:
+    app: milvus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: milvus
+  template:
+    metadata:
+      labels:
+        app: milvus
+    spec:
+      containers:
+        - name: milvus
+          image: milvusdb/milvus:v2.3.0
+          ports:
+            - containerPort: 19530
+            - containerPort: 9091
+          volumeMounts:
+            - name: milvus-data
+              mountPath: /var/lib/milvus
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "4000m"
+              memory: "8Gi"
+      volumes:
+        - name: milvus-data
+          persistentVolumeClaim:
+            claimName: milvus-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: milvus
+  namespace: chongming
+spec:
+  selector:
+    app: milvus
+  ports:
+    - name: grpc
+      port: 19530
+      targetPort: 19530
+    - name: metrics
+      port: 9091
+      targetPort: 9091
+  type: ClusterIP
+
+---
+# ==================== OmniParser ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omniparser
+  namespace: chongming
+  labels:
+    app: omniparser
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: omniparser
+  template:
+    metadata:
+      labels:
+        app: omniparser
+    spec:
+      containers:
+        - name: omniparser
+          image: chongming/omniparser:latest
+          ports:
+            - containerPort: 7861
+          volumeMounts:
+            - name: omniparser-models
+              mountPath: /app/models
+          resources:
+            requests:
+              cpu: "2000m"
+              memory: "4Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4000m"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+      volumes:
+        - name: omniparser-models
+          persistentVolumeClaim:
+            claimName: omniparser-models-pvc
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: omniparser
+  namespace: chongming
+spec:
+  selector:
+    app: omniparser
+  ports:
+    - port: 7861
+      targetPort: 7861
+  type: ClusterIP
+
+---
+# ==================== Flower ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flower
+  namespace: chongming
+  labels:
+    app: flower
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flower
+  template:
+    metadata:
+      labels:
+        app: flower
+    spec:
+      containers:
+        - name: flower
+          image: mher/flower:2.0
+          ports:
+            - containerPort: 5555
+          env:
+            - name: CELERY_BROKER_URL
+              value: "redis://redis:6379/1"
+            - name: FLOWER_BASIC_AUTH
+              value: "admin:admin123"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flower
+  namespace: chongming
+spec:
+  selector:
+    app: flower
+  ports:
+    - port: 5555
+      targetPort: 5555
+  type: ClusterIP
+
+---
+# ==================== PersistentVolumeClaims ====================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-assets-pvc
+  namespace: chongming
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recordings-pvc
+  namespace: chongming
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chromadb-pvc
+  namespace: chongming
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: milvus-pvc
+  namespace: chongming
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: omniparser-models-pvc
+  namespace: chongming
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# ==================== Ingress ====================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chongming-ingress
+  namespace: chongming
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+    - hosts:
+        - chongming.example.com
+        - api.chongming.example.com
+      secretName: chongming-tls
+  rules:
+    - host: chongming.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    - host: api.chongming.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8000
+
+---
+# ==================== HorizontalPodAutoscaler ====================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway-hpa
+  namespace: chongming
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker-ui-hpa
+  namespace: chongming
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker-ui
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: worker-api-hpa
+  namespace: chongming
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: worker-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+# ==================== NetworkPolicy ====================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chongming-network-policy
+  namespace: chongming
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: chongming
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: chongming
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

@@ -1,0 +1,866 @@
+重明 (ChongMing) 详细设计说明书：LangGraph Agent 编排模块 (Agent Orchestration)
+所属层级：智能层 (Intelligence Layer) - Agent 协调侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+LangGraph Agent 编排模块 (Agent Orchestration Module) 是重明架构中负责 AI Agent 工作流编排的核心组件。它基于 LangGraph 框架，将多个专业 Agent（设计、执行、分析、自愈）编排为有状态的工作流图，实现复杂测试场景的智能协作。
+
+其核心设计哲学是 "Graph-as-Workflow, State-as-Memory" (图即工作流，状态即记忆)：
+- 图结构编排：使用有向图定义 Agent 协作路径
+- 状态机驱动：显式状态管理，支持断点续执行
+- 条件分支：基于运行时结果动态路由
+- 人机协作：关键节点支持人工介入
+
+1.2 核心价值
+
+1. **复杂流程编排** - 多 Agent 串行/并行/条件分支
+2. **状态持久化** - 支持长流程断点恢复
+3. **可视化调试** - Agent 执行路径可追溯
+4. **动态路由** - 基于 LLM 判断的智能决策
+
+---
+
+2. 系统架构
+
+2.1 整体架构图
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    LangGraph Agent 编排模块                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │                        图定义层 (Graph Definition)                     │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │ │
+│  │  │ StateSchema │  │   Nodes     │  │   Edges     │  │ Conditions  │  │ │
+│  │  │  状态定义   │  │  节点函数   │  │  边连接     │  │  条件路由   │  │ │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │ │
+│  └───────────────────────────────────────┬───────────────────────────────┘ │
+│                                          │                                  │
+│  ┌───────────────────────────────────────┴───────────────────────────────┐ │
+│  │                        运行时层 (Runtime Layer)                        │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │ │
+│  │  │  Executor   │  │   State     │  │ Checkpoint  │  │   Stream    │  │ │
+│  │  │  执行引擎   │  │  状态管理   │  │  检查点     │  │  流式输出   │  │ │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │ │
+│  └───────────────────────────────────────┬───────────────────────────────┘ │
+│                                          │                                  │
+│  ┌───────────────────────────────────────┴───────────────────────────────┐ │
+│  │                        Agent 节点层 (Agent Nodes)                      │ │
+│  │  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌─────────┐ │ │
+│  │  │ Designer  │ │ Executor  │ │ Analyzer  │ │  Healer   │ │ Critic  │ │ │
+│  │  │ 设计Agent │ │ 执行Agent │ │ 分析Agent │ │ 自愈Agent │ │评审Agent│ │ │
+│  │  └───────────┘ └───────────┘ └───────────┘ └───────────┘ └─────────┘ │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+2.2 核心组件
+
+| 组件 | 职责 | 技术选型 |
+|------|------|----------|
+| StateGraph | 工作流图定义 | LangGraph 0.2+ |
+| StateSchema | 状态结构定义 | TypedDict / Pydantic |
+| Checkpointer | 状态持久化 | Redis / SQLite |
+| StreamWriter | 流式输出 | AsyncGenerator |
+| HumanInLoop | 人工介入 | Interrupt + Resume |
+
+---
+
+3. 数据模型设计
+
+3.1 状态定义
+
+```python
+from typing import TypedDict, Annotated, List, Optional, Literal
+from langgraph.graph import add_messages
+from pydantic import BaseModel
+
+class AgentState(TypedDict):
+    """Agent 工作流状态"""
+    
+    # 会话信息
+    session_id: str
+    user_id: str
+    
+    # 输入数据
+    prd_content: str                    # PRD 需求文档
+    test_scope: List[str]               # 测试范围
+    
+    # 消息历史 (自动合并)
+    messages: Annotated[list, add_messages]
+    
+    # 中间产物
+    tc_ir_list: List[dict]              # 生成的 TC-IR 列表
+    execution_results: List[dict]        # 执行结果
+    trace_logs: List[dict]              # 执行轨迹
+    
+    # 分析结果
+    defect_report: Optional[dict]       # 缺陷分析报告
+    healing_actions: List[dict]         # 自愈动作
+    
+    # 流程控制
+    current_step: str                   # 当前步骤
+    retry_count: int                    # 重试次数
+    should_continue: bool               # 是否继续
+    human_feedback: Optional[str]       # 人工反馈
+    
+    # 最终输出
+    final_report: Optional[dict]        # 最终测试报告
+    compiled_scripts: List[str]         # 编译的脚本路径
+
+
+class ExecutionConfig(BaseModel):
+    """执行配置"""
+    browser: str = "chromium"
+    headless: bool = True
+    timeout: int = 30000
+    max_retries: int = 3
+    enable_healing: bool = True
+    enable_vrt: bool = False
+```
+
+---
+
+4. 工作流图定义
+
+4.1 完整测试流程图
+
+```python
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+def create_test_workflow() -> StateGraph:
+    """创建完整测试工作流图"""
+    
+    # 初始化状态图
+    workflow = StateGraph(AgentState)
+    
+    # ========== 添加节点 ==========
+    
+    # 1. 设计阶段
+    workflow.add_node("parse_prd", parse_prd_node)
+    workflow.add_node("generate_tc", generate_tc_node)
+    workflow.add_node("critic_review", critic_review_node)
+    workflow.add_node("human_confirm", human_confirm_node)
+    
+    # 2. 执行阶段
+    workflow.add_node("route_tc", route_tc_node)
+    workflow.add_node("execute_ui", execute_ui_node)
+    workflow.add_node("execute_api", execute_api_node)
+    workflow.add_node("aggregate_results", aggregate_results_node)
+    
+    # 3. 分析阶段
+    workflow.add_node("analyze_defects", analyze_defects_node)
+    workflow.add_node("try_healing", try_healing_node)
+    
+    # 4. 输出阶段
+    workflow.add_node("compile_scripts", compile_scripts_node)
+    workflow.add_node("generate_report", generate_report_node)
+    
+    # ========== 定义边 ==========
+    
+    # 入口
+    workflow.set_entry_point("parse_prd")
+    
+    # 设计阶段流程
+    workflow.add_edge("parse_prd", "generate_tc")
+    workflow.add_edge("generate_tc", "critic_review")
+    
+    # 评审后条件路由
+    workflow.add_conditional_edges(
+        "critic_review",
+        should_regenerate,
+        {
+            "regenerate": "generate_tc",      # 重新生成
+            "confirm": "human_confirm",       # 人工确认
+            "proceed": "route_tc"             # 直接执行
+        }
+    )
+    
+    # 人工确认后
+    workflow.add_conditional_edges(
+        "human_confirm",
+        check_human_feedback,
+        {
+            "approved": "route_tc",
+            "rejected": "generate_tc",
+            "modified": "route_tc"
+        }
+    )
+    
+    # 执行阶段 - 并行分发
+    workflow.add_conditional_edges(
+        "route_tc",
+        determine_execution_path,
+        {
+            "ui_only": "execute_ui",
+            "api_only": "execute_api",
+            "hybrid": "execute_ui"  # UI 先执行
+        }
+    )
+    
+    # UI 执行后
+    workflow.add_conditional_edges(
+        "execute_ui",
+        check_has_api_tests,
+        {
+            "yes": "execute_api",
+            "no": "aggregate_results"
+        }
+    )
+    
+    workflow.add_edge("execute_api", "aggregate_results")
+    
+    # 结果聚合后 - 检查是否有失败
+    workflow.add_conditional_edges(
+        "aggregate_results",
+        check_failures,
+        {
+            "has_failures": "analyze_defects",
+            "all_passed": "compile_scripts"
+        }
+    )
+    
+    # 缺陷分析后
+    workflow.add_conditional_edges(
+        "analyze_defects",
+        should_try_healing,
+        {
+            "heal": "try_healing",
+            "skip": "compile_scripts"
+        }
+    )
+    
+    # 自愈后重新执行
+    workflow.add_conditional_edges(
+        "try_healing",
+        healing_result,
+        {
+            "success": "execute_ui",        # 重新执行
+            "failure": "compile_scripts",   # 放弃自愈
+            "max_retries": "compile_scripts"
+        }
+    )
+    
+    # 最终阶段
+    workflow.add_edge("compile_scripts", "generate_report")
+    workflow.add_edge("generate_report", END)
+    
+    return workflow
+
+
+# ========== 条件路由函数 ==========
+
+def should_regenerate(state: AgentState) -> str:
+    """判断是否需要重新生成用例"""
+    critic_score = state.get("critic_score", 0)
+    
+    if critic_score < 0.6:
+        return "regenerate"
+    elif critic_score < 0.9:
+        return "confirm"
+    else:
+        return "proceed"
+
+
+def check_failures(state: AgentState) -> str:
+    """检查是否有执行失败"""
+    results = state.get("execution_results", [])
+    failed = [r for r in results if r.get("status") == "failed"]
+    return "has_failures" if failed else "all_passed"
+
+
+def should_try_healing(state: AgentState) -> str:
+    """判断是否尝试自愈"""
+    if not state.get("enable_healing", True):
+        return "skip"
+    if state.get("retry_count", 0) >= 3:
+        return "skip"
+    return "heal"
+```
+
+4.2 工作流可视化
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│                         重明测试工作流图                                   │
+├───────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│    ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐       │
+│    │ parse_prd│────►│generate_tc────►│critic    │────►│human     │       │
+│    │          │     │          │  ◄──│ review   │     │ confirm  │       │
+│    └──────────┘     └──────────┘     └──────────┘     └────┬─────┘       │
+│                           ▲               │                 │             │
+│                           │ regenerate    │ proceed         │ approved    │
+│                           └───────────────┘                 ▼             │
+│                                                        ┌──────────┐       │
+│                                                        │ route_tc │       │
+│                                                        └────┬─────┘       │
+│                                            ┌────────────────┼─────────┐   │
+│                                            ▼                ▼         ▼   │
+│                                       ┌──────────┐    ┌──────────┐       │
+│                                       │execute_ui│    │execute_api       │
+│                                       └────┬─────┘    └────┬─────┘       │
+│                                            │               │              │
+│                                            └───────┬───────┘              │
+│                                                    ▼                      │
+│    ┌──────────┐     ┌──────────┐     ┌──────────────────┐                │
+│    │ generate │◄────│ compile  │◄────│ aggregate_results│                │
+│    │ report   │     │ scripts  │     └────────┬─────────┘                │
+│    └────┬─────┘     └──────────┘              │ has_failures             │
+│         │                 ▲                   ▼                          │
+│         ▼                 │           ┌──────────────┐                   │
+│    ┌──────────┐           │           │analyze_defects                   │
+│    │   END    │           │           └──────┬───────┘                   │
+│    └──────────┘           │                  │                           │
+│                           │           ┌──────▼───────┐                   │
+│                           └───────────│ try_healing  │───► execute_ui    │
+│                             failure   └──────────────┘       (retry)     │
+│                                                                          │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+5. Agent 节点实现
+
+5.1 设计 Agent (Designer)
+
+```python
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+
+async def parse_prd_node(state: AgentState) -> AgentState:
+    """解析 PRD 文档，提取测试意图"""
+    
+    llm = ChatOpenAI(model="qwen3-max")
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", """你是一个专业的测试需求分析师。
+请从 PRD 文档中提取以下信息：
+1. 核心功能模块
+2. 用户场景流程
+3. 边界条件
+4. 数据约束"""),
+        ("human", "{prd_content}")
+    ])
+    
+    chain = prompt | llm
+    result = await chain.ainvoke({"prd_content": state["prd_content"]})
+    
+    return {
+        **state,
+        "messages": [("assistant", result.content)],
+        "current_step": "prd_parsed"
+    }
+
+
+async def generate_tc_node(state: AgentState) -> AgentState:
+    """生成 TC-IR 测试用例"""
+    
+    from agents.neural_design import NeuralDesignAgent
+    
+    agent = NeuralDesignAgent()
+    tc_list = await agent.generate_testcases(
+        prd_content=state["prd_content"],
+        test_scope=state["test_scope"],
+        history=state.get("messages", [])
+    )
+    
+    return {
+        **state,
+        "tc_ir_list": tc_list,
+        "current_step": "tc_generated"
+    }
+
+
+async def critic_review_node(state: AgentState) -> AgentState:
+    """评审生成的测试用例"""
+    
+    from agents.critic import CriticAgent
+    
+    critic = CriticAgent()
+    review_result = await critic.review(state["tc_ir_list"])
+    
+    return {
+        **state,
+        "critic_score": review_result.score,
+        "critic_feedback": review_result.feedback,
+        "messages": state["messages"] + [
+            ("critic", f"评审得分: {review_result.score}, 反馈: {review_result.feedback}")
+        ],
+        "current_step": "tc_reviewed"
+    }
+```
+
+5.2 执行 Agent (Executor)
+
+```python
+async def execute_ui_node(state: AgentState) -> AgentState:
+    """执行 UI 测试"""
+    
+    from engines.right_pupil import RightPupilEngine
+    
+    ui_tests = [tc for tc in state["tc_ir_list"] if tc.get("mode") == "UI"]
+    engine = RightPupilEngine(state.get("config", {}))
+    
+    results = []
+    traces = []
+    
+    for tc in ui_tests:
+        result = await engine.execute(tc)
+        results.append({
+            "tc_id": tc["id"],
+            "status": result.status,
+            "error": result.error,
+            "duration": result.duration
+        })
+        traces.append(result.trace_log)
+    
+    return {
+        **state,
+        "execution_results": state.get("execution_results", []) + results,
+        "trace_logs": state.get("trace_logs", []) + traces,
+        "current_step": "ui_executed"
+    }
+
+
+async def execute_api_node(state: AgentState) -> AgentState:
+    """执行 API 测试"""
+    
+    from engines.left_pupil import LeftPupilEngine
+    
+    api_tests = [tc for tc in state["tc_ir_list"] if tc.get("mode") == "API"]
+    engine = LeftPupilEngine(state.get("config", {}))
+    
+    results = []
+    for tc in api_tests:
+        result = await engine.execute(tc)
+        results.append({
+            "tc_id": tc["id"],
+            "status": result.status,
+            "response": result.response,
+            "assertions": result.assertions
+        })
+    
+    return {
+        **state,
+        "execution_results": state.get("execution_results", []) + results,
+        "current_step": "api_executed"
+    }
+```
+
+5.3 分析与自愈 Agent
+
+```python
+async def analyze_defects_node(state: AgentState) -> AgentState:
+    """分析执行失败的缺陷"""
+    
+    from agents.defect_analyzer import DefectAnalyzerAgent
+    
+    failed_results = [
+        r for r in state["execution_results"] 
+        if r.get("status") == "failed"
+    ]
+    
+    if not failed_results:
+        return {**state, "current_step": "no_defects"}
+    
+    analyzer = DefectAnalyzerAgent()
+    report = await analyzer.analyze(
+        failures=failed_results,
+        traces=state.get("trace_logs", [])
+    )
+    
+    return {
+        **state,
+        "defect_report": report,
+        "current_step": "defects_analyzed"
+    }
+
+
+async def try_healing_node(state: AgentState) -> AgentState:
+    """尝试自愈失败的测试"""
+    
+    from agents.self_healing import SelfHealingAgent
+    
+    healer = SelfHealingAgent()
+    healing_results = await healer.heal(
+        defect_report=state["defect_report"],
+        tc_ir_list=state["tc_ir_list"]
+    )
+    
+    # 更新 TC-IR 列表 (应用自愈修复)
+    healed_tc_list = healer.apply_fixes(
+        state["tc_ir_list"], 
+        healing_results
+    )
+    
+    return {
+        **state,
+        "tc_ir_list": healed_tc_list,
+        "healing_actions": healing_results,
+        "retry_count": state.get("retry_count", 0) + 1,
+        "execution_results": [],  # 清空结果，准备重新执行
+        "current_step": "healed"
+    }
+```
+
+---
+
+6. 人机协作 (Human-in-the-Loop)
+
+6.1 中断与恢复
+
+```python
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.graph import interrupt
+
+async def human_confirm_node(state: AgentState) -> AgentState:
+    """人工确认节点 - 中断等待人工反馈"""
+    
+    # 准备确认信息
+    confirm_data = {
+        "tc_count": len(state["tc_ir_list"]),
+        "critic_score": state.get("critic_score"),
+        "critic_feedback": state.get("critic_feedback"),
+        "preview": state["tc_ir_list"][:3]  # 显示前 3 个用例
+    }
+    
+    # 中断工作流，等待人工输入
+    human_input = interrupt(
+        value=confirm_data,
+        resume_type="feedback"
+    )
+    
+    return {
+        **state,
+        "human_feedback": human_input,
+        "current_step": "human_confirmed"
+    }
+
+
+# 恢复执行
+async def resume_workflow(session_id: str, feedback: str):
+    """恢复被中断的工作流"""
+    
+    checkpointer = SqliteSaver.from_conn_string("checkpoints.db")
+    workflow = create_test_workflow()
+    
+    app = workflow.compile(checkpointer=checkpointer)
+    
+    # 获取最新状态
+    config = {"configurable": {"thread_id": session_id}}
+    
+    # 恢复执行，传入人工反馈
+    result = await app.astream(
+        {"human_feedback": feedback},
+        config=config
+    )
+    
+    async for event in result:
+        yield event
+```
+
+6.2 WebSocket 实时交互
+
+```python
+from fastapi import WebSocket
+
+async def stream_workflow_execution(
+    websocket: WebSocket,
+    session_id: str,
+    initial_state: AgentState
+):
+    """流式执行工作流，实时推送状态"""
+    
+    await websocket.accept()
+    
+    checkpointer = SqliteSaver.from_conn_string("checkpoints.db")
+    workflow = create_test_workflow()
+    app = workflow.compile(checkpointer=checkpointer)
+    
+    config = {"configurable": {"thread_id": session_id}}
+    
+    try:
+        async for event in app.astream(initial_state, config=config):
+            # 推送节点执行状态
+            await websocket.send_json({
+                "type": "node_update",
+                "node": event.get("current_step"),
+                "state": {
+                    k: v for k, v in event.items() 
+                    if k not in ["messages"]  # 过滤大数据
+                }
+            })
+            
+            # 检查是否需要人工介入
+            if event.get("current_step") == "waiting_human":
+                await websocket.send_json({
+                    "type": "human_required",
+                    "data": event.get("confirm_data")
+                })
+                
+                # 等待用户响应
+                feedback = await websocket.receive_json()
+                # 恢复执行...
+                
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+    finally:
+        await websocket.close()
+```
+
+---
+
+7. 状态持久化
+
+7.1 检查点配置
+
+```python
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.redis import RedisSaver
+
+# SQLite 检查点 (开发环境)
+sqlite_checkpointer = SqliteSaver.from_conn_string(
+    "sqlite:///./checkpoints.db"
+)
+
+# Redis 检查点 (生产环境)
+redis_checkpointer = RedisSaver.from_conn_string(
+    "redis://localhost:6379/2"
+)
+
+def compile_workflow(checkpointer=None):
+    """编译工作流，启用检查点"""
+    
+    workflow = create_test_workflow()
+    
+    if checkpointer is None:
+        checkpointer = redis_checkpointer
+    
+    return workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["human_confirm"],  # 人工确认前中断
+        interrupt_after=["analyze_defects"]  # 分析后可暂停
+    )
+```
+
+7.2 状态恢复
+
+```python
+async def restore_workflow(session_id: str) -> AgentState:
+    """从检查点恢复工作流状态"""
+    
+    app = compile_workflow()
+    config = {"configurable": {"thread_id": session_id}}
+    
+    # 获取最新状态快照
+    state = await app.aget_state(config)
+    
+    return state.values
+
+
+async def list_checkpoints(session_id: str) -> List[dict]:
+    """列出会话的所有检查点"""
+    
+    app = compile_workflow()
+    config = {"configurable": {"thread_id": session_id}}
+    
+    checkpoints = []
+    async for checkpoint in app.aget_state_history(config):
+        checkpoints.append({
+            "checkpoint_id": checkpoint.config["configurable"]["checkpoint_id"],
+            "timestamp": checkpoint.created_at,
+            "step": checkpoint.values.get("current_step")
+        })
+    
+    return checkpoints
+```
+
+---
+
+8. API 设计
+
+8.1 HTTP 端点
+
+| 方法 | 端点 | 描述 |
+|------|------|------|
+| POST | /api/v1/workflows | 启动新工作流 |
+| GET | /api/v1/workflows/{id} | 获取工作流状态 |
+| POST | /api/v1/workflows/{id}/resume | 恢复执行 |
+| DELETE | /api/v1/workflows/{id} | 取消工作流 |
+| GET | /api/v1/workflows/{id}/history | 获取检查点历史 |
+| WS | /api/v1/workflows/{id}/stream | WebSocket 实时流 |
+
+8.2 启动工作流
+
+POST /api/v1/workflows
+Content-Type: application/json
+
+{
+  "prd_content": "...",
+  "test_scope": ["login", "order"],
+  "config": {
+    "browser": "chromium",
+    "enable_healing": true
+  }
+}
+
+响应：
+
+{
+  "session_id": "wf_20260206_001",
+  "status": "running",
+  "current_step": "parse_prd",
+  "stream_url": "/api/v1/workflows/wf_20260206_001/stream"
+}
+
+---
+
+9. 预定义工作流模板
+
+9.1 快速冒烟测试
+
+```python
+def create_smoke_test_workflow() -> StateGraph:
+    """快速冒烟测试流程 (跳过评审)"""
+    
+    workflow = StateGraph(AgentState)
+    
+    workflow.add_node("generate_tc", generate_tc_node)
+    workflow.add_node("execute_ui", execute_ui_node)
+    workflow.add_node("generate_report", generate_report_node)
+    
+    workflow.set_entry_point("generate_tc")
+    workflow.add_edge("generate_tc", "execute_ui")
+    workflow.add_edge("execute_ui", "generate_report")
+    workflow.add_edge("generate_report", END)
+    
+    return workflow
+```
+
+9.2 完整回归测试
+
+```python
+def create_regression_workflow() -> StateGraph:
+    """完整回归测试流程 (含 VRT)"""
+    
+    workflow = StateGraph(AgentState)
+    
+    # ... 所有节点 + VRT 节点
+    workflow.add_node("run_vrt", run_vrt_node)
+    
+    # 在执行后添加 VRT
+    workflow.add_edge("aggregate_results", "run_vrt")
+    workflow.add_conditional_edges(
+        "run_vrt",
+        check_vrt_failures,
+        {
+            "passed": "compile_scripts",
+            "failed": "analyze_defects"
+        }
+    )
+    
+    return workflow
+```
+
+---
+
+10. 监控与可视化
+
+10.1 执行追踪
+
+```python
+from langsmith import Client
+
+# LangSmith 追踪
+client = Client()
+
+async def traced_workflow_execution(state: AgentState):
+    """启用 LangSmith 追踪的工作流执行"""
+    
+    with client.trace(
+        name="chongming_test_workflow",
+        project_name="chongming-prod"
+    ) as trace:
+        app = compile_workflow()
+        
+        async for event in app.astream(state):
+            trace.log(event)
+            yield event
+```
+
+10.2 Grafana 仪表盘指标
+
+```python
+from prometheus_client import Counter, Histogram
+
+workflow_started = Counter(
+    "langgraph_workflow_started_total",
+    "Total workflows started",
+    ["workflow_type"]
+)
+
+node_duration = Histogram(
+    "langgraph_node_duration_seconds",
+    "Node execution duration",
+    ["node_name"],
+    buckets=[0.1, 0.5, 1, 5, 10, 30, 60]
+)
+
+workflow_completed = Counter(
+    "langgraph_workflow_completed_total",
+    "Total workflows completed",
+    ["workflow_type", "status"]
+)
+```
+
+---
+
+11. 配置示例
+
+```yaml
+# langgraph_config.yaml
+langgraph:
+  checkpointer:
+    type: "redis"
+    url: "redis://localhost:6379/2"
+    ttl: 86400  # 1 天
+    
+  workflows:
+    full_test:
+      interrupt_before: ["human_confirm"]
+      max_retries: 3
+      timeout: 3600
+      
+    smoke_test:
+      interrupt_before: []
+      max_retries: 1
+      timeout: 600
+      
+  tracing:
+    enabled: true
+    provider: "langsmith"
+    project: "chongming-prod"
+    
+  agents:
+    designer:
+      model: "qwen3-max"
+      temperature: 0.3
+    executor:
+      model: "qwen3-max"
+      timeout: 30000
+    analyzer:
+      model: "qwen3-max"
+      temperature: 0.1
+```
+
+---
+
+EOF

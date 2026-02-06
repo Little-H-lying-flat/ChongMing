@@ -1,0 +1,874 @@
+重明 (ChongMing) 详细设计说明书：涡轮引擎 (Turbo Engine)
+所属层级：执行层 (Execution Layer) - 性能压测侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+涡轮引擎 (Turbo Engine) 是重明架构中负责 "压" (Stress) 和 "量" (Measure) 的核心组件。它承载了重明鸟"负重"的神力，能够将 API-IR 资产快速转化为大规模并发压测脚本。
+
+其核心设计哲学是 "Asset-Driven, Data-Amplified" (资产驱动，数据膨胀)：
+- 资产复用：基于左瞳引擎积累的 API-IR 资产，无需重新编写压测脚本
+- 数据膨胀：利用 LLM 智能生成海量符合 Schema 的测试数据
+- 极速施压：通过 Locust 分布式架构实现高并发压测
+
+1.2 核心职责
+- 数据合成 (Data Synthesis)：基于 API-IR 定义，批量生成符合 Schema 的测试数据
+- 脚本生成 (Script Generation)：将 API-IR 自动转译为 Locust 压测脚本
+- 压测执行 (Load Execution)：配置并运行分布式压测
+- 性能分析 (Performance Analysis)：收集并分析 TPS、响应时间、错误率等指标
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 输入层 (Input Layer)
+        APIIR[API-IR 资产库]
+        SCHEMA[数据 Schema]
+    end
+    
+    subgraph Turbo Engine
+        subgraph Data Synthesizer [数据合成器]
+            APIIR --> ANALYZER[Schema 分析器]
+            ANALYZER --> LLM[LLM 数据生成]
+            LLM --> DATA[(测试数据集)]
+        end
+        
+        subgraph Script Generator [脚本生成器]
+            APIIR --> COMPILER[Locust 编译器]
+            COMPILER --> TEMPLATE[Jinja2 模板]
+            TEMPLATE --> LOCUST[locustfile.py]
+        end
+        
+        subgraph Load Runner [压测执行器]
+            LOCUST --> MASTER[Locust Master]
+            DATA --> MASTER
+            MASTER --> WORKER1[Worker 1]
+            MASTER --> WORKER2[Worker 2]
+            MASTER --> WORKERN[Worker N]
+        end
+        
+        subgraph Metrics Collector [指标收集器]
+            WORKER1 --> COLLECTOR[性能指标收集]
+            WORKER2 --> COLLECTOR
+            WORKERN --> COLLECTOR
+            COLLECTOR --> REPORT[压测报告]
+        end
+    end
+    
+    subgraph 目标系统 (Target System)
+        WORKER1 --> API[被测 API]
+        WORKER2 --> API
+        WORKERN --> API
+    end
+
+2.2 核心类图 (Class Diagram)
+
+- TurboEngine: 涡轮引擎入口，协调数据生成与压测执行
+- DataSynthesizer: 数据合成器，基于 Schema 批量生成测试数据
+- LocustCompiler: Locust 编译器，将 API-IR 转译为压测脚本
+- LoadRunner: 压测执行器，管理 Locust Master/Worker 集群
+- MetricsCollector: 指标收集器，聚合并分析性能数据
+
+3. 数据合成器 (Data Synthesizer)
+
+3.1 设计目标
+
+解决压力测试中"数据不够用"的痛点：
+- 传统方式：手动准备测试数据，耗时且数量有限
+- 涡轮方式：AI 基于 Schema 自动生成海量符合业务规则的数据
+
+3.2 合成流程
+
+=== Step 1: Schema 分析 ===
+
+从 API-IR 中提取数据定义：
+
+API-IR 输入示例：
+{
+  "method": "POST",
+  "url": "/api/v1/orders",
+  "body": {
+    "buyer_id": "${user_uid}",
+    "items": [
+      {
+        "product_id": "string",
+        "quantity": "integer(1-10)"
+      }
+    ],
+    "address_id": "integer"
+  }
+}
+
+Schema 分析输出：
+{
+  "fields": [
+    {"name": "buyer_id", "type": "uuid", "source": "variable"},
+    {"name": "product_id", "type": "string", "pattern": "PROD_[0-9]{4}"},
+    {"name": "quantity", "type": "integer", "min": 1, "max": 10},
+    {"name": "address_id", "type": "integer", "range": [100, 999]}
+  ]
+}
+
+=== Step 2: LLM 数据生成 ===
+
+使用低成本模型批量生成符合 Schema 的数据：
+
+class DataSynthesizer:
+    def synthesize(self, schema: dict, count: int) -> list[dict]:
+        prompt = f"""
+        请根据以下 Schema 生成 {count} 条测试数据：
+        {json.dumps(schema, ensure_ascii=False)}
+        
+        要求：
+        1. 数据符合字段类型和范围约束
+        2. 数据分布均匀，覆盖边界值
+        3. 字符串字段生成有意义的中文/英文内容
+        4. 输出 JSON 数组格式
+        """
+        return self.llm.generate(prompt, model="qwen-long")  # 使用低成本模型
+
+=== Step 3: 数据存储 ===
+
+生成的数据存储为 CSV/JSON，供 Locust 读取：
+
+生成结果示例 (test_data_orders.csv)：
+buyer_id,product_id,quantity,address_id
+USR_001,PROD_1234,3,501
+USR_002,PROD_5678,1,502
+USR_003,PROD_9012,10,503
+...
+
+3.3 智能数据策略
+
+| 策略 | 描述 | 适用场景 |
+|------|------|---------|
+| 均匀分布 | 字段值均匀覆盖范围 | 常规压测 |
+| 边界覆盖 | 重点生成边界值 | 边界压力测试 |
+| 热点数据 | 80% 集中在少量值 | 模拟真实流量分布 |
+| 异常注入 | 混入非法值 | 异常容错测试 |
+
+配置示例：
+{
+  "strategy": "hotspot",
+  "hotspot_ratio": 0.8,
+  "hotspot_values": ["PROD_0001", "PROD_0002", "PROD_0003"]
+}
+
+4. Locust 脚本生成器 (Script Generator)
+
+4.1 设计目标
+
+将 API-IR 资产"一键"转化为可执行的 Locust 压测脚本：
+- 无需手写 Python 代码
+- 自动处理依赖关系（如先登录获取 Token）
+- 支持自定义权重和思考时间
+
+4.2 编译流程
+
+=== Step 1: API-IR 解析 ===
+
+读取 API-IR 资产链：
+
+[
+  {"id": "STEP_01", "method": "POST", "url": "/login", "extract": {"token": "$.data.token"}},
+  {"id": "STEP_02", "method": "POST", "url": "/orders", "dependencies": ["STEP_01"]}
+]
+
+=== Step 2: Jinja2 模板渲染 ===
+
+使用模板生成 Locust 脚本：
+
+# locust_template.j2
+from locust import HttpUser, task, between
+import csv
+
+class {{ class_name }}(HttpUser):
+    wait_time = between({{ wait_min }}, {{ wait_max }})
+    
+    def on_start(self):
+        """初始化：执行登录获取 Token"""
+        {% if login_step %}
+        response = self.client.post(
+            "{{ login_step.url }}",
+            json={{ login_step.body | tojson }}
+        )
+        self.token = response.json()["data"]["token"]
+        {% endif %}
+        
+        # 加载测试数据
+        self.test_data = self._load_test_data()
+        self.data_index = 0
+    
+    def _load_test_data(self):
+        with open("{{ data_file }}", "r") as f:
+            return list(csv.DictReader(f))
+    
+    def _get_next_data(self):
+        data = self.test_data[self.data_index % len(self.test_data)]
+        self.data_index += 1
+        return data
+    
+    {% for step in steps %}
+    @task({{ step.weight }})
+    def {{ step.task_name }}(self):
+        data = self._get_next_data()
+        headers = {"Authorization": f"Bearer {self.token}"}
+        
+        self.client.{{ step.method | lower }}(
+            "{{ step.url }}",
+            {% if step.body %}
+            json={
+                {% for key, value in step.body.items() %}
+                "{{ key }}": data.get("{{ value }}", "{{ value }}"),
+                {% endfor %}
+            },
+            {% endif %}
+            headers=headers,
+            name="{{ step.name }}"
+        )
+    {% endfor %}
+
+=== Step 3: 脚本输出 ===
+
+生成的 locustfile.py：
+
+from locust import HttpUser, task, between
+import csv
+
+class OrderLoadTest(HttpUser):
+    wait_time = between(1, 3)
+    
+    def on_start(self):
+        response = self.client.post(
+            "/api/v1/login",
+            json={"username": "loadtest_user", "password": "Test123!"}
+        )
+        self.token = response.json()["data"]["token"]
+        
+        self.test_data = self._load_test_data()
+        self.data_index = 0
+    
+    def _load_test_data(self):
+        with open("test_data_orders.csv", "r") as f:
+            return list(csv.DictReader(f))
+    
+    def _get_next_data(self):
+        data = self.test_data[self.data_index % len(self.test_data)]
+        self.data_index += 1
+        return data
+    
+    @task(10)
+    def create_order(self):
+        data = self._get_next_data()
+        headers = {"Authorization": f"Bearer {self.token}"}
+        
+        self.client.post(
+            "/api/v1/orders",
+            json={
+                "buyer_id": data.get("buyer_id"),
+                "product_id": data.get("product_id"),
+                "quantity": int(data.get("quantity")),
+                "address_id": int(data.get("address_id"))
+            },
+            headers=headers,
+            name="Create Order"
+        )
+    
+    @task(5)
+    def get_order_list(self):
+        headers = {"Authorization": f"Bearer {self.token}"}
+        self.client.get("/api/v1/orders", headers=headers, name="List Orders")
+
+5. 压测执行器 (Load Runner)
+
+5.1 执行模式
+
+| 模式 | 描述 | 适用场景 |
+|------|------|---------|
+| 本地模式 | 单机运行 Locust | 开发调试、小规模压测 |
+| 分布式模式 | Master + Workers | 大规模并发压测 |
+| 容器模式 | Kubernetes 弹性伸缩 | 超大规模、持续压测 |
+
+5.2 配置与启动
+
+class LoadRunner:
+    def run(self, config: LoadConfig):
+        # 1. 准备压测脚本
+        locustfile = self.compiler.compile(config.api_ir)
+        
+        # 2. 准备测试数据
+        test_data = self.synthesizer.synthesize(config.schema, config.data_count)
+        
+        # 3. 启动 Locust
+        if config.mode == "local":
+            cmd = f"locust -f {locustfile} --host {config.target_host}"
+        else:
+            cmd = f"locust -f {locustfile} --master --expect-workers {config.worker_count}"
+        
+        subprocess.run(cmd, shell=True)
+
+5.3 压测配置
+
+load_test_config:
+  # 目标系统
+  target_host: "https://api.example.com"
+  
+  # 并发配置
+  users: 1000              # 最大并发用户数
+  spawn_rate: 50           # 每秒新增用户数
+  run_time: "10m"          # 运行时长
+  
+  # 数据配置
+  data_count: 10000        # 生成测试数据条数
+  data_strategy: "hotspot" # 数据分布策略
+  
+  # 分布式配置
+  mode: "distributed"
+  worker_count: 5
+
+6. 性能指标收集 (Metrics Collector)
+
+6.1 核心指标
+
+| 指标 | 说明 | 健康阈值 |
+|------|------|---------|
+| TPS (Transactions Per Second) | 每秒事务数 | 根据业务定义 |
+| RT (Response Time) | 响应时间 | P95 < 1000ms |
+| Error Rate | 错误率 | < 1% |
+| Throughput | 吞吐量 | 根据业务定义 |
+| Concurrent Users | 并发用户数 | 无固定阈值 |
+
+6.2 实时监控仪表盘
+
++------------------------------------------------------------------+
+| 📊 涡轮引擎压测监控                            运行中 00:05:32   |
++------------------------------------------------------------------+
+|                                                                  |
+|  并发用户          TPS                 平均响应时间               |
+|  ┌──────────┐   ┌──────────┐        ┌──────────┐                |
+|  │   850    │   │  1,250   │        │  320ms   │                |
+|  │    ↑     │   │   /s     │        │   ↓      │                |
+|  └──────────┘   └──────────┘        └──────────┘                |
+|                                                                  |
+|  错误率            P95 响应时间         P99 响应时间              |
+|  ┌──────────┐   ┌──────────┐        ┌──────────┐                |
+|  │  0.12%   │   │  580ms   │        │  950ms   │                |
+|  │   ✅     │   │   ✅      │        │   ⚠️     │                |
+|  └──────────┘   └──────────┘        └──────────┘                |
+|                                                                  |
++------------------------------------------------------------------+
+|  TPS 趋势 (最近5分钟)                                            |
+|  1500 ┤                    ╭──────╮                              |
+|  1200 ┤          ╭────────╯      ╰────                           |
+|   900 ┤     ╭───╯                                                |
+|   600 ┤────╯                                                     |
+|       └─────┬─────┬─────┬─────┬─────                             |
+|           00:01  00:02  00:03  00:04  00:05                      |
++------------------------------------------------------------------+
+
+6.3 报告生成
+
+压测完成后自动生成报告：
+
+{
+  "test_id": "LOAD_TEST_20260206_001",
+  "duration_seconds": 600,
+  "summary": {
+    "total_requests": 750000,
+    "total_failures": 823,
+    "avg_response_time_ms": 320,
+    "p50_response_time_ms": 280,
+    "p95_response_time_ms": 580,
+    "p99_response_time_ms": 950,
+    "requests_per_second": 1250,
+    "error_rate_percent": 0.11
+  },
+  "endpoints": [
+    {
+      "name": "Create Order",
+      "requests": 500000,
+      "failures": 512,
+      "avg_response_time_ms": 450,
+      "p95_response_time_ms": 780
+    },
+    {
+      "name": "List Orders",
+      "requests": 250000,
+      "failures": 311,
+      "avg_response_time_ms": 120,
+      "p95_response_time_ms": 220
+    }
+  ],
+  "conclusion": "性能达标，P95 响应时间在阈值内",
+  "recommendations": [
+    "Create Order 接口 P95 偏高，建议优化数据库写入性能"
+  ]
+}
+
+7. API 接口设计
+
+7.1 启动压测
+
+POST /api/v1/turbo/run
+Content-Type: application/json
+
+{
+  "api_ir_ids": ["API_STEP_01", "API_STEP_02"],
+  "config": {
+    "users": 1000,
+    "spawn_rate": 50,
+    "run_time": "10m",
+    "data_count": 10000
+  }
+}
+
+响应：
+{
+  "test_id": "LOAD_TEST_001",
+  "status": "running",
+  "dashboard_url": "http://localhost:8089"
+}
+
+7.2 停止压测
+
+POST /api/v1/turbo/stop/{test_id}
+
+7.3 获取报告
+
+GET /api/v1/turbo/report/{test_id}
+
+8. LLM 选型配置
+
+涡轮引擎的数据合成模块需要大量 Token 消耗，选择低成本模型：
+
+| 子模块 | 推荐模型 | 理由 |
+|-------|---------|------|
+| Data Synthesizer | Qwen-Long / DeepSeek-V3 | Token 消耗大，关注成本 |
+| Script Generator | 无需 LLM | 基于模板编译，无 AI 调用 |
+
+配置示例：
+{
+  "turbo_engine": {
+    "synthesizer": {
+      "model": "qwen-long",
+      "temperature": 0.8,
+      "max_tokens": 8192,
+      "batch_size": 100  # 每次生成100条数据
+    }
+  }
+}
+
+9. 与其他模块集成
+
+9.1 与左瞳引擎集成
+
+涡轮引擎复用左瞳引擎积累的 API-IR 资产：
+
+graph LR
+    LEFT[左瞳引擎] --> |API-IR 资产| ASSET[(资产库)]
+    ASSET --> TURBO[涡轮引擎]
+    TURBO --> LOCUST[Locust 压测]
+
+9.2 与报告可视化模块集成
+
+压测结果自动接入报告可视化：
+
+- 压测历史趋势对比
+- 性能基线管理
+- 异常自动告警
+
+10. 云原生压测 (Cloud-Native Load Testing with k6)
+
+10.1 设计目标
+
+提供云原生压测能力，作为 Locust 的备选方案：
+- **k6 集成**：支持 k6 作为轻量级高性能压测引擎
+- **Kubernetes 弹性**：原生支持 K8s 部署，自动扩缩容
+- **云服务集成**：对接主流云压测平台 (Grafana Cloud k6, 阿里云 PTS)
+
+10.2 双引擎架构
+
+=== 引擎选择策略 ===
+
+| 场景 | 推荐引擎 | 理由 |
+|------|---------|------|
+| 快速本地压测 | k6 | 单二进制、无依赖、启动快 |
+| 大规模分布式 | Locust | Master/Worker 成熟架构 |
+| Kubernetes 原生 | k6-operator | 原生支持 K8s CRD |
+| Python 生态 | Locust | Python 脚本扩展性强 |
+| 持续集成 | k6 | CLI 友好，易集成 CI/CD |
+
+涡轮引擎支持动态切换：
+
+turbo_engine:
+  default_runner: "locust"  # 或 "k6"
+  fallback_runner: "k6"     # 主引擎不可用时的备选
+
+10.3 k6 脚本生成器
+
+=== API-IR 到 k6 脚本的转换 ===
+
+class K6Compiler:
+    """将 API-IR 转换为 k6 JavaScript 脚本"""
+    
+    def compile(self, api_ir_chain: list[ApiIR], config: K6Config) -> str:
+        """编译 API-IR 为 k6 脚本"""
+        template = self._get_template()
+        
+        return template.render(
+            options=self._build_options(config),
+            setup_code=self._build_setup(api_ir_chain),
+            scenarios=self._build_scenarios(api_ir_chain),
+            checks=self._build_checks(api_ir_chain)
+        )
+    
+    def _build_options(self, config: K6Config) -> dict:
+        return {
+            "vus": config.virtual_users,
+            "duration": config.duration,
+            "stages": config.stages,
+            "thresholds": {
+                "http_req_duration": ["p(95)<1000"],
+                "http_req_failed": ["rate<0.01"]
+            }
+        }
+
+=== 生成的 k6 脚本示例 ===
+
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { SharedArray } from 'k6/data';
+
+// 配置选项
+export const options = {
+  stages: [
+    { duration: '30s', target: 100 },   // 爬升到 100 用户
+    { duration: '5m', target: 100 },    // 稳定 5 分钟
+    { duration: '30s', target: 0 },     // 降到 0
+  ],
+  thresholds: {
+    http_req_duration: ['p(95)<1000'],  // 95% 请求 < 1s
+    http_req_failed: ['rate<0.01'],     // 错误率 < 1%
+  },
+};
+
+// 加载测试数据
+const testData = new SharedArray('orders', function () {
+  return JSON.parse(open('./test_data.json'));
+});
+
+// 设置阶段：登录获取 Token
+export function setup() {
+  const loginRes = http.post(`${__ENV.BASE_URL}/api/v1/login`, JSON.stringify({
+    username: 'loadtest_user',
+    password: 'Test123!'
+  }), { headers: { 'Content-Type': 'application/json' } });
+  
+  return { token: loginRes.json('data.token') };
+}
+
+// 主测试逻辑
+export default function (data) {
+  const headers = {
+    'Authorization': `Bearer ${data.token}`,
+    'Content-Type': 'application/json'
+  };
+  
+  // 获取下一条测试数据
+  const orderData = testData[__VU % testData.length];
+  
+  // 创建订单
+  const orderRes = http.post(`${__ENV.BASE_URL}/api/v1/orders`,
+    JSON.stringify({
+      buyer_id: orderData.buyer_id,
+      product_id: orderData.product_id,
+      quantity: orderData.quantity
+    }),
+    { headers, tags: { name: 'CreateOrder' } }
+  );
+  
+  check(orderRes, {
+    'order created': (r) => r.status === 201,
+    'has order_id': (r) => r.json('data.order_id') !== undefined,
+  });
+  
+  sleep(1);  // 思考时间
+  
+  // 查询订单列表
+  const listRes = http.get(`${__ENV.BASE_URL}/api/v1/orders`,
+    { headers, tags: { name: 'ListOrders' } }
+  );
+  
+  check(listRes, {
+    'list success': (r) => r.status === 200,
+  });
+  
+  sleep(0.5);
+}
+
+10.4 k6-operator Kubernetes 集成
+
+=== 自定义资源定义 (CRD) ===
+
+apiVersion: k6.io/v1alpha1
+kind: K6
+metadata:
+  name: chongming-load-test
+  namespace: chongming-turbo
+spec:
+  parallelism: 4  # 并行 Pod 数量
+  script:
+    configMap:
+      name: load-test-script
+      file: test.js
+  arguments: --out influxdb=http://influxdb:8086/k6
+  runner:
+    image: grafana/k6:latest
+    resources:
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+
+=== 弹性伸缩 HPA ===
+
+class K6OperatorRunner:
+    """基于 k6-operator 的 Kubernetes 压测执行器"""
+    
+    async def run(self, config: K6Config) -> K6TestRun:
+        # 1. 创建 ConfigMap 存储脚本
+        await self._create_script_configmap(config.script)
+        
+        # 2. 创建 K6 CRD 资源
+        k6_resource = self._build_k6_resource(config)
+        await self.k8s_client.create_namespaced_custom_object(
+            group="k6.io",
+            version="v1alpha1",
+            plural="k6s",
+            namespace=config.namespace,
+            body=k6_resource
+        )
+        
+        # 3. 监控压测进度
+        return await self._watch_test_progress(config.test_id)
+    
+    def _build_k6_resource(self, config: K6Config) -> dict:
+        parallelism = self._calculate_parallelism(config.vus)
+        
+        return {
+            "apiVersion": "k6.io/v1alpha1",
+            "kind": "K6",
+            "metadata": {"name": config.test_id},
+            "spec": {
+                "parallelism": parallelism,
+                "script": {
+                    "configMap": {
+                        "name": f"{config.test_id}-script",
+                        "file": "test.js"
+                    }
+                },
+                "arguments": f"--out influxdb={config.influxdb_url}/k6",
+                "runner": {
+                    "resources": {
+                        "limits": {"cpu": "1", "memory": "1Gi"}
+                    }
+                }
+            }
+        }
+    
+    def _calculate_parallelism(self, vus: int) -> int:
+        """计算需要的 Pod 数量，每 Pod 承载 ~250 VU"""
+        return max(1, (vus + 249) // 250)
+
+10.5 云压测平台集成
+
+=== Grafana Cloud k6 ===
+
+class GrafanaCloudK6Runner:
+    """Grafana Cloud k6 托管压测"""
+    
+    def __init__(self, api_token: str, project_id: str):
+        self.api_token = api_token
+        self.project_id = project_id
+        self.base_url = "https://api.k6.io/v3"
+    
+    async def run_cloud(self, script: str, config: CloudK6Config) -> CloudTestRun:
+        """上传脚本到 Grafana Cloud 执行"""
+        
+        # 创建测试
+        response = await self.client.post(
+            f"{self.base_url}/projects/{self.project_id}/tests",
+            headers={"Authorization": f"Token {self.api_token}"},
+            json={
+                "name": config.test_name,
+                "script": script,
+                "vus": config.vus,
+                "duration": config.duration,
+                "zones": config.load_zones  # ["amazon:us-east-1", "amazon:eu-west-1"]
+            }
+        )
+        
+        test_id = response.json()["id"]
+        
+        # 启动测试
+        await self.client.post(
+            f"{self.base_url}/tests/{test_id}/start",
+            headers={"Authorization": f"Token {self.api_token}"}
+        )
+        
+        return CloudTestRun(
+            test_id=test_id,
+            dashboard_url=f"https://app.k6.io/runs/{test_id}"
+        )
+
+=== 阿里云 PTS 集成 (备选) ===
+
+class AliyunPTSRunner:
+    """阿里云性能测试服务集成"""
+    
+    async def run_pts(self, api_ir_chain: list[ApiIR], config: PTSConfig) -> PTSTestRun:
+        # 1. 将 API-IR 转换为 JMeter 格式 (PTS 兼容)
+        jmx_script = self.jmeter_converter.convert(api_ir_chain)
+        
+        # 2. 上传到 OSS
+        script_url = await self._upload_to_oss(jmx_script)
+        
+        # 3. 创建压测场景
+        scene_id = await self._create_scene(config, script_url)
+        
+        # 4. 启动压测
+        return await self._start_test(scene_id, config)
+
+10.6 统一执行器接口
+
+class UnifiedLoadRunner:
+    """统一压测执行器，支持多引擎切换"""
+    
+    def __init__(self, config: TurboConfig):
+        self.runners = {
+            "locust": LocustRunner(config.locust),
+            "k6": K6LocalRunner(config.k6),
+            "k6_operator": K6OperatorRunner(config.k6_operator),
+            "k6_cloud": GrafanaCloudK6Runner(config.k6_cloud),
+            "pts": AliyunPTSRunner(config.pts)
+        }
+        self.default_runner = config.default_runner
+    
+    async def run(self, api_ir_chain: list[ApiIR], config: LoadConfig) -> LoadTestRun:
+        """根据配置选择引擎执行压测"""
+        runner_name = config.runner or self.default_runner
+        runner = self.runners.get(runner_name)
+        
+        if not runner:
+            raise ValueError(f"Unknown runner: {runner_name}")
+        
+        # 编译脚本
+        if runner_name.startswith("k6"):
+            script = self.k6_compiler.compile(api_ir_chain, config)
+        else:
+            script = self.locust_compiler.compile(api_ir_chain, config)
+        
+        # 执行压测
+        return await runner.run(script, config)
+
+10.7 配置选项
+
+turbo_engine:
+  # 默认引擎
+  default_runner: "locust"
+  
+  # k6 本地模式
+  k6:
+    binary_path: "/usr/local/bin/k6"
+    output_format: "influxdb"
+    influxdb_url: "http://localhost:8086"
+  
+  # k6-operator Kubernetes 模式
+  k6_operator:
+    namespace: "chongming-turbo"
+    image: "grafana/k6:latest"
+    vus_per_pod: 250
+  
+  # Grafana Cloud k6
+  k6_cloud:
+    api_token: "${K6_CLOUD_TOKEN}"
+    project_id: "chongming-prod"
+    load_zones:
+      - "amazon:us-east-1"
+      - "amazon:ap-northeast-1"
+  
+  # 阿里云 PTS (可选)
+  pts:
+    access_key_id: "${ALIYUN_AK}"
+    access_key_secret: "${ALIYUN_SK}"
+    region_id: "cn-hangzhou"
+
+10.8 API 扩展
+
+=== 启动 k6 压测 ===
+
+POST /api/v1/turbo/run
+Content-Type: application/json
+
+{
+  "api_ir_ids": ["API_STEP_01", "API_STEP_02"],
+  "runner": "k6",  // 或 "k6_operator", "k6_cloud"
+  "config": {
+    "vus": 500,
+    "duration": "10m",
+    "stages": [
+      {"duration": "1m", "target": 100},
+      {"duration": "8m", "target": 500},
+      {"duration": "1m", "target": 0}
+    ]
+  }
+}
+
+=== 响应示例 ===
+
+{
+  "test_id": "K6_TEST_20260206_001",
+  "runner": "k6_operator",
+  "status": "running",
+  "pods": 2,
+  "dashboard_url": "http://grafana:3000/d/k6"
+}
+
+11. 部署说明
+
+10.1 依赖安装
+
+pip install locust
+pip install jinja2
+
+10.2 分布式部署 (Docker)
+
+# docker-compose.yml
+services:
+  locust-master:
+    image: locustio/locust
+    ports:
+      - "8089:8089"
+    command: -f /mnt/locust/locustfile.py --master
+    volumes:
+      - ./locust:/mnt/locust
+  
+  locust-worker:
+    image: locustio/locust
+    command: -f /mnt/locust/locustfile.py --worker --master-host locust-master
+    volumes:
+      - ./locust:/mnt/locust
+    deploy:
+      replicas: 5
+
+10.3 Kubernetes 弹性伸缩
+
+支持根据压测需求动态调整 Worker 数量：
+
+kubectl scale deployment locust-worker --replicas=10
+
+End of Design Document

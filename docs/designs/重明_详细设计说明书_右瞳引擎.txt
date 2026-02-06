@@ -1,0 +1,511 @@
+﻿重明 (ChongMing) 详细设计说明书：右瞳引擎 (Right Pupil Engine)
+所属层级：执行层 (Execution Layer) - UI 侧
+版本：v2.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+右瞳引擎 (Right Pupil Engine) 是重明架构中负责 "看" (Perceive) 和 "动" (Act) 的核心组件。它模拟人类测试员的视觉操作模式，通过"看屏幕"而非"读代码"来完成 UI 自动化测试。
+
+其核心设计哲学是 "Visual-First, DOM-Fallback" (视觉主导，结构兜底)：
+- 主路径 (90%)：像人一样看屏幕，基于视觉坐标操作（抗前端框架变动）
+- 兜底路径 (10%)：在视觉失效时，退化为精简 DOM 结构定位
+- 多模态感知：使用 Qwen3-VL-Plus 视觉语言模型理解 SoM 标注图
+- 智能等待：多信号融合确保页面稳定后再操作
+
+1.2 核心职责
+- 视觉感知 (Visual Perception)：截图 + OmniParser 识别页面元素
+- 结构感知 (Structural Perception)：DOM 树剪枝，生成精简 HTML
+- 融合决策 (Fusion Decision)：Qwen3-VL-Plus 多模态推理
+- 原子执行 (Atomic Execution)：坐标点击 / 选择器点击
+- 智能等待 (Smart Wait)：多信号融合页面稳定检测
+- 资产生产 (Asset Generation)：生成 AUI-IR 与 Trace Log
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 输入层 (Input Layer)
+        INTENT[用户意图/TC-IR]
+        PAGE[当前页面]
+    end
+    
+    subgraph Right Pupil Engine
+        subgraph Smart Wait [智能等待层]
+            PAGE --> WAIT[多信号融合等待]
+            WAIT --> |页面稳定| CAPTURE[状态捕获]
+        end
+        
+        subgraph Perceptor [双模态感知层]
+            CAPTURE --> SCREENSHOT[截图器]
+            CAPTURE --> DOMTREE[DOM 提取器]
+            
+            SCREENSHOT --> OMNI[OmniParser GPU]
+            OMNI --> SOM[SoM 标注图]
+            OMNI --> LABELS[元素标签列表]
+            
+            DOMTREE --> SIMPLIFIER[DOM 剪枝器]
+            SIMPLIFIER --> HTML[精简 HTML]
+        end
+        
+        subgraph Planner [融合决策层]
+            INTENT --> VLM[Qwen3-VL-Plus]
+            SOM --> VLM
+            LABELS --> VLM
+            HTML --> VLM
+            VLM --> DECISION{决策}
+            DECISION --> |高置信度| VISUAL[视觉策略]
+            DECISION --> |低置信度| DOM[DOM 策略]
+            VISUAL --> AUIIR[AUI-IR 指令]
+            DOM --> AUIIR
+        end
+        
+        subgraph Actuator [双路径执行层]
+            AUIIR --> COORD[坐标执行器]
+            AUIIR --> SELECTOR[选择器执行器]
+            COORD --> PW[Playwright]
+            SELECTOR --> PW
+        end
+        
+        subgraph Validator [验证层]
+            PW --> VERIFY[视觉变化验证]
+            VERIFY --> TRACE[Trace Log]
+        end
+    end
+    
+    subgraph 输出层 (Output Layer)
+        TRACE --> REPORT[执行报告]
+        AUIIR --> ASSET[(AUI-IR 资产库)]
+    end
+
+2.2 核心类图 (Class Diagram)
+
+- RightPupilEngine: 引擎入口，编排全流程
+- SmartWait: 智能等待模块，多信号融合
+- OmniClient: OmniParser GPU 服务客户端
+- DomTreeSimplifier: DOM 树剪枝器
+- VisionPlanner: Qwen3-VL-Plus 多模态决策器
+- CoordinateActuator: 坐标点击执行器
+- LocatorActuator: CSS 选择器执行器
+- VisualVerifier: 视觉变化验证器
+
+3. 智能等待层 (Smart Wait Layer)
+
+3.1 多信号融合策略
+
+class SmartWait:
+    async def wait_for_stable(self, page: Page) -> bool:
+        detectors = {
+            "visual": VisualStabilityDetector(page),    # 截图 Hash 稳定
+            "network": NetworkIdleDetector(page),        # 无待处理请求
+            "dom": DomMutationDetector(page),            # DOM 变更平静
+            "animation": AnimationCompleteDetector(page) # CSS 动画结束
+        }
+        
+        while elapsed < timeout_ms:
+            signals = await asyncio.gather(*[d.check() for d in detectors.values()])
+            if all(signals):
+                return True
+            await asyncio.sleep(0.5)
+        
+        return False
+
+3.2 信号检测机制
+
+| 信号 | 检测方法 | 稳定条件 |
+|------|---------|---------|
+| 视觉稳定 | 截图 Hash 比对 | 连续 3 帧变化率 < 5% |
+| 网络空闲 | 监控 XHR/Fetch | 无待处理请求 |
+| DOM 平静 | MutationObserver | 1 秒内无变更 |
+| 动画完成 | getAnimations() | 无运行中动画 |
+
+4. 双模态感知层 (Perceptor Layer)
+
+4.1 视觉感知：OmniParser
+
+class OmniClient:
+    async def parse(self, screenshot_base64: str) -> OmniResult:
+        response = await self.client.post(
+            f"{self.endpoint}/parse",
+            json={"image": screenshot_base64}
+        )
+        
+        return OmniResult(
+            som_image=response["annotated_image"],
+            labels=[
+                ElementLabel(
+                    id=item["id"],
+                    text=item["text"],
+                    bbox=BoundingBox(*item["bbox"]),
+                    element_type=item["type"],
+                    confidence=item["confidence"]
+                )
+                for item in response["labels"]
+            ]
+        )
+
+OmniParser 输出示例：
+
+{
+  "annotated_image": "base64...(带红框编号的截图)",
+  "labels": [
+    {"id": 1, "text": "用户名", "bbox": [100, 200, 300, 240], "type": "input", "confidence": 0.95},
+    {"id": 2, "text": "密码", "bbox": [100, 260, 300, 300], "type": "input", "confidence": 0.93},
+    {"id": 3, "text": "登录", "bbox": [150, 340, 250, 380], "type": "button", "confidence": 0.98}
+  ]
+}
+
+4.2 结构感知：DOM 剪枝器
+
+class DomTreeSimplifier:
+    INTERACTIVE_TAGS = ["button", "input", "a", "select", "textarea"]
+    INTERACTIVE_ROLES = ["button", "link", "textbox", "checkbox", "menuitem"]
+    
+    async def simplify(self, page: Page) -> str:
+        raw_html = await page.content()
+        tree = BeautifulSoup(raw_html, "lxml")
+        
+        # 1. 删除不可见元素
+        for elem in tree.find_all(style=re.compile("display:\s*none")):
+            elem.decompose()
+        
+        # 2. 仅保留交互元素
+        interactive_elements = []
+        for elem in tree.find_all(self.INTERACTIVE_TAGS):
+            interactive_elements.append(self._extract_element_info(elem))
+        
+        return self._format_summary(interactive_elements)
+
+5. 融合决策层 (Planner Layer)
+
+5.1 Qwen3-VL-Plus 多模态决策
+
+class VisionPlanner:
+    def __init__(self):
+        self.model = "qwen3-vl-plus"
+    
+    async def plan(self, intent: str, som_image: str, labels: list, 
+                   simplified_html: str = None) -> AuiIR:
+        messages = [
+            {
+                "role": "system",
+                "content": """你是一个 UI 自动化专家。根据用户意图和屏幕截图，输出精确的操作指令。
+                
+输出 JSON 格式：
+{
+  "strategy": "visual" | "dom",
+  "action": "click" | "input" | "scroll" | ...,
+  "target": "som_id:X" | "CSS选择器",
+  "coordinates": [x, y],
+  "confidence": 0.0-1.0
+}"""
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": som_image},
+                    {"type": "text", "text": f"用户意图：{intent}\n元素列表：{json.dumps(labels)}"}
+                ]
+            }
+        ]
+        
+        response = await self.llm.generate(messages)
+        return self._parse_response(response)
+
+5.2 决策逻辑流程
+
+用户意图 + SoM 图
+       ↓
+Qwen3-VL-Plus 分析
+       ↓
+置信度 > 0.8? ─── 是 ──→ 视觉策略 (坐标点击)
+       │
+       └── 否 ──→ 注入精简 HTML ──→ DOM 策略 (选择器点击)
+
+6. 双路径执行层 (Actuator Layer)
+
+6.1 坐标执行器 (视觉策略)
+
+class CoordinateActuator:
+    async def execute(self, page: Page, action: str, coordinates: tuple, value: str = None):
+        x, y = self._scale_coordinates(page, coordinates)
+        
+        if action == "click":
+            await page.mouse.click(x, y)
+        elif action == "input":
+            await page.mouse.click(x, y)
+            await page.keyboard.type(value, delay=50)
+
+6.2 选择器执行器 (DOM 策略)
+
+class LocatorActuator:
+    async def execute(self, page: Page, action: str, selector: str, value: str = None):
+        locator = page.locator(selector)
+        await locator.wait_for(state="visible", timeout=5000)
+        
+        if action == "click":
+            await locator.click()
+        elif action == "input":
+            await locator.fill(value)
+
+6.3 动作类型汇总
+
+| 动作 | 视觉支持 | DOM 支持 |
+|------|---------|---------|
+| click | ✅ | ✅ |
+| input | ✅ | ✅ |
+| hover | ✅ | ✅ |
+| scroll | ✅ | ✅ |
+| drag | ✅ | ❌ |
+| select | ❌ | ✅ |
+| upload | ❌ | ✅ |
+
+7. AUI-IR 协议定义
+
+{
+  "protocol": "AUI-IR",
+  "version": "2.0",
+  "id": "STEP_UI_003",
+  "name": "点击登录按钮",
+  
+  "execution_plan": {
+    "primary": {
+      "strategy": "visual",
+      "action": "click",
+      "target": "som_id:3",
+      "coordinates": [200, 360],
+      "confidence": 0.95
+    },
+    "fallback": {
+      "strategy": "dom",
+      "selector": "button[data-testid='login-btn']"
+    }
+  },
+  
+  "verification": {
+    "expect_visual_change": true,
+    "expect_url_change": true,
+    "timeout_ms": 5000
+  },
+  
+  "retry": {
+    "max_attempts": 2,
+    "switch_strategy_on_fail": true
+  }
+}
+
+8. 异常处理与自愈
+
+| 异常类型 | 处理策略 |
+|---------|---------|
+| ElementNotFound | 切换到 DOM 模式 |
+| AmbiguousElement | 注入 HTML 辅助判断 |
+| ClickIntercepted | JS 强制点击 |
+| Timeout | 重试或标记失败 |
+
+class SelfHealing:
+    async def execute_with_healing(self, page: Page, aui_ir: AuiIR) -> ExecutionResult:
+        # 1. 尝试主策略 (视觉)
+        try:
+            result = await self._execute_primary(page, aui_ir)
+            if result.success:
+                return result
+        except ElementNotFoundError:
+            pass
+        
+        # 2. 切换到兜底策略 (DOM)
+        if aui_ir.fallback:
+            result = await self._execute_fallback(page, aui_ir)
+            result.healed = True
+            return result
+        
+        return ExecutionResult(success=False)
+
+9. LLM 选型配置
+
+| 子模块 | 推荐模型 | 理由 |
+|-------|---------|------|
+| 融合决策器 | **Qwen3-VL-Plus** | 多模态视觉语言模型 |
+| 验证确认 | Qwen3-VL-Plus | 视觉验证需要图像理解 |
+| DOM 语义理解 | Qwen-Turbo | 速度优先 |
+
+10. 部署说明
+
+10.1 OmniParser 部署
+
+# docker-compose.yml
+services:
+  omniparser:
+    image: microsoft/omniparser:v2
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+10.2 配置
+
+right_pupil:
+  browser:
+    type: chromium
+    headless: true
+    viewport: {width: 1920, height: 1080}
+  
+  omniparser:
+    endpoint: http://localhost:8000
+    timeout_ms: 30000
+  
+  smart_wait:
+    timeout_ms: 10000
+    visual_stable_frames: 3
+
+11. 双模态执行机制 (Dual-Mode Execution) 【v2.1 新增】
+
+11.1 概述
+
+双模态执行机制解决了 AI 自动化测试的两个核心痛点:
+- 痛点1: 规划太慢 - 每次操作需要 LLM 意图规划，引入 2-5s 延迟
+- 痛点2: 定位不准 - 密集 UI (编辑器侧边栏、复杂表格) 识别精度低
+
+11.2 模式定义
+
+┌────────────────┬────────────────────────┬────────────────────────────────┐
+│     模式       │       执行流程         │          适用场景              │
+├────────────────┼────────────────────────┼────────────────────────────────┤
+│ 规划模式       │ 意图 → LLM规划 →       │ • 探索性测试                  │
+│ Planning Mode  │ 步骤生成 → 循环执行    │ • 复杂业务流程                │
+├────────────────┼────────────────────────┼────────────────────────────────┤
+│ 原子模式       │ 动作 → 直接定位 →      │ • 回归测试                    │
+│ Atomic Mode    │ 单步执行               │ • 固定业务路径                │
+├────────────────┼────────────────────────┼────────────────────────────────┤
+│ 深度聚焦       │ 全局 → 区域 →          │ • 密集 UI                     │
+│ Deep Focus     │ 元素 三级定位          │ • 编辑器侧边栏/复杂表格       │
+└────────────────┴────────────────────────┴────────────────────────────────┘
+
+11.3 原子执行模式 (Atomic Mode)
+
+设计理念: "Instant Actions - 即时操作，零规划延迟"
+
+支持的原子操作:
+- atomicTap(target): 点击指定元素
+- atomicInput(target, value): 在指定元素输入文本
+- atomicHover(target): 悬停在指定元素
+- atomicScroll(target, direction): 滚动指定元素
+- atomicSelect(target, option): 选择下拉选项
+- atomicAssert(target, condition): 断言元素状态
+
+执行流程:
+    原子指令 → 跳过规划层 → 直接视觉定位 → 单步执行
+                    ↓
+             延迟从 3-5s 降至 0.5-1s
+
+11.4 多级视觉聚焦 (Deep Focus)
+
+设计理念: "Deep Think - 深度思考，渐进聚焦"
+
+三级聚焦策略:
+    Stage 1: 全局区域识别 (Qwen-VL 分析全屏，输出目标区域边界框)
+         ↓
+    Stage 2: 区域裁剪检测 (OmniParser 对裁剪区域高精度识别)
+         ↓
+    Stage 3: 精确目标匹配 (Qwen-VL 从候选元素中精确匹配)
+
+触发条件:
+- 元素密度 > 50 个/区域
+- 首次定位置信度 < 0.7
+- 匹配到多个相似元素
+- deepFocus: true 配置指定
+
+11.5 模式路由决策
+
+class ModeRouter:
+    ATOMIC_ACTIONS = {"tap", "click", "input", "type", "hover", "scroll", "select"}
+    
+    def detect_mode(self, tc_ir: dict) -> ExecutionMode:
+        # 1. 显式指定优先
+        if tc_ir.get("mode") == "atomic":
+            return ExecutionMode.ATOMIC
+        
+        # 2. 根据动作类型推断
+        action = tc_ir.get("action", "").lower()
+        if action in self.ATOMIC_ACTIONS:
+            return ExecutionMode.ATOMIC
+        
+        # 3. 默认规划模式
+        return ExecutionMode.PLANNING
+
+11.6 性能对比
+
+┌────────────────────────┬────────────────┬────────────────┬──────────────┐
+│        指标            │   规划模式     │   原子模式     │    提升      │
+├────────────────────────┼────────────────┼────────────────┼──────────────┤
+│ 单步平均延迟           │    3-5s        │    0.5-1s      │    5x        │
+│ LLM Token 消耗         │   500-1000     │      0         │    100%      │
+│ 密集 UI 定位精度       │    60%         │    90%         │    +30%      │
+│ 10步回归测试           │   30-50s       │    5-10s       │    5x        │
+└────────────────────────┴────────────────┴────────────────┴──────────────┘
+
+12. 竞品参考与设计灵感 (Competitor References) 【v2.1 新增】
+
+12.1 开源项目参考
+───────────────────────────────────────────────────────────────────────────────
+
+A. LaVague (lavague-ai/LaVague) - Python Web Agent 框架
+
+    核心架构借鉴:
+    ┌─────────────────────────┬───────────────────────────────────────────┐
+    │  LaVague 概念           │  重明右瞳引擎对应                         │
+    ├─────────────────────────┼───────────────────────────────────────────┤
+    │  World Model            │  意图理解 + 页面状态分析                  │
+    │  Action Engine          │  执行器 (Actuators)                       │
+    │  html_extractor.py      │  DomTreeSimplifier DOM 压缩               │
+    │  Selenium/Playwright    │  双路径执行 (Visual/DOM)                  │
+    └─────────────────────────┴───────────────────────────────────────────┘
+
+    建议参考:
+    • lavague/core/html_extractor.py → 学习 DOM 压缩算法
+    • Ollama 本地模型集成方式
+
+B. Skyvern (Skyvern-AI/skyvern) - 企业级浏览器自动化
+
+    核心特性:
+    • Swarm Agents 架构 (元素识别/导航/数据提取)
+    • 64.4% WebBench SOTA 性能
+    • Draw Box 元素标注可视化
+    • Livestreaming 实时调试
+
+C. SeeAct (ICML 2024) - GPT-4V Web Agent
+
+    Visual Grounding 策略:
+    • text_choice_som 标注模式
+    • ⚠️ Set-of-Mark 在复杂页面会产生 VLM 幻觉
+    • ✅ 最佳策略: HTML + 视觉 结合
+
+D. Mind2Web (NeurIPS 2023) - DOM 清洗标准
+
+    数据结构参考:
+    • raw_html / cleaned_html → DOM 压缩标准
+    • pos_candidates → 元素匹配候选集
+
+12.2 设计决策对照
+───────────────────────────────────────────────────────────────────────────────
+
+    ┌────────────────────┬─────────────┬─────────────┬───────────────────┐
+    │ 设计维度           │ 重明        │ 竞品主流    │ 决策理由          │
+    ├────────────────────┼─────────────┼─────────────┼───────────────────┤
+    │ 感知模式           │ Visual-First│ DOM-First   │ 抗前端框架变动    │
+    │ VLM 选择           │ Qwen3-VL    │ GPT-4V      │ 成本可控+中文优化 │
+    │ SoM 标注           │ OmniParser  │ 自研        │ 复用成熟方案      │
+    │ 执行方式           │ 双路径      │ 单路径      │ 坐标+选择器互补   │
+    └────────────────────┴─────────────┴─────────────┴───────────────────┘
+
+End of Design Document
+

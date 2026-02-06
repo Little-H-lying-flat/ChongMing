@@ -1,0 +1,921 @@
+重明 (ChongMing) 详细设计说明书：自愈中心模块 (Self-Healing Center)
+所属层级：智能层 (Intelligence Layer) - 自愈侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+自愈中心模块 (Self-Healing Center) 是重明架构中负责 "愈" (Heal) 和 "进" (Evolve) 的核心创新组件。它是"气态"生命周期的执行中枢，当测试脚本失败时自动诊断问题并修复，实现测试资产的自我进化。
+
+其核心设计哲学是 "Fail-Fast, Heal-Smart" (快速失败，智能修复)：
+- 快速检测：毫秒级识别失败原因
+- 智能诊断：AI 分析根因并制定修复策略
+- 自动修复：无需人工介入的热修复能力
+- 持续进化：从修复中学习，预防类似问题
+
+1.2 核心职责
+- 失败检测 (Failure Detection)：实时监控执行状态
+- 根因诊断 (Root Cause Diagnosis)：AI 分析失败原因
+- 策略选择 (Strategy Selection)：匹配最佳修复策略
+- 自动修复 (Auto Repair)：执行修复并验证
+- 知识积累 (Knowledge Accumulation)：学习修复经验
+- 热更新 (Hot Update)：无缝更新测试脚本
+
+1.3 架构位置
+
+┌─────────────────────────────────────────────────────────────────┐
+│                          重明三态架构                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│    液态 (AI探索)                                                │
+│         │                                                       │
+│         ▼                                                       │
+│    固态 (脚本执行) ─────── 失败 ─────────┐                      │
+│         │                               │                       │
+│         │ 成功                          ▼                       │
+│         ▼                    ┌─────────────────────┐           │
+│    测试报告                   │   自愈中心 (气态)   │           │
+│                              │                     │           │
+│                              │  ┌──────────────┐   │           │
+│                              │  │ 诊断 → 修复  │   │           │
+│                              │  └──────────────┘   │           │
+│                              │         │          │           │
+│                              └─────────┼──────────┘           │
+│                                        │                       │
+│                               修复成功 │ 热更新                 │
+│                                        ▼                       │
+│                              固态脚本 (已修复)                  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 触发层 (Trigger Layer)
+        FAILURE[执行失败事件]
+        MONITOR[执行监控器]
+    end
+    
+    subgraph Self-Healing Center
+        subgraph Diagnosis [诊断层]
+            FAILURE --> DETECTOR[失败检测器]
+            DETECTOR --> CLASSIFIER[失败分类器]
+            CLASSIFIER --> ANALYZER[根因分析器]
+        end
+        
+        subgraph Strategy [策略层]
+            ANALYZER --> MATCHER[策略匹配器]
+            MATCHER --> SELECTOR[策略选择器]
+            SELECTOR --> PLAN[修复计划]
+        end
+        
+        subgraph Repair [修复层]
+            PLAN --> EXECUTOR[修复执行器]
+            EXECUTOR --> VALIDATOR[验证器]
+            VALIDATOR -->|失败| RETRY[重试/升级]
+            VALIDATOR -->|成功| UPDATER[热更新器]
+        end
+        
+        subgraph Learning [学习层]
+            UPDATER --> RECORDER[修复记录器]
+            RECORDER --> LEARNER[知识学习器]
+            LEARNER --> KB[自愈知识库]
+        end
+    end
+    
+    subgraph 输出层 (Output Layer)
+        UPDATER --> SCRIPT[更新后脚本]
+        KB --> PREDICTION[预防性建议]
+    end
+
+2.2 核心类图
+
+- SelfHealingCenter: 自愈中心入口
+- FailureDetector: 失败检测器
+- FailureClassifier: 失败分类器
+- RootCauseAnalyzer: 根因分析器
+- StrategyMatcher: 策略匹配器
+- RepairExecutor: 修复执行器
+- HotUpdater: 热更新器
+- HealingKnowledgeBase: 自愈知识库
+
+3. 失败检测层 (Failure Detection Layer)
+
+3.1 失败类型分类
+
+| 失败类型 | 描述 | 可自愈性 | 修复策略 |
+|---------|------|---------|---------|
+| ElementNotFound | 元素定位失败 | 高 | 选择器重建 |
+| ElementNotVisible | 元素不可见 | 高 | 等待/滚动 |
+| TimeoutError | 操作超时 | 中 | 增加等待/重试 |
+| AssertionError | 断言失败 | 低 | 更新预期值 |
+| NetworkError | 网络请求失败 | 中 | 重试/环境检查 |
+| StaleElement | 元素过期 | 高 | 重新定位 |
+| FrameSwitch | iframe 切换失败 | 高 | 帧定位修复 |
+| PopupBlocked | 弹窗拦截 | 高 | 弹窗处理 |
+
+3.2 失败检测器
+
+class FailureDetector:
+    def __init__(self):
+        self.patterns = {
+            'element_not_found': [
+                r'Element.*not found',
+                r'No element matches',
+                r'Unable to locate element'
+            ],
+            'timeout': [
+                r'Timeout.*exceeded',
+                r'TimeoutError',
+                r'waiting for.*timed out'
+            ],
+            'stale_element': [
+                r'StaleElementReferenceException',
+                r'Element is no longer attached'
+            ],
+            'assertion': [
+                r'AssertionError',
+                r'Expected.*but got',
+                r'Assertion failed'
+            ]
+        }
+    
+    def detect(self, error: Exception, context: ExecutionContext) -> FailureInfo:
+        error_msg = str(error)
+        
+        # 1. 模式匹配
+        failure_type = self._match_pattern(error_msg)
+        
+        # 2. 提取详细信息
+        details = self._extract_details(error, context)
+        
+        # 3. 评估可自愈性
+        healability = self._assess_healability(failure_type, details)
+        
+        return FailureInfo(
+            type=failure_type,
+            message=error_msg,
+            details=details,
+            healability=healability,
+            timestamp=datetime.now(),
+            context=context
+        )
+    
+    def _assess_healability(self, failure_type: str, details: dict) -> float:
+        """评估自愈可能性 (0-1)"""
+        base_scores = {
+            'element_not_found': 0.9,
+            'stale_element': 0.95,
+            'timeout': 0.7,
+            'element_not_visible': 0.85,
+            'assertion': 0.3,
+            'network': 0.5
+        }
+        return base_scores.get(failure_type, 0.2)
+
+4. 根因分析层 (Root Cause Analysis Layer)
+
+4.1 分析器
+
+class RootCauseAnalyzer:
+    def __init__(self, llm_client: LLMClient):
+        self.llm = llm_client
+    
+    async def analyze(self, failure: FailureInfo) -> RootCauseReport:
+        # 1. 收集上下文
+        context = await self._gather_context(failure)
+        
+        # 2. AI 分析
+        analysis = await self._ai_analyze(failure, context)
+        
+        # 3. 查询历史相似案例
+        similar_cases = await self._find_similar_cases(failure)
+        
+        return RootCauseReport(
+            failure_type=failure.type,
+            root_cause=analysis.root_cause,
+            confidence=analysis.confidence,
+            evidence=analysis.evidence,
+            similar_cases=similar_cases,
+            suggested_repairs=analysis.repairs
+        )
+    
+    async def _ai_analyze(self, failure: FailureInfo, context: dict) -> AnalysisResult:
+        prompt = f"""
+你是一个测试自动化专家。请分析以下测试失败的根本原因。
+
+【失败类型】
+{failure.type}
+
+【错误信息】
+{failure.message}
+
+【失败步骤】
+{json.dumps(context['failed_step'], ensure_ascii=False)}
+
+【当前页面截图描述】
+{context.get('screenshot_description', '无')}
+
+【页面 DOM 摘要】
+{context.get('dom_summary', '无')}
+
+【历史执行记录】
+最近 5 次执行状态: {context.get('history', [])}
+
+【选择器信息】
+- 原始选择器: {context.get('original_selector', '无')}
+- 选择器类型: {context.get('selector_type', '无')}
+
+请分析失败原因并给出修复建议。输出 JSON 格式：
+{{
+  "root_cause": "根本原因描述",
+  "cause_category": "ui_change|timing|data|environment|test_bug",
+  "confidence": 0.0-1.0,
+  "evidence": ["证据1", "证据2"],
+  "repairs": [
+    {{
+      "strategy": "修复策略名称",
+      "priority": 1,
+      "description": "修复描述",
+      "params": {{}}
+    }}
+  ]
+}}
+"""
+        response = await self.llm.generate(prompt, model="qwen3-max")
+        return self._parse_analysis(response)
+
+4.2 上下文收集
+
+class ContextGatherer:
+    async def gather(self, failure: FailureInfo) -> dict:
+        context = {}
+        
+        # 1. 截图分析
+        if failure.context.screenshot:
+            context['screenshot_description'] = await self._analyze_screenshot(
+                failure.context.screenshot
+            )
+        
+        # 2. DOM 摘要
+        if failure.context.page:
+            context['dom_summary'] = await self._get_dom_summary(
+                failure.context.page
+            )
+        
+        # 3. 网络日志
+        context['network_log'] = failure.context.network_events[-10:]
+        
+        # 4. 控制台日志
+        context['console_log'] = failure.context.console_messages[-20:]
+        
+        # 5. 历史执行记录
+        context['history'] = await self._get_execution_history(
+            failure.context.tc_id
+        )
+        
+        # 6. 失败步骤详情
+        context['failed_step'] = failure.context.current_step
+        context['original_selector'] = failure.context.selector
+        
+        return context
+
+5. 修复策略层 (Repair Strategy Layer)
+
+5.1 策略库
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        自愈策略库                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 选择器修复策略                                          │   │
+│  │ • SelectorRebuild: 基于 AI 视觉重建选择器               │   │
+│  │ • SelectorFuzzy: 模糊匹配相似元素                       │   │
+│  │ • SelectorFallback: 切换到备用选择器                    │   │
+│  │ • XPathToCSS: 选择器类型转换                           │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 等待策略                                                 │   │
+│  │ • WaitIncrease: 增加等待时间                            │   │
+│  │ • SmartWait: 多信号融合等待                             │   │
+│  │ • ElementWait: 等待元素出现                             │   │
+│  │ • NetworkIdle: 等待网络空闲                             │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 交互策略                                                 │   │
+│  │ • ScrollIntoView: 滚动到可见区域                        │   │
+│  │ • FrameSwitch: 切换 iframe                              │   │
+│  │ • PopupHandle: 处理弹窗                                 │   │
+│  │ • HoverFirst: 悬停后再点击                              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 数据策略                                                 │   │
+│  │ • DataRefresh: 刷新测试数据                             │   │
+│  │ • AssertionUpdate: 更新断言预期值                       │   │
+│  │ • VariableRebind: 重新绑定变量                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 环境策略                                                 │   │
+│  │ • PageRefresh: 刷新页面                                 │   │
+│  │ • SessionReset: 重置会话                                │   │
+│  │ • BrowserRestart: 重启浏览器                            │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+5.2 策略匹配器
+
+class StrategyMatcher:
+    def __init__(self):
+        self.strategies = {
+            'element_not_found': [
+                ('SelectorRebuild', 0.9),
+                ('SelectorFuzzy', 0.7),
+                ('VisualLocate', 0.6)
+            ],
+            'timeout': [
+                ('SmartWait', 0.8),
+                ('WaitIncrease', 0.7),
+                ('NetworkIdle', 0.6)
+            ],
+            'stale_element': [
+                ('ElementRefresh', 0.95),
+                ('PageRefresh', 0.5)
+            ],
+            'element_not_visible': [
+                ('ScrollIntoView', 0.9),
+                ('WaitVisible', 0.8),
+                ('HoverReveal', 0.6)
+            ]
+        }
+    
+    def match(self, root_cause: RootCauseReport) -> list[RepairStrategy]:
+        candidates = self.strategies.get(root_cause.failure_type, [])
+        
+        matched = []
+        for strategy_name, base_score in candidates:
+            strategy = self._get_strategy(strategy_name)
+            
+            # 结合历史成功率调整分数
+            historical_rate = self._get_historical_rate(strategy_name, root_cause)
+            adjusted_score = base_score * 0.7 + historical_rate * 0.3
+            
+            matched.append(RepairStrategy(
+                name=strategy_name,
+                score=adjusted_score,
+                strategy=strategy
+            ))
+        
+        # 加入 AI 建议的策略
+        for repair in root_cause.suggested_repairs:
+            if repair.strategy not in [m.name for m in matched]:
+                matched.append(RepairStrategy(
+                    name=repair.strategy,
+                    score=repair.priority * 0.1,
+                    strategy=self._get_strategy(repair.strategy),
+                    params=repair.params
+                ))
+        
+        return sorted(matched, key=lambda x: x.score, reverse=True)
+
+5.3 核心修复策略实现
+
+class SelectorRebuildStrategy:
+    """基于 AI 视觉重建选择器"""
+    
+    async def execute(self, context: RepairContext) -> RepairResult:
+        # 1. 获取当前页面截图
+        screenshot = await context.page.screenshot()
+        
+        # 2. 使用 OmniParser 识别元素
+        som_result = await self.omni_client.analyze(screenshot)
+        
+        # 3. 匹配目标元素
+        target_desc = context.original_step.target_description
+        matched_element = await self._match_element(som_result, target_desc)
+        
+        if not matched_element:
+            return RepairResult(success=False, reason="无法匹配目标元素")
+        
+        # 4. 生成新选择器
+        new_selector = await self._generate_selector(
+            context.page,
+            matched_element
+        )
+        
+        # 5. 验证新选择器
+        if await self._validate_selector(context.page, new_selector):
+            return RepairResult(
+                success=True,
+                new_selector=new_selector,
+                repair_type='selector_rebuild',
+                confidence=matched_element.confidence
+            )
+        
+        return RepairResult(success=False, reason="新选择器验证失败")
+    
+    async def _generate_selector(self, page, element: SOMElement) -> str:
+        """生成多种选择器并选择最优"""
+        selectors = []
+        
+        # 基于 data-testid
+        if element.attributes.get('data-testid'):
+            selectors.append(f"[data-testid='{element.attributes['data-testid']}']")
+        
+        # 基于 ID
+        if element.id:
+            selectors.append(f"#{element.id}")
+        
+        # 基于文本内容
+        if element.text:
+            selectors.append(f"text={element.text}")
+        
+        # 基于 ARIA 标签
+        if element.aria_label:
+            selectors.append(f"[aria-label='{element.aria_label}']")
+        
+        # 基于 XPath (兜底)
+        selectors.append(await self._generate_robust_xpath(element))
+        
+        # 选择唯一性最好的选择器
+        for selector in selectors:
+            count = await page.locator(selector).count()
+            if count == 1:
+                return selector
+        
+        return selectors[0]
+
+
+class SmartWaitStrategy:
+    """智能等待策略"""
+    
+    async def execute(self, context: RepairContext) -> RepairResult:
+        # 1. 分析等待原因
+        wait_reason = await self._analyze_wait_reason(context)
+        
+        # 2. 应用对应等待方式
+        if wait_reason == 'network':
+            await context.page.wait_for_load_state('networkidle')
+        elif wait_reason == 'animation':
+            await self._wait_for_animation(context.page)
+        elif wait_reason == 'element':
+            await context.page.wait_for_selector(
+                context.original_selector,
+                state='visible',
+                timeout=30000
+            )
+        
+        # 3. 重试原操作
+        try:
+            await self._retry_original_action(context)
+            return RepairResult(success=True, repair_type='smart_wait')
+        except Exception as e:
+            return RepairResult(success=False, reason=str(e))
+
+6. 修复执行层 (Repair Execution Layer)
+
+6.1 修复执行器
+
+class RepairExecutor:
+    def __init__(self, max_attempts: int = 3):
+        self.max_attempts = max_attempts
+    
+    async def execute(self, strategies: list[RepairStrategy], 
+                      context: RepairContext) -> RepairResult:
+        """按优先级尝试修复策略"""
+        
+        results = []
+        
+        for i, strategy in enumerate(strategies[:self.max_attempts]):
+            try:
+                result = await strategy.strategy.execute(context)
+                results.append(result)
+                
+                if result.success:
+                    # 验证修复
+                    verified = await self._verify_repair(result, context)
+                    if verified:
+                        return RepairResult(
+                            success=True,
+                            strategy_used=strategy.name,
+                            attempt=i + 1,
+                            details=result
+                        )
+                
+            except Exception as e:
+                results.append(RepairResult(
+                    success=False,
+                    strategy_used=strategy.name,
+                    reason=str(e)
+                ))
+        
+        return RepairResult(
+            success=False,
+            strategies_tried=[r.strategy_used for r in results],
+            reason="所有策略均失败"
+        )
+    
+    async def _verify_repair(self, result: RepairResult, 
+                            context: RepairContext) -> bool:
+        """验证修复是否有效"""
+        
+        if result.repair_type == 'selector_rebuild':
+            # 验证新选择器能找到元素
+            count = await context.page.locator(result.new_selector).count()
+            if count != 1:
+                return False
+            
+            # 验证元素可交互
+            element = context.page.locator(result.new_selector)
+            return await element.is_visible() and await element.is_enabled()
+        
+        # 其他修复类型的验证...
+        return True
+
+6.2 修复流程
+
+失败发生
+    │
+    ▼
+┌─────────────┐
+│  失败检测   │ ──→ 识别失败类型
+└─────────────┘
+    │
+    ▼
+┌─────────────┐
+│  根因分析   │ ──→ AI 分析根因
+└─────────────┘
+    │
+    ▼
+┌─────────────┐
+│  策略匹配   │ ──→ 选择修复策略 (Top 3)
+└─────────────┘
+    │
+    ▼
+┌─────────────┐     ┌─────────────┐
+│  策略1执行  │ ──→ │   验证      │ ──→ 成功? ──→ 热更新
+└─────────────┘     └─────────────┘
+    │ 失败                              │ 失败
+    ▼                                   │
+┌─────────────┐                         │
+│  策略2执行  │ ─────────────────────────┘
+└─────────────┘
+    │ 失败
+    ▼
+┌─────────────┐
+│  人工介入   │ ──→ 通知开发者
+└─────────────┘
+
+7. 热更新层 (Hot Update Layer)
+
+7.1 热更新器
+
+class HotUpdater:
+    def __init__(self, script_repo: ScriptRepository):
+        self.repo = script_repo
+    
+    async def update(self, repair_result: RepairResult, 
+                     context: RepairContext) -> UpdateResult:
+        """热更新测试脚本"""
+        
+        # 1. 读取原脚本
+        script_path = context.script_path
+        original_code = await self.repo.read(script_path)
+        
+        # 2. 应用修复
+        updated_code = await self._apply_repair(
+            original_code,
+            repair_result,
+            context
+        )
+        
+        # 3. 保存更新
+        await self.repo.write(script_path, updated_code)
+        
+        # 4. 记录修复历史
+        await self._record_update(repair_result, context, updated_code)
+        
+        # 5. 通知相关方
+        await self._notify_update(repair_result, script_path)
+        
+        return UpdateResult(
+            success=True,
+            script_path=script_path,
+            changes=self._generate_diff(original_code, updated_code)
+        )
+    
+    async def _apply_repair(self, code: str, result: RepairResult, 
+                           context: RepairContext) -> str:
+        """应用修复到代码"""
+        
+        if result.repair_type == 'selector_rebuild':
+            # 替换选择器
+            old_selector = context.original_selector
+            new_selector = result.new_selector
+            
+            # 使用 AST 进行精确替换
+            updated = await self._replace_selector_ast(
+                code, old_selector, new_selector
+            )
+            
+            # 添加修复注释
+            updated = self._add_repair_comment(
+                updated, 
+                f"# 自愈修复: {old_selector} -> {new_selector}"
+            )
+            
+            return updated
+        
+        elif result.repair_type == 'wait_added':
+            # 添加等待语句
+            return self._insert_wait_statement(code, result.wait_config)
+        
+        # 其他修复类型...
+        return code
+
+7.2 代码修复 AST 处理
+
+class ASTRepairer:
+    """基于 AST 的代码修复"""
+    
+    def replace_selector(self, code: str, old: str, new: str) -> str:
+        tree = ast.parse(code)
+        transformer = SelectorTransformer(old, new)
+        new_tree = transformer.visit(tree)
+        return ast.unparse(new_tree)
+    
+    def insert_wait(self, code: str, line: int, wait_stmt: str) -> str:
+        lines = code.split('\n')
+        indent = self._get_indent(lines[line - 1])
+        lines.insert(line, indent + wait_stmt)
+        return '\n'.join(lines)
+    
+    def update_assertion(self, code: str, old_value: str, 
+                        new_value: str) -> str:
+        tree = ast.parse(code)
+        transformer = AssertionTransformer(old_value, new_value)
+        new_tree = transformer.visit(tree)
+        return ast.unparse(new_tree)
+
+8. 知识学习层 (Knowledge Learning Layer)
+
+8.1 自愈知识库
+
+class HealingKnowledgeBase:
+    def __init__(self, vector_db: MilvusClient):
+        self.db = vector_db
+        self.collection = "healing_knowledge"
+    
+    async def store_case(self, case: HealingCase):
+        """存储修复案例"""
+        await self.db.insert(self.collection, {
+            'id': case.id,
+            'failure_type': case.failure_type,
+            'root_cause': case.root_cause,
+            'strategy_used': case.strategy_used,
+            'success': case.success,
+            'selector_before': case.selector_before,
+            'selector_after': case.selector_after,
+            'context_embedding': case.context_embedding,
+            'created_at': datetime.now()
+        })
+    
+    async def find_similar(self, failure: FailureInfo, 
+                          top_k: int = 5) -> list[HealingCase]:
+        """查找相似修复案例"""
+        embedding = await self._generate_embedding(failure)
+        
+        results = await self.db.search(
+            self.collection,
+            query_vector=embedding,
+            filter={
+                'failure_type': failure.type,
+                'success': True
+            },
+            top_k=top_k
+        )
+        
+        return [self._to_healing_case(r) for r in results]
+    
+    async def get_strategy_success_rate(self, strategy: str, 
+                                        failure_type: str) -> float:
+        """获取策略历史成功率"""
+        total = await self.db.count(self.collection, {
+            'strategy_used': strategy,
+            'failure_type': failure_type
+        })
+        
+        success = await self.db.count(self.collection, {
+            'strategy_used': strategy,
+            'failure_type': failure_type,
+            'success': True
+        })
+        
+        return success / total if total > 0 else 0.5
+
+8.2 学习与进化
+
+class HealingLearner:
+    async def learn(self, case: HealingCase):
+        """从修复案例中学习"""
+        
+        # 1. 更新策略权重
+        await self._update_strategy_weights(case)
+        
+        # 2. 提取模式
+        patterns = await self._extract_patterns(case)
+        
+        # 3. 生成预防规则
+        if patterns:
+            await self._create_prevention_rules(patterns)
+        
+        # 4. 更新选择器健壮性评分
+        if case.selector_before:
+            await self._update_selector_robustness(case)
+    
+    async def _update_strategy_weights(self, case: HealingCase):
+        """更新策略权重"""
+        if case.success:
+            # 成功策略权重提升
+            await self.weight_store.increase(
+                case.strategy_used,
+                case.failure_type,
+                delta=0.05
+            )
+        else:
+            # 失败策略权重降低
+            await self.weight_store.decrease(
+                case.strategy_used,
+                case.failure_type,
+                delta=0.02
+            )
+    
+    async def _create_prevention_rules(self, patterns: list[Pattern]):
+        """创建预防规则"""
+        for pattern in patterns:
+            rule = PreventionRule(
+                trigger=pattern.trigger,
+                action=pattern.suggested_action,
+                confidence=pattern.confidence
+            )
+            await self.rule_store.save(rule)
+
+9. API 接口设计
+
+9.1 触发自愈
+
+POST /api/v1/self-healing/heal
+{
+  "failure_info": {
+    "type": "element_not_found",
+    "message": "Unable to locate element: #old-button",
+    "context": {
+      "tc_id": "TC_001",
+      "step_index": 3,
+      "selector": "#old-button",
+      "screenshot_base64": "..."
+    }
+  },
+  "options": {
+    "max_attempts": 3,
+    "timeout_ms": 30000,
+    "auto_update": true
+  }
+}
+
+响应：
+{
+  "success": true,
+  "repair_result": {
+    "strategy_used": "SelectorRebuild",
+    "attempt": 1,
+    "old_selector": "#old-button",
+    "new_selector": "[data-testid='submit-btn']",
+    "confidence": 0.92
+  },
+  "script_updated": true,
+  "diff": "- page.click('#old-button')\n+ page.click('[data-testid=\"submit-btn\"]')"
+}
+
+9.2 查询修复历史
+
+GET /api/v1/self-healing/history?tc_id=TC_001&limit=10
+
+9.3 获取策略统计
+
+GET /api/v1/self-healing/strategies/stats
+
+响应：
+{
+  "strategies": [
+    {"name": "SelectorRebuild", "total": 156, "success": 142, "rate": 0.91},
+    {"name": "SmartWait", "total": 89, "success": 78, "rate": 0.88},
+    ...
+  ]
+}
+
+10. 前端界面设计
+
++------------------------------------------------------------------+
+| 🔄 自愈中心                                                       |
++------------------------------------------------------------------+
+|                                                                  |
+| 实时自愈状态                                                     |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │ 🟢 自愈引擎: 运行中    今日修复: 23 次    成功率: 91.3%      │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| 最近修复记录                                                     |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │ 时间      │ 用例      │ 失败类型       │ 策略       │ 状态  │  |
+| ├───────────┼───────────┼────────────────┼────────────┼───────┤  |
+| │ 10:25:30  │ TC_LOGIN  │ ElementNotFound│ 选择器重建 │ ✅    │  |
+| │ 10:23:15  │ TC_CART   │ Timeout        │ 智能等待   │ ✅    │  |
+| │ 10:20:42  │ TC_PAY    │ StaleElement   │ 元素刷新   │ ✅    │  |
+| │ 10:18:00  │ TC_REG    │ Assertion      │ 预期更新   │ ⚠️    │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| 策略成功率                                                       |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │ 选择器重建  ████████████████████░░░░  91%                  │  |
+| │ 智能等待    █████████████████░░░░░░░  85%                  │  |
+| │ 元素刷新    ██████████████████████░░  95%                  │  |
+| │ 滚动可见    ███████████████████░░░░░  89%                  │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| [查看详情]  [策略配置]  [知识库]  [导出报告]                     |
++------------------------------------------------------------------+
+
+11. 配置说明
+
+self_healing:
+  enabled: true
+  
+  # 检测配置
+  detection:
+    enabled: true
+    patterns_path: "healing/patterns.yaml"
+  
+  # 策略配置
+  strategies:
+    max_attempts: 3
+    timeout_per_strategy_ms: 30000
+    
+    weights:
+      SelectorRebuild: 0.9
+      SmartWait: 0.8
+      ElementRefresh: 0.85
+    
+    enabled_strategies:
+      - SelectorRebuild
+      - SmartWait
+      - ElementRefresh
+      - ScrollIntoView
+      - WaitVisible
+  
+  # 热更新配置
+  hot_update:
+    enabled: true
+    auto_commit: false
+    require_review: true
+  
+  # 知识库配置
+  knowledge:
+    vector_db: "milvus"
+    embedding_model: "text-embedding-3-small"
+    retention_days: 90
+  
+  # 通知配置
+  notification:
+    on_success: false
+    on_failure: true
+    channels:
+      - type: "dingtalk"
+        webhook: "${DINGTALK_WEBHOOK}"
+      - type: "email"
+        recipients: ["qa-team@example.com"]
+
+12. 自愈成功率指标
+
+| 失败类型 | 目标成功率 | 当前成功率 |
+|---------|-----------|-----------|
+| ElementNotFound | >90% | 91.3% |
+| StaleElement | >95% | 96.2% |
+| Timeout | >85% | 87.5% |
+| ElementNotVisible | >90% | 89.8% |
+| FrameSwitch | >85% | 86.4% |
+| AssertionError | >30% | 28.7% |
+
+总体自愈成功率目标: >85%
+
+End of Design Document

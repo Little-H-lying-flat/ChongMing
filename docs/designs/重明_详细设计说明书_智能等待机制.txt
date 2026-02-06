@@ -1,0 +1,281 @@
+重明 (ChongMing) 详细设计说明书：智能等待机制 (Smart Wait Mechanism)
+所属层级：执行层 (Execution Layer) - 右瞳引擎子模块
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+智能等待机制 (Smart Wait Mechanism) 是右瞳引擎中负责 "候" (Wait) 和 "判" (Judge) 的关键子模块。它替代传统的硬编码等待 (sleep)，通过多信号融合判断页面是否真正加载完成。
+
+其核心设计哲学是 "Multi-Signal Fusion, Visual Stability" (多信号融合，视觉稳定)：
+- 不再猜测：摒弃 sleep(3) 这种盲猜式等待
+- 多维感知：同时监控视觉、网络、DOM、动画四个维度
+- 精准截图：确保页面完全静止后再执行截图，提高 OmniParser 识别准确率
+
+1.2 核心职责
+- 视觉稳定检测：通过截图 Hash 比对判断画面是否停止变化
+- 网络空闲检测：监控是否有未完成的 XHR/Fetch 请求
+- DOM 变更检测：监控 DOM Mutation 是否平静
+- 动画完成检测：监控 CSS/JS 动画是否结束
+
+2. 架构设计 (Architecture Design)
+
+2.1 多信号融合模型
+
+graph TD
+    START[开始等待] --> LOOP{循环检测}
+    
+    subgraph 四维信号检测
+        LOOP --> VIS[视觉稳定检测]
+        LOOP --> NET[网络空闲检测]
+        LOOP --> DOM[DOM 变更检测]
+        LOOP --> ANI[动画完成检测]
+    end
+    
+    VIS --> FUSION[信号融合器]
+    NET --> FUSION
+    DOM --> FUSION
+    ANI --> FUSION
+    
+    FUSION --> DECIDE{全部信号稳定?}
+    DECIDE --> |是| READY[页面就绪]
+    DECIDE --> |否| WAIT[等待 500ms]
+    WAIT --> LOOP
+    
+    READY --> ACTION[执行截图/操作]
+
+2.2 核心类图 (Class Diagram)
+
+- SmartWait: 智能等待主类，协调四维检测
+- VisualStabilityDetector: 视觉稳定检测器
+- NetworkIdleDetector: 网络空闲检测器
+- DomMutationDetector: DOM 变更检测器
+- AnimationCompleteDetector: 动画完成检测器
+- SignalFusion: 信号融合器，综合判断页面状态
+
+3. 详细流程设计 (Workflow Design)
+
+3.1 多信号融合等待流程
+
+=== Step 1: 初始化检测器 ===
+
+当右瞳引擎需要等待页面稳定时，调用 SmartWait：
+
+async def wait_for_stable(page: Page, timeout_ms: int = 10000) -> bool:
+    start_time = time.time()
+    
+    detectors = {
+        "visual": VisualStabilityDetector(page),
+        "network": NetworkIdleDetector(page),
+        "dom": DomMutationDetector(page),
+        "animation": AnimationCompleteDetector(page)
+    }
+    
+    while elapsed < timeout_ms:
+        signals = await gather_signals(detectors)
+        if all_stable(signals):
+            return True
+        await asyncio.sleep(0.5)
+    
+    return False  # 超时
+
+=== Step 2: 视觉稳定检测 (Visual Stability) ===
+
+原理：每 500ms 截图一次，计算图像 Hash，连续 3 帧 Hash 变化率 < 5% 视为稳定。
+
+class VisualStabilityDetector:
+    def __init__(self, page):
+        self.page = page
+        self.hash_history = []
+        self.stable_threshold = 3  # 连续3帧稳定
+        
+    async def check(self) -> bool:
+        screenshot = await self.page.screenshot()
+        current_hash = imagehash.average_hash(Image.open(screenshot))
+        
+        if len(self.hash_history) >= self.stable_threshold:
+            # 计算最近几帧的变化率
+            changes = [
+                abs(self.hash_history[i] - self.hash_history[i-1])
+                for i in range(-self.stable_threshold + 1, 0)
+            ]
+            if all(c < 5 for c in changes):  # 变化小于5
+                return True
+        
+        self.hash_history.append(current_hash)
+        return False
+
+=== Step 3: 网络空闲检测 (Network Idle) ===
+
+原理：监控 Playwright 的网络事件，当无待处理请求时视为空闲。
+
+class NetworkIdleDetector:
+    def __init__(self, page):
+        self.page = page
+        self.pending_requests = 0
+        
+        page.on("request", self._on_request)
+        page.on("requestfinished", self._on_request_done)
+        page.on("requestfailed", self._on_request_done)
+        
+    def _on_request(self, request):
+        # 忽略静态资源
+        if not self._is_api_request(request):
+            return
+        self.pending_requests += 1
+        
+    def _on_request_done(self, request):
+        if not self._is_api_request(request):
+            return
+        self.pending_requests = max(0, self.pending_requests - 1)
+        
+    def check(self) -> bool:
+        return self.pending_requests == 0
+        
+    def _is_api_request(self, request) -> bool:
+        # 仅监控 XHR/Fetch，忽略图片/CSS/JS
+        return request.resource_type in ["xhr", "fetch"]
+
+=== Step 4: DOM 变更检测 (DOM Mutation) ===
+
+原理：通过浏览器端 MutationObserver 监控 DOM 变化，无变更持续 1s 视为稳定。
+
+class DomMutationDetector:
+    def __init__(self, page):
+        self.page = page
+        self.last_mutation_time = 0
+        
+    async def setup(self):
+        await self.page.evaluate("""
+            window.__domMutationTime = Date.now();
+            const observer = new MutationObserver(() => {
+                window.__domMutationTime = Date.now();
+            });
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: true
+            });
+        """)
+        
+    async def check(self) -> bool:
+        last_mutation = await self.page.evaluate("window.__domMutationTime")
+        current_time = time.time() * 1000
+        # 距离上次变更超过 1000ms 视为稳定
+        return (current_time - last_mutation) > 1000
+
+=== Step 5: 动画完成检测 (Animation Complete) ===
+
+原理：检测页面上是否有正在进行的 CSS 动画或过渡效果。
+
+class AnimationCompleteDetector:
+    def __init__(self, page):
+        self.page = page
+        
+    async def check(self) -> bool:
+        running_animations = await self.page.evaluate("""
+            () => {
+                const animations = document.getAnimations();
+                return animations.filter(a => a.playState === 'running').length;
+            }
+        """)
+        return running_animations == 0
+
+=== Step 6: 信号融合判断 ===
+
+四个信号全部为 True 时，判定页面稳定：
+
+class SignalFusion:
+    @staticmethod
+    def all_stable(signals: dict) -> bool:
+        return all([
+            signals.get("visual", False),
+            signals.get("network", False),
+            signals.get("dom", False),
+            signals.get("animation", False)
+        ])
+    
+    @staticmethod
+    def partial_stable(signals: dict, required: list) -> bool:
+        # 支持部分信号判断（某些场景可配置）
+        return all(signals.get(s, False) for s in required)
+
+4. 配置选项
+
+智能等待支持灵活配置，适应不同场景：
+
+class SmartWaitConfig:
+    # 超时设置
+    timeout_ms: int = 10000           # 最大等待时间
+    poll_interval_ms: int = 500       # 检测间隔
+    
+    # 视觉检测配置
+    visual_stable_frames: int = 3     # 需要连续稳定的帧数
+    visual_change_threshold: int = 5  # Hash 变化阈值
+    
+    # 网络检测配置
+    ignore_resource_types: list = ["image", "stylesheet", "font"]
+    
+    # DOM 检测配置
+    dom_stable_duration_ms: int = 1000  # DOM 平静持续时间
+    
+    # 融合策略
+    required_signals: list = ["visual", "network", "dom", "animation"]
+    fallback_on_timeout: bool = True  # 超时后是否继续执行
+
+5. 使用示例
+
+在右瞳引擎中集成智能等待：
+
+class RightPupilEngine:
+    async def execute_action(self, action: AuiIR):
+        # 执行操作前等待页面稳定
+        await self.smart_wait.wait_for_stable(self.page)
+        
+        # 现在截图，OmniParser 识别更准确
+        screenshot = await self.page.screenshot()
+        som_result = await self.omni_client.parse(screenshot)
+        
+        # 执行点击/输入等操作
+        await self.actuator.execute(action)
+        
+        # 操作后再次等待，确保页面响应完成
+        await self.smart_wait.wait_for_stable(self.page)
+
+6. 降级策略
+
+当智能等待超时时，采用降级策略：
+
+async def wait_with_fallback(page, config):
+    try:
+        stable = await smart_wait(page, config.timeout_ms)
+        if stable:
+            return WaitResult.STABLE
+    except Exception as e:
+        log.warning(f"Smart wait failed: {e}")
+    
+    # 降级策略
+    if config.fallback_on_timeout:
+        log.info("Falling back to simple network idle wait")
+        await page.wait_for_load_state("networkidle")
+        return WaitResult.FALLBACK
+    
+    return WaitResult.TIMEOUT
+
+7. 性能优化
+
+7.1 截图缓存
+- 使用 JPEG 格式替代 PNG，减少截图体积
+- 仅对首屏区域截图，避免长页面
+
+7.2 异步并行
+- 四个检测器并行执行，不阻塞
+- 使用 asyncio.gather 同时收集信号
+
+7.3 早期退出
+- 如果网络/DOM 明显不稳定，跳过视觉检测（节省算力）
+
+End of Design Document

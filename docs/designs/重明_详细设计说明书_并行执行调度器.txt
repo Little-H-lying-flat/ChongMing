@@ -1,0 +1,440 @@
+重明 (ChongMing) 详细设计说明书：并行执行调度器 (Parallel Scheduler)
+所属层级：执行层 (Execution Layer) - 调度侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+并行执行调度器 (Parallel Scheduler) 是重明架构中负责 "分" (Distribute) 和 "控" (Orchestrate) 的核心组件。它像交响乐指挥一样，协调多个测试用例的并行执行，最大化资源利用率。
+
+其核心设计哲学是 "Dependency-Aware, Resource-Optimized" (依赖感知，资源优化)：
+- 依赖分析：自动识别用例间的依赖关系，确保执行顺序正确
+- 并行调度：无依赖的用例并行执行，提高效率
+- 资源管理：动态分配浏览器实例和 Worker 资源
+- 失败隔离：单用例失败不影响其他用例执行
+
+1.2 核心职责
+- 依赖图构建 (Dependency Graph)：分析 TC-IR 间的依赖关系
+- 任务分片 (Task Sharding)：将用例集拆分为可并行的批次
+- 资源池管理 (Resource Pool)：管理浏览器实例和执行器
+- 执行编排 (Orchestration)：调度任务到 Worker 执行
+- 结果聚合 (Result Aggregation)：收集并汇总执行结果
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 输入层 (Input Layer)
+        TCLIST[TC-IR 用例集]
+        CONFIG[调度配置]
+    end
+    
+    subgraph Parallel Scheduler
+        subgraph Analyzer [依赖分析层]
+            TCLIST --> PARSER[依赖解析器]
+            PARSER --> DAG[依赖图 DAG]
+            DAG --> TOPO[拓扑排序器]
+            TOPO --> BATCHES[执行批次]
+        end
+        
+        subgraph Dispatcher [调度层]
+            BATCHES --> QUEUE[任务队列]
+            QUEUE --> LB[负载均衡器]
+            LB --> W1[Worker 1]
+            LB --> W2[Worker 2]
+            LB --> WN[Worker N]
+        end
+        
+        subgraph Resource Pool [资源池]
+            POOL[(浏览器实例池)]
+            W1 --> POOL
+            W2 --> POOL
+            WN --> POOL
+        end
+        
+        subgraph Collector [结果收集层]
+            W1 --> AGG[结果聚合器]
+            W2 --> AGG
+            WN --> AGG
+            AGG --> REPORT[执行报告]
+        end
+    end
+
+2.2 核心类图
+
+- ParallelScheduler: 调度器入口，编排全流程
+- DependencyAnalyzer: 依赖分析器，构建 DAG
+- TaskQueue: 任务队列，支持优先级
+- LoadBalancer: 负载均衡器，分配任务
+- WorkerPool: Worker 池，管理执行器
+- BrowserPool: 浏览器实例池
+- ResultAggregator: 结果聚合器
+
+3. 依赖分析层 (Dependency Analysis)
+
+3.1 依赖类型
+
+| 依赖类型 | 描述 | 示例 |
+|---------|------|------|
+| 数据依赖 | 后续用例需要前序用例的输出数据 | 登录 → 获取 Token → 购买 |
+| 顺序依赖 | 明确指定执行顺序 | setup → test → teardown |
+| 资源依赖 | 共享同一资源，需互斥 | 多用例操作同一账号 |
+| 无依赖 | 完全独立，可并行 | 不同功能模块的测试 |
+
+3.2 依赖图构建
+
+class DependencyAnalyzer:
+    def build_dag(self, tc_list: list[TCIR]) -> nx.DiGraph:
+        dag = nx.DiGraph()
+        
+        for tc in tc_list:
+            dag.add_node(tc.id, tc=tc, status="pending")
+            
+            # 分析显式依赖
+            for dep_id in tc.dependencies:
+                dag.add_edge(dep_id, tc.id)
+            
+            # 分析隐式依赖（数据依赖）
+            for var in tc.required_variables:
+                provider = self._find_variable_provider(tc_list, var)
+                if provider:
+                    dag.add_edge(provider.id, tc.id)
+        
+        # 检测循环依赖
+        if not nx.is_directed_acyclic_graph(dag):
+            cycles = nx.find_cycle(dag)
+            raise CircularDependencyError(cycles)
+        
+        return dag
+
+3.3 拓扑排序与批次划分
+
+def generate_batches(self, dag: nx.DiGraph) -> list[Batch]:
+    batches = []
+    remaining = set(dag.nodes())
+    
+    while remaining:
+        # 找出所有入度为 0 的节点（无依赖或依赖已完成）
+        ready = [n for n in remaining 
+                 if all(pred not in remaining for pred in dag.predecessors(n))]
+        
+        if not ready:
+            raise DeadlockError("存在无法解决的依赖")
+        
+        # 这些节点可以并行执行
+        batches.append(Batch(
+            id=len(batches) + 1,
+            tasks=ready,
+            parallel=True
+        ))
+        
+        remaining -= set(ready)
+    
+    return batches
+
+批次划分示例：
+
+用例依赖关系：
+TC_001 (登录)
+   ↓
+TC_002 (获取用户信息) ─────┬───→ TC_004 (修改密码)
+   ↓                      │
+TC_003 (获取订单列表) ────┴───→ TC_005 (下单)
+
+批次划分：
+┌─────────────────────────────────────┐
+│ Batch 1: [TC_001]                    │  → 串行
+├─────────────────────────────────────┤
+│ Batch 2: [TC_002, TC_003]           │  → 并行
+├─────────────────────────────────────┤
+│ Batch 3: [TC_004, TC_005]           │  → 并行
+└─────────────────────────────────────┘
+
+4. 调度层 (Dispatcher Layer)
+
+4.1 任务队列
+
+class TaskQueue:
+    def __init__(self):
+        self.queue = asyncio.PriorityQueue()
+    
+    async def enqueue(self, task: Task, priority: int = 0):
+        # 优先级：0=最高，数字越大优先级越低
+        await self.queue.put((priority, task))
+    
+    async def dequeue(self) -> Task:
+        _, task = await self.queue.get()
+        return task
+
+4.2 负载均衡策略
+
+| 策略 | 描述 | 适用场景 |
+|------|------|---------|
+| Round Robin | 轮询分配 | Worker 能力均等 |
+| Least Connections | 最少任务优先 | 任务耗时差异大 |
+| Resource Affinity | 资源亲和 | 特定 Worker 绑定特定资源 |
+| Priority-Based | 优先级调度 | P0 用例优先执行 |
+
+class LoadBalancer:
+    def __init__(self, strategy: str = "least_connections"):
+        self.strategy = strategy
+        self.workers = []
+    
+    def select_worker(self, task: Task) -> Worker:
+        if self.strategy == "least_connections":
+            return min(self.workers, key=lambda w: w.current_tasks)
+        elif self.strategy == "round_robin":
+            return self.workers[self._rr_index % len(self.workers)]
+        elif self.strategy == "resource_affinity":
+            return self._find_affinity_worker(task)
+
+4.3 Worker 管理
+
+class WorkerPool:
+    def __init__(self, size: int, browser_pool: BrowserPool):
+        self.workers = [Worker(id=i, browser_pool=browser_pool) for i in range(size)]
+    
+    async def scale_up(self, count: int):
+        """动态扩容"""
+        for i in range(count):
+            self.workers.append(Worker(id=len(self.workers)))
+    
+    async def scale_down(self, count: int):
+        """动态缩容"""
+        idle_workers = [w for w in self.workers if w.is_idle]
+        for worker in idle_workers[:count]:
+            await worker.shutdown()
+            self.workers.remove(worker)
+
+5. 资源池管理 (Resource Pool)
+
+5.1 浏览器实例池
+
+class BrowserPool:
+    def __init__(self, max_instances: int = 10):
+        self.max_instances = max_instances
+        self.instances = []
+        self.available = asyncio.Queue()
+    
+    async def acquire(self) -> BrowserContext:
+        """获取浏览器实例"""
+        if not self.available.empty():
+            return await self.available.get()
+        
+        if len(self.instances) < self.max_instances:
+            browser = await self._create_browser()
+            self.instances.append(browser)
+            return browser
+        
+        # 等待可用实例
+        return await self.available.get()
+    
+    async def release(self, browser: BrowserContext):
+        """归还浏览器实例"""
+        await browser.clear_cookies()
+        await browser.clear_storage()
+        await self.available.put(browser)
+
+5.2 实例复用策略
+
+| 策略 | 描述 | 优势 |
+|------|------|------|
+| 复用 + 清理 | 清理 Cookie/Storage 后复用 | 启动快 |
+| 每次新建 | 每个用例新建实例 | 完全隔离 |
+| 按套件复用 | 同一测试套件内复用 | 平衡性能与隔离 |
+
+6. 执行编排 (Orchestration)
+
+6.1 编排流程
+
+class ParallelScheduler:
+    async def execute(self, tc_list: list[TCIR], config: SchedulerConfig) -> Report:
+        # 1. 构建依赖图
+        dag = self.analyzer.build_dag(tc_list)
+        
+        # 2. 划分执行批次
+        batches = self.analyzer.generate_batches(dag)
+        
+        # 3. 初始化资源池
+        browser_pool = BrowserPool(max_instances=config.max_browsers)
+        worker_pool = WorkerPool(size=config.workers, browser_pool=browser_pool)
+        
+        # 4. 逐批次执行
+        results = []
+        for batch in batches:
+            batch_results = await self._execute_batch(batch, worker_pool)
+            results.extend(batch_results)
+            
+            # 检查是否需要中断
+            if config.fail_fast and any(r.status == "failed" for r in batch_results):
+                break
+        
+        # 5. 聚合结果
+        return self.aggregator.aggregate(results)
+    
+    async def _execute_batch(self, batch: Batch, worker_pool: WorkerPool) -> list:
+        tasks = []
+        for tc_id in batch.tasks:
+            worker = self.load_balancer.select_worker(tc_id)
+            task = asyncio.create_task(worker.execute(tc_id))
+            tasks.append(task)
+        
+        return await asyncio.gather(*tasks, return_exceptions=True)
+
+6.2 失败处理策略
+
+| 策略 | 描述 |
+|------|------|
+| fail_fast | 首个失败立即终止全部 |
+| continue_on_error | 失败后继续执行其他用例 |
+| retry_failed | 失败用例自动重试 N 次 |
+| skip_dependents | 失败后跳过所有依赖该用例的后续用例 |
+
+配置示例：
+
+scheduler:
+  workers: 5
+  max_browsers: 10
+  strategy: "least_connections"
+  
+  failure_policy:
+    mode: "skip_dependents"
+    max_retries: 2
+    retry_delay_ms: 1000
+
+7. 结果聚合 (Result Aggregation)
+
+7.1 聚合报告
+
+{
+  "execution_id": "EXEC_20260206_001",
+  "start_time": "2026-02-06T10:00:00Z",
+  "end_time": "2026-02-06T10:15:30Z",
+  "duration_seconds": 930,
+  
+  "summary": {
+    "total_cases": 50,
+    "passed": 45,
+    "failed": 3,
+    "skipped": 2,
+    "pass_rate": 0.90
+  },
+  
+  "parallelism_stats": {
+    "batches": 8,
+    "max_concurrency": 5,
+    "avg_concurrency": 4.2,
+    "time_saved_percent": 65
+  },
+  
+  "batch_details": [
+    {"batch_id": 1, "tasks": 1, "duration_ms": 5000},
+    {"batch_id": 2, "tasks": 5, "duration_ms": 12000},
+    {"batch_id": 3, "tasks": 5, "duration_ms": 8000}
+  ]
+}
+
+8. API 接口设计
+
+8.1 启动并行执行
+
+POST /api/v1/scheduler/run
+{
+  "tc_ids": ["TC_001", "TC_002", "TC_003"],
+  "config": {
+    "workers": 5,
+    "max_browsers": 10,
+    "fail_fast": false
+  }
+}
+
+响应：
+{
+  "execution_id": "EXEC_001",
+  "status": "running",
+  "dashboard_url": "/executions/EXEC_001"
+}
+
+8.2 查询执行状态
+
+GET /api/v1/scheduler/status/{execution_id}
+
+8.3 取消执行
+
+POST /api/v1/scheduler/cancel/{execution_id}
+
+9. 前端界面设计
+
++------------------------------------------------------------------+
+| 📊 并行执行监控                                    运行中 5/50   |
++------------------------------------------------------------------+
+|                                                                  |
+| Batch 进度                                                       |
+| ═══════════════════════════════════════ 40%                     |
+|                                                                  |
+| Worker 状态                                                      |
+| ┌──────┬──────┬──────┬──────┬──────┐                            |
+| │ W1   │ W2   │ W3   │ W4   │ W5   │                            |
+| │ 🟢   │ 🟢   │ 🟡   │ 🟢   │ ⚪   │                            |
+| │TC_05 │TC_06 │等待  │TC_08 │空闲  │                            |
+| └──────┴──────┴──────┴──────┴──────┘                            |
+|                                                                  |
+| 实时日志                                                         |
+| 10:05:32 [W1] TC_005 通过 (3.2s)                                |
+| 10:05:34 [W2] TC_006 执行中...                                  |
+| 10:05:35 [W4] TC_008 通过 (2.8s)                                |
++------------------------------------------------------------------+
+
+10. 竞品参考与设计灵感 (Competitor References) 【v1.1 新增】
+
+10.1 Microsoft UFO³ Galaxy 参考
+
+UFO³ 的 Galaxy 多设备编排框架与重明并行调度器高度相关：
+
+    ┌────────────────────────┬─────────────────────────────────────────────┐
+    │  UFO³ Galaxy 概念      │  重明并行调度器对应                          │
+    ├────────────────────────┼─────────────────────────────────────────────┤
+    │  ConstellationAgent    │  ParallelScheduler 入口                     │
+    │  Dynamic DAG           │  依赖图 (Dependency DAG)                    │
+    │  TaskStar              │  Task / TC-IR                              │
+    │  Task Orchestrator     │  LoadBalancer + WorkerPool                 │
+    │  AIP (Agent Protocol)  │  Worker 间通信协议                          │
+    └────────────────────────┴─────────────────────────────────────────────┘
+
+    UFO³ Galaxy 五大设计原则对重明的启发:
+
+    1. Declarative Decomposition into Dynamic DAG
+       → 重明: TC-IR 分解为依赖图，自动拓扑排序
+
+    2. Continuous Result-Driven Graph Evolution
+       → 重明: 执行结果反馈驱动 DAG 动态调整
+
+    3. Heterogeneous, Asynchronous & Safe Orchestration
+       → 重明: 异步 Worker 执行 + 资源池锁管理
+
+    4. Unified Agent Interaction Protocol
+       → 重明: Worker 间标准化通信协议
+
+    5. Template-Driven Device Agents
+       → 重明: Worker 模板化，支持快速扩展
+
+10.2 Skyvern Workflows 参考
+
+Skyvern 的工作流编排与调度器设计相关:
+
+    Skyvern Workflow 特性:
+    • 任务链式编排 (Task Chaining)
+    • 并行分支支持 (Parallel Branches)
+    • 循环与条件 (Loops / Conditionals)
+    • HTTP 回调集成
+
+    建议参考:
+    • skyvern/forge/sdk/workflow/ → Workflow 编排设计
+    • 任务状态机实现
+
+End of Design Document
+

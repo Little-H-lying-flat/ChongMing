@@ -1,0 +1,19 @@
+2026-02-06 15:36:23 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-06 15:36:23 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-06 15:36:23 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-06 15:37:42 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-06 15:52:30 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-06 15:52:30 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-06 15:52:30 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-06 15:55:28 | INFO     | app.core.request_logger:request_logging_middleware:71 | [f9acfa0d] --> GET /api/v1/health
+2026-02-06 15:55:28 | INFO     | app.core.request_logger:request_logging_middleware:91 | [f9acfa0d] <-- 200 (1.70ms)
+2026-02-06 15:55:33 | INFO     | app.core.request_logger:request_logging_middleware:71 | [45ed9810] --> GET /api/v1/test-cases
+2026-02-06 15:55:33 | INFO     | app.core.request_logger:request_logging_middleware:91 | [45ed9810] <-- 200 (1.80ms)
+2026-02-06 15:55:36 | INFO     | app.core.request_logger:request_logging_middleware:71 | [8ef2615b] --> GET /api/v1/executions
+2026-02-06 15:55:36 | INFO     | app.core.request_logger:request_logging_middleware:91 | [8ef2615b] <-- 200 (1.55ms)
+2026-02-06 15:57:02 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-06 16:09:24 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-06 16:09:24 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-06 16:09:24 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-06 16:09:46 | INFO     | app.core.request_logger:request_logging_middleware:71 | [8f89596a] --> POST /api/v1/api-engine/execute
+2026-02-06 16:09:46 | ERROR    | app.core.request_logger:request_logging_middleware:111 | [8f89596a] <-- ERROR: ModuleNotFoundError: No module named 'playwright' (11.21ms)

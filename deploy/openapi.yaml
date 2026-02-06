@@ -1,0 +1,1132 @@
+openapi: 3.0.3
+info:
+  title: 重明 (ChongMing) API
+  description: |
+    重明 AI 自动化测试平台 API 文档
+    
+    ## 核心模块
+    - **神经设计层**: PRD 解析、用例生成
+    - **左瞳引擎**: API 测试执行
+    - **右瞳引擎**: UI 测试执行
+    - **涡轮引擎**: 性能测试
+    - **凤凰涅槃层**: 脚本编译
+    - **缺陷分析**: 根因分析、修复建议
+    
+  version: 2.0.0
+  contact:
+    name: ChongMing Team
+    email: chongming@example.com
+  license:
+    name: GNU AGPLv3
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: 开发环境
+  - url: https://test-api.chongming.ai/api/v1
+    description: 测试环境
+  - url: https://api.chongming.ai/api/v1
+    description: 生产环境
+
+tags:
+  - name: design
+    description: 神经设计层 - 用例生成
+  - name: test-cases
+    description: 测试用例管理
+  - name: executions
+    description: 测试执行管理
+  - name: ui-engine
+    description: 右瞳引擎 - UI 测试
+  - name: api-engine
+    description: 左瞳引擎 - API 测试
+  - name: turbo
+    description: 涡轮引擎 - 性能测试
+  - name: phoenix
+    description: 凤凰涅槃层 - 脚本编译
+  - name: defect-analyzer
+    description: 缺陷分析智能体
+  - name: self-healing
+    description: 自愈中心
+  - name: vrt
+    description: VRT 视觉回归测试
+  - name: environments
+    description: 环境管理
+  - name: data-factory
+    description: 数据工厂
+  - name: reports
+    description: 报告可视化
+  - name: tasks
+    description: 任务调度
+  - name: workflows
+    description: Agent 工作流
+
+paths:
+  # ==================== 神经设计层 ====================
+  /design/parse-prd:
+    post:
+      tags: [design]
+      summary: 解析 PRD 文档
+      description: 从 PRD 需求文档中提取测试意图
+      operationId: parsePrd
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                  description: PRD 文档内容
+                format:
+                  type: string
+                  enum: [markdown, word, confluence]
+                  default: markdown
+      responses:
+        '200':
+          description: 解析成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrdParseResult'
+
+  /design/generate:
+    post:
+      tags: [design]
+      summary: 生成测试用例
+      description: 根据 PRD 解析结果生成 TC-IR 格式的测试用例
+      operationId: generateTestCases
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prd_id]
+              properties:
+                prd_id:
+                  type: string
+                test_scope:
+                  type: array
+                  items:
+                    type: string
+                coverage_strategy:
+                  type: string
+                  enum: [smoke, regression, full]
+                  default: regression
+      responses:
+        '200':
+          description: 生成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tc_list:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TCIR'
+
+  # ==================== 测试用例管理 ====================
+  /test-cases:
+    get:
+      tags: [test-cases]
+      summary: 获取用例列表
+      operationId: listTestCases
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: mode
+          in: query
+          schema:
+            type: string
+            enum: [UI, API, HYBRID]
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [P0, P1, P2]
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCaseList'
+
+    post:
+      tags: [test-cases]
+      summary: 创建测试用例
+      operationId: createTestCase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TCIR'
+      responses:
+        '201':
+          description: 创建成功
+
+  /test-cases/{tc_id}:
+    get:
+      tags: [test-cases]
+      summary: 获取用例详情
+      operationId: getTestCase
+      parameters:
+        - name: tc_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TCIR'
+
+  # ==================== 测试执行 ====================
+  /executions:
+    post:
+      tags: [executions]
+      summary: 创建执行任务
+      operationId: createExecution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tc_ids]
+              properties:
+                tc_ids:
+                  type: array
+                  items:
+                    type: string
+                environment:
+                  type: string
+                  default: test
+                parallel:
+                  type: integer
+                  default: 1
+                config:
+                  $ref: '#/components/schemas/ExecutionConfig'
+      responses:
+        '202':
+          description: 执行任务已创建
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  execution_id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [pending, running]
+
+  /executions/{execution_id}:
+    get:
+      tags: [executions]
+      summary: 获取执行状态
+      operationId: getExecution
+      parameters:
+        - name: execution_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResult'
+
+  /executions/{execution_id}/stream:
+    get:
+      tags: [executions]
+      summary: SSE 进度流
+      description: 实时推送执行进度
+      operationId: streamExecution
+      parameters:
+        - name: execution_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE 事件流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  # ==================== 右瞳引擎 (UI) ====================
+  /ui-engine/execute:
+    post:
+      tags: [ui-engine]
+      summary: 执行 UI 测试
+      operationId: executeUiTest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tc_ir]
+              properties:
+                tc_ir:
+                  $ref: '#/components/schemas/TCIR'
+                config:
+                  type: object
+                  properties:
+                    browser:
+                      type: string
+                      enum: [chromium, firefox, webkit]
+                      default: chromium
+                    headless:
+                      type: boolean
+                      default: true
+                    viewport:
+                      type: object
+                      properties:
+                        width:
+                          type: integer
+                          default: 1920
+                        height:
+                          type: integer
+                          default: 1080
+      responses:
+        '202':
+          description: 执行任务已创建
+
+  /ui-engine/screenshot:
+    post:
+      tags: [ui-engine]
+      summary: 页面截图
+      operationId: takeScreenshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                full_page:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: 成功
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+
+  # ==================== 左瞳引擎 (API) ====================
+  /api-engine/execute:
+    post:
+      tags: [api-engine]
+      summary: 执行 API 测试
+      operationId: executeApiTest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [api_ir_chain]
+              properties:
+                api_ir_chain:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/APIIR'
+                environment:
+                  type: string
+      responses:
+        '202':
+          description: 执行任务已创建
+
+  /api-engine/swagger/parse:
+    post:
+      tags: [api-engine]
+      summary: 解析 Swagger 文档
+      operationId: parseSwagger
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                swagger_url:
+                  type: string
+                  format: uri
+                swagger_content:
+                  type: string
+      responses:
+        '200':
+          description: 解析成功
+
+  # ==================== 涡轮引擎 (性能测试) ====================
+  /turbo/run:
+    post:
+      tags: [turbo]
+      summary: 启动性能测试
+      operationId: runPerfTest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [api_ir_chain]
+              properties:
+                api_ir_chain:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/APIIR'
+                load_config:
+                  type: object
+                  properties:
+                    users:
+                      type: integer
+                      default: 100
+                    spawn_rate:
+                      type: integer
+                      default: 10
+                    duration:
+                      type: string
+                      default: "5m"
+                    ramp_up:
+                      type: string
+                      default: "1m"
+      responses:
+        '202':
+          description: 压测任务已创建
+
+  /turbo/{run_id}/metrics:
+    get:
+      tags: [turbo]
+      summary: 获取压测指标
+      operationId: getPerfMetrics
+      parameters:
+        - name: run_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerfMetrics'
+
+  # ==================== 凤凰涅槃层 ====================
+  /phoenix/compile:
+    post:
+      tags: [phoenix]
+      summary: 编译执行轨迹为脚本
+      operationId: compileTrace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [trace_id]
+              properties:
+                trace_id:
+                  type: string
+                strategy:
+                  type: string
+                  enum: [simple, optimized, data_driven]
+                  default: optimized
+                framework:
+                  type: string
+                  enum: [pytest, unittest]
+                  default: pytest
+      responses:
+        '200':
+          description: 编译成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompiledScript'
+
+  /phoenix/scripts:
+    get:
+      tags: [phoenix]
+      summary: 获取脚本列表
+      operationId: listScripts
+      responses:
+        '200':
+          description: 成功
+
+  /phoenix/scripts/{script_id}/history:
+    get:
+      tags: [phoenix]
+      summary: 获取脚本版本历史
+      operationId: getScriptHistory
+      parameters:
+        - name: script_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+
+  # ==================== 缺陷分析 ====================
+  /defect-analyzer/analyze:
+    post:
+      tags: [defect-analyzer]
+      summary: 分析测试失败
+      operationId: analyzeDefect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [execution_id, test_case_id]
+              properties:
+                execution_id:
+                  type: string
+                test_case_id:
+                  type: string
+                failure_info:
+                  type: object
+                  properties:
+                    error:
+                      type: string
+                    stack_trace:
+                      type: string
+      responses:
+        '200':
+          description: 分析成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DefectAnalysisReport'
+
+  /defect-analyzer/correlate:
+    post:
+      tags: [defect-analyzer]
+      summary: 关联已知缺陷
+      operationId: correlateDefect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [failure_id]
+              properties:
+                failure_id:
+                  type: string
+      responses:
+        '200':
+          description: 成功
+
+  # ==================== 自愈中心 ====================
+  /self-healing/heal:
+    post:
+      tags: [self-healing]
+      summary: 尝试自愈失败的测试
+      operationId: healFailure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [execution_id, step_index]
+              properties:
+                execution_id:
+                  type: string
+                step_index:
+                  type: integer
+                strategy:
+                  type: string
+                  enum: [visual_fallback, dom_fallback, retry, skip]
+      responses:
+        '200':
+          description: 自愈结果
+
+  # ==================== VRT 视觉回归 ====================
+  /vrt/run:
+    post:
+      tags: [vrt]
+      summary: 执行 VRT 测试
+      operationId: runVrt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pages]
+              properties:
+                pages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                      name:
+                        type: string
+                browsers:
+                  type: array
+                  items:
+                    type: string
+                  default: [chromium]
+                threshold:
+                  type: number
+                  default: 0.02
+      responses:
+        '202':
+          description: VRT 任务已创建
+
+  /vrt/baselines:
+    get:
+      tags: [vrt]
+      summary: 获取基线列表
+      operationId: listBaselines
+      responses:
+        '200':
+          description: 成功
+
+  /vrt/baselines/{id}/approve:
+    put:
+      tags: [vrt]
+      summary: 审批更新基线
+      operationId: approveBaseline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+
+  # ==================== 环境管理 ====================
+  /environments:
+    get:
+      tags: [environments]
+      summary: 获取环境列表
+      operationId: listEnvironments
+      responses:
+        '200':
+          description: 成功
+
+    post:
+      tags: [environments]
+      summary: 创建环境
+      operationId: createEnvironment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Environment'
+      responses:
+        '201':
+          description: 创建成功
+
+  /environments/{env_id}/variables:
+    get:
+      tags: [environments]
+      summary: 获取环境变量
+      operationId: getEnvVariables
+      parameters:
+        - name: env_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+
+  # ==================== 数据工厂 ====================
+  /data-factory/generate:
+    post:
+      tags: [data-factory]
+      summary: 生成测试数据
+      operationId: generateTestData
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [schema]
+              properties:
+                schema:
+                  type: object
+                count:
+                  type: integer
+                  default: 10
+                locale:
+                  type: string
+                  default: zh_CN
+      responses:
+        '200':
+          description: 成功
+
+  # ==================== 报告 ====================
+  /reports:
+    get:
+      tags: [reports]
+      summary: 获取报告列表
+      operationId: listReports
+      parameters:
+        - name: execution_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+
+  /reports/{report_id}:
+    get:
+      tags: [reports]
+      summary: 获取报告详情
+      operationId: getReport
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+
+  # ==================== 任务调度 ====================
+  /tasks:
+    post:
+      tags: [tasks]
+      summary: 提交任务
+      operationId: submitTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, payload]
+              properties:
+                type:
+                  type: string
+                  enum: [ui_test, api_test, perf_test, design_gen, vrt_test, compile]
+                priority:
+                  type: string
+                  enum: [high, normal, low]
+                  default: normal
+                payload:
+                  type: object
+      responses:
+        '202':
+          description: 任务已提交
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                  status:
+                    type: string
+
+  /tasks/{task_id}:
+    get:
+      tags: [tasks]
+      summary: 获取任务状态
+      operationId: getTaskStatus
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+
+    delete:
+      tags: [tasks]
+      summary: 取消任务
+      operationId: cancelTask
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+
+  /tasks/{task_id}/stream:
+    get:
+      tags: [tasks]
+      summary: SSE 任务进度流
+      operationId: streamTaskProgress
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE 事件流
+
+  # ==================== Agent 工作流 ====================
+  /workflows:
+    post:
+      tags: [workflows]
+      summary: 启动工作流
+      operationId: startWorkflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prd_content]
+              properties:
+                prd_content:
+                  type: string
+                test_scope:
+                  type: array
+                  items:
+                    type: string
+                config:
+                  type: object
+      responses:
+        '202':
+          description: 工作流已启动
+
+  /workflows/{session_id}:
+    get:
+      tags: [workflows]
+      summary: 获取工作流状态
+      operationId: getWorkflowStatus
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+
+  /workflows/{session_id}/resume:
+    post:
+      tags: [workflows]
+      summary: 恢复工作流执行
+      operationId: resumeWorkflow
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                feedback:
+                  type: string
+      responses:
+        '200':
+          description: 成功
+
+  /workflows/{session_id}/stream:
+    get:
+      tags: [workflows]
+      summary: WebSocket 实时流
+      operationId: streamWorkflow
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '101':
+          description: WebSocket 升级
+
+# ==================== 组件定义 ====================
+components:
+  schemas:
+    TCIR:
+      type: object
+      description: 测试用例中间表示
+      properties:
+        protocol:
+          type: string
+          default: TC-IR
+        version:
+          type: string
+          default: "1.0"
+        id:
+          type: string
+        name:
+          type: string
+        mode:
+          type: string
+          enum: [UI, API, HYBRID]
+        priority:
+          type: string
+          enum: [P0, P1, P2]
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              action:
+                type: string
+              target:
+                type: string
+              value:
+                type: string
+        assertions:
+          type: array
+          items:
+            type: object
+
+    APIIR:
+      type: object
+      description: API 中间表示
+      properties:
+        protocol:
+          type: string
+          default: API-IR
+        version:
+          type: string
+          default: "1.0"
+        id:
+          type: string
+        name:
+          type: string
+        request:
+          type: object
+          properties:
+            method:
+              type: string
+              enum: [GET, POST, PUT, DELETE, PATCH]
+            url:
+              type: string
+            headers:
+              type: object
+            body:
+              type: object
+        extraction:
+          type: object
+        assertion:
+          type: object
+
+    ExecutionConfig:
+      type: object
+      properties:
+        browser:
+          type: string
+          default: chromium
+        headless:
+          type: boolean
+          default: true
+        timeout:
+          type: integer
+          default: 30000
+        retries:
+          type: integer
+          default: 3
+        enable_healing:
+          type: boolean
+          default: true
+
+    ExecutionResult:
+      type: object
+      properties:
+        execution_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, running, passed, failed, cancelled]
+        progress:
+          type: number
+        total_cases:
+          type: integer
+        passed:
+          type: integer
+        failed:
+          type: integer
+        results:
+          type: array
+          items:
+            type: object
+
+    PrdParseResult:
+      type: object
+      properties:
+        prd_id:
+          type: string
+        modules:
+          type: array
+          items:
+            type: string
+        scenarios:
+          type: array
+          items:
+            type: object
+        data_constraints:
+          type: array
+          items:
+            type: string
+
+    TestCaseList:
+      type: object
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TCIR'
+
+    CompiledScript:
+      type: object
+      properties:
+        script_id:
+          type: string
+        tc_id:
+          type: string
+        content:
+          type: string
+        file_path:
+          type: string
+        framework:
+          type: string
+        parameters:
+          type: array
+          items:
+            type: string
+        git_commit:
+          type: string
+
+    DefectAnalysisReport:
+      type: object
+      properties:
+        analysis_id:
+          type: string
+        root_cause:
+          type: object
+          properties:
+            category:
+              type: string
+            subcategory:
+              type: string
+            description:
+              type: string
+            confidence:
+              type: number
+        impact:
+          type: object
+        similar_defects:
+          type: array
+          items:
+            type: object
+        fix_suggestion:
+          type: object
+
+    PerfMetrics:
+      type: object
+      properties:
+        run_id:
+          type: string
+        status:
+          type: string
+        metrics:
+          type: object
+          properties:
+            total_requests:
+              type: integer
+            failures:
+              type: integer
+            avg_response_time:
+              type: number
+            p50:
+              type: number
+            p95:
+              type: number
+            p99:
+              type: number
+            rps:
+              type: number
+
+    Environment:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [dev, test, staging, prod]
+        urls:
+          type: object
+          properties:
+            web:
+              type: string
+            api:
+              type: string
+        variables:
+          type: object
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []

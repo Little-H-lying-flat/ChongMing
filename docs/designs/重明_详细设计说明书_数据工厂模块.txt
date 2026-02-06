@@ -1,0 +1,840 @@
+重明 (ChongMing) 详细设计说明书：数据工厂模块 (Data Factory)
+所属层级：基础设施层 (Infrastructure Layer) - 数据侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+数据工厂模块 (Data Factory) 是重明架构中负责 "造" (Generate) 和 "管" (Manage) 测试数据的核心组件。它像一个智能的数据生产车间，根据测试需求自动生成、管理、脱敏测试数据。
+
+其核心设计哲学是 "Schema-Driven, AI-Enhanced" (模式驱动，AI 增强)：
+- 模式驱动：基于数据 Schema 自动生成符合规则的测试数据
+- AI 增强：利用 LLM 生成语义真实的业务数据
+- 数据脱敏：保护隐私，安全使用生产数据
+- 参数化驱动：支持数据驱动测试 (DDT)
+
+1.2 核心职责
+- 数据生成 (Data Generation)：基于规则/AI 生成测试数据
+- 数据模板 (Data Template)：定义可复用的数据结构
+- 数据脱敏 (Data Masking)：敏感数据脱敏处理
+- 数据池管理 (Data Pool)：统一管理测试数据生命周期
+- 数据驱动 (Data-Driven)：支持参数化测试
+
+1.3 架构位置
+
+┌─────────────────────────────────────────────────────────────────┐
+│                          重明架构                                │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌───────────────────┐         ┌───────────────────────┐       │
+│  │   神经设计层       │         │   项目知识库          │       │
+│  │   TC-IR 生成      │         │   业务语义            │       │
+│  └─────────┬─────────┘         └───────────┬───────────┘       │
+│            │                               │                    │
+│            ▼                               ▼                    │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                   数据工厂 (Data Factory)                │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐  │   │
+│  │  │ 生成器   │  │ 模板库   │  │ 脱敏器   │  │ 数据池  │  │   │
+│  │  └──────────┘  └──────────┘  └──────────┘  └─────────┘  │   │
+│  └─────────────────────────────┬───────────────────────────┘   │
+│                                │                                │
+│            ┌───────────────────┼───────────────────┐           │
+│            │                   │                   │           │
+│            ▼                   ▼                   ▼           │
+│  ┌───────────────┐   ┌───────────────┐   ┌───────────────┐   │
+│  │   右瞳引擎    │   │   左瞳引擎    │   │   涡轮引擎    │   │
+│  └───────────────┘   └───────────────┘   └───────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 输入层 (Input Layer)
+        SCHEMA[数据 Schema]
+        TEMPLATE[数据模板]
+        PROD_DATA[生产数据]
+        AI_REQUEST[AI 生成请求]
+    end
+    
+    subgraph Data Factory
+        subgraph Generator [生成层]
+            SCHEMA --> RULE_GEN[规则生成器]
+            AI_REQUEST --> AI_GEN[AI 生成器]
+            RULE_GEN --> DATA[生成数据]
+            AI_GEN --> DATA
+        end
+        
+        subgraph Template [模板层]
+            TEMPLATE --> PARSER[模板解析器]
+            PARSER --> INSTANCE[实例化数据]
+        end
+        
+        subgraph Masking [脱敏层]
+            PROD_DATA --> DETECTOR[敏感检测]
+            DETECTOR --> MASKER[脱敏处理]
+            MASKER --> SAFE_DATA[脱敏数据]
+        end
+        
+        subgraph Pool [数据池层]
+            DATA --> POOL[数据池]
+            INSTANCE --> POOL
+            SAFE_DATA --> POOL
+            POOL --> LIFECYCLE[生命周期管理]
+        end
+    end
+    
+    subgraph 输出层 (Output Layer)
+        LIFECYCLE --> TEST[测试执行]
+        LIFECYCLE --> CLEANUP[数据清理]
+    end
+
+2.2 核心类图
+
+- DataFactory: 数据工厂入口
+- RuleGenerator: 规则生成器
+- AIGenerator: AI 生成器
+- TemplateParser: 模板解析器
+- DataMasker: 数据脱敏器
+- DataPool: 数据池管理
+- LifecycleManager: 生命周期管理
+
+3. 数据生成层 (Data Generator Layer)
+
+3.1 生成器类型
+
+| 生成器 | 描述 | 适用场景 |
+|--------|------|---------|
+| 规则生成器 (RuleGenerator) | 基于 Schema 规则随机生成 | 结构化数据批量生成 |
+| AI 生成器 (AIGenerator) | LLM 生成语义真实数据 | 复杂业务数据 |
+| Faker 生成器 (FakerGenerator) | 基于 Faker 库生成 | 基础随机数据 |
+| 枚举生成器 (EnumGenerator) | 从枚举集合中选择 | 状态/类型字段 |
+| 关联生成器 (RelationGenerator) | 基于关联关系生成 | 外键/引用字段 |
+
+3.2 规则生成器
+
+class RuleGenerator:
+    def __init__(self):
+        self.faker = Faker('zh_CN')
+        self.type_handlers = {
+            'string': self._gen_string,
+            'integer': self._gen_integer,
+            'number': self._gen_number,
+            'boolean': self._gen_boolean,
+            'date': self._gen_date,
+            'datetime': self._gen_datetime,
+            'email': self._gen_email,
+            'phone': self._gen_phone,
+            'id_card': self._gen_id_card,
+            'address': self._gen_address
+        }
+    
+    def generate(self, schema: DataSchema, count: int = 1) -> list[dict]:
+        results = []
+        for _ in range(count):
+            record = {}
+            for field in schema.fields:
+                handler = self.type_handlers.get(field.type)
+                if handler:
+                    record[field.name] = handler(field)
+                else:
+                    record[field.name] = self._gen_by_pattern(field)
+            results.append(record)
+        return results
+    
+    def _gen_string(self, field: FieldSpec) -> str:
+        if field.pattern:
+            return exrex.getone(field.pattern)
+        min_len = field.min_length or 1
+        max_len = field.max_length or 20
+        return self.faker.pystr(min_chars=min_len, max_chars=max_len)
+    
+    def _gen_email(self, field: FieldSpec) -> str:
+        return self.faker.email()
+    
+    def _gen_phone(self, field: FieldSpec) -> str:
+        return self.faker.phone_number()
+    
+    def _gen_id_card(self, field: FieldSpec) -> str:
+        return self.faker.ssn()
+
+3.3 AI 生成器
+
+class AIGenerator:
+    def __init__(self, llm_client: LLMClient):
+        self.llm = llm_client
+    
+    async def generate(self, request: AIGenRequest) -> list[dict]:
+        prompt = f"""
+你是一个测试数据生成专家。请根据以下要求生成测试数据。
+
+【业务场景】
+{request.business_context}
+
+【数据结构】
+{json.dumps(request.schema, ensure_ascii=False, indent=2)}
+
+【生成要求】
+- 数量: {request.count} 条
+- 语言: 中文
+- 数据特征: {request.characteristics}
+
+【约束条件】
+{self._format_constraints(request.constraints)}
+
+请以 JSON 数组格式输出，每条数据应符合业务逻辑且相互独立：
+"""
+        response = await self.llm.generate(prompt, model="qwen-long")
+        return self._parse_response(response)
+    
+    async def generate_edge_cases(self, schema: DataSchema) -> list[dict]:
+        """生成边界测试数据"""
+        prompt = f"""
+请为以下数据结构生成边界测试用例：
+
+{json.dumps(schema.to_dict(), ensure_ascii=False)}
+
+生成以下类型的边界数据：
+1. 空值/null 值
+2. 最大长度
+3. 最小长度
+4. 特殊字符
+5. SQL 注入尝试
+6. XSS 尝试
+7. 极端数值 (最大/最小)
+8. 非法格式
+
+每种类型生成 1 条，共 8 条数据。
+"""
+        response = await self.llm.generate(prompt)
+        return self._parse_response(response)
+
+3.4 生成规则 DSL
+
+# schema.yaml - 数据 Schema 定义
+
+name: "用户注册数据"
+version: "1.0"
+
+fields:
+  - name: username
+    type: string
+    min_length: 4
+    max_length: 20
+    pattern: "^[a-zA-Z][a-zA-Z0-9_]+$"
+    unique: true
+  
+  - name: email
+    type: email
+    unique: true
+  
+  - name: phone
+    type: phone
+    format: "1[3-9]\\d{9}"
+  
+  - name: age
+    type: integer
+    min: 18
+    max: 100
+  
+  - name: gender
+    type: enum
+    values: ["male", "female"]
+  
+  - name: password
+    type: string
+    min_length: 8
+    max_length: 32
+    pattern: "^(?=.*[A-Z])(?=.*[a-z])(?=.*\\d).+$"
+  
+  - name: address
+    type: address
+    locale: "zh_CN"
+  
+  - name: id_card
+    type: id_card
+    validate: true
+  
+  - name: created_at
+    type: datetime
+    range: ["2024-01-01", "now"]
+
+constraints:
+  - type: unique_together
+    fields: ["username", "email"]
+  
+  - type: expression
+    expr: "age >= 18"
+
+4. 数据模板层 (Template Layer)
+
+4.1 模板定义
+
+# templates/user_login.yaml
+
+name: "用户登录模板"
+description: "用于登录测试的用户数据模板"
+
+variables:
+  - name: role
+    type: enum
+    values: ["admin", "user", "guest"]
+    default: "user"
+
+data:
+  admin:
+    username: "admin_${random.uuid4()[:8]}"
+    password: "Admin@${random.digits(4)}"
+    role: "admin"
+    permissions: ["read", "write", "delete", "admin"]
+  
+  normal_user:
+    username: "user_${random.uuid4()[:8]}"
+    password: "User@${random.digits(4)}"
+    role: "user"
+    permissions: ["read", "write"]
+  
+  guest:
+    username: "guest_${random.uuid4()[:8]}"
+    password: "Guest@${random.digits(4)}"
+    role: "guest"
+    permissions: ["read"]
+
+scenarios:
+  - name: "正常登录"
+    template: normal_user
+    count: 10
+  
+  - name: "管理员登录"
+    template: admin
+    count: 2
+  
+  - name: "访客登录"
+    template: guest
+    count: 5
+
+4.2 模板解析器
+
+class TemplateParser:
+    def __init__(self):
+        self.env = jinja2.Environment()
+        self.functions = {
+            'random': RandomFunctions(),
+            'faker': Faker('zh_CN'),
+            'now': datetime.now
+        }
+    
+    def parse(self, template: DataTemplate, variables: dict = None) -> list[dict]:
+        results = []
+        
+        for scenario in template.scenarios:
+            base_data = template.data[scenario.template]
+            
+            for i in range(scenario.count):
+                # 合并变量
+                context = {**self.functions, **(variables or {}), 'index': i}
+                
+                # 渲染模板
+                rendered = self._render_dict(base_data, context)
+                rendered['_scenario'] = scenario.name
+                results.append(rendered)
+        
+        return results
+    
+    def _render_dict(self, data: dict, context: dict) -> dict:
+        result = {}
+        for key, value in data.items():
+            if isinstance(value, str) and '${' in value:
+                result[key] = self._render_string(value, context)
+            elif isinstance(value, dict):
+                result[key] = self._render_dict(value, context)
+            elif isinstance(value, list):
+                result[key] = [self._render_dict(v, context) if isinstance(v, dict) else v for v in value]
+            else:
+                result[key] = value
+        return result
+
+4.3 内置模板库
+
+重明内置常用测试数据模板：
+
+| 模板名称 | 描述 | 字段 |
+|---------|------|------|
+| user_basic | 基础用户信息 | username, email, phone, password |
+| user_profile | 完整用户资料 | + name, avatar, gender, birthday |
+| address | 地址信息 | province, city, district, street, zipcode |
+| payment | 支付信息 | card_number, cvv, expiry, holder_name |
+| order | 订单信息 | order_id, user_id, items, total_amount |
+| product | 商品信息 | name, price, category, stock, description |
+
+5. 数据脱敏层 (Data Masking Layer)
+
+5.1 敏感数据类型
+
+| 类型 | 识别规则 | 脱敏策略 |
+|------|---------|---------|
+| 身份证号 | 18 位数字 | 保留前 3 后 4，中间替换 * |
+| 手机号 | 11 位 1 开头 | 保留前 3 后 4 |
+| 银行卡号 | 16-19 位数字 | 保留后 4 位 |
+| 邮箱 | email 格式 | 用户名部分模糊 |
+| 姓名 | 2-4 个中文字 | 保留姓，名替换 * |
+| 地址 | 包含省市区 | 保留省市，详细地址模糊 |
+| 密码 | password 字段 | 完全替换 |
+
+5.2 脱敏器
+
+class DataMasker:
+    def __init__(self):
+        self.rules = {
+            'id_card': IDCardMaskRule(),
+            'phone': PhoneMaskRule(),
+            'bank_card': BankCardMaskRule(),
+            'email': EmailMaskRule(),
+            'name': NameMaskRule(),
+            'address': AddressMaskRule(),
+            'password': PasswordMaskRule()
+        }
+        self.detector = SensitiveDetector()
+    
+    def mask(self, data: dict, config: MaskConfig = None) -> dict:
+        result = {}
+        
+        for key, value in data.items():
+            if isinstance(value, dict):
+                result[key] = self.mask(value, config)
+            elif isinstance(value, list):
+                result[key] = [self.mask(v, config) if isinstance(v, dict) else self._mask_value(key, v) for v in value]
+            else:
+                result[key] = self._mask_value(key, value)
+        
+        return result
+    
+    def _mask_value(self, field_name: str, value: any) -> any:
+        if value is None:
+            return None
+        
+        # 检测敏感类型
+        sensitive_type = self.detector.detect(field_name, value)
+        
+        if sensitive_type and sensitive_type in self.rules:
+            return self.rules[sensitive_type].mask(value)
+        
+        return value
+
+class IDCardMaskRule:
+    def mask(self, value: str) -> str:
+        if len(value) == 18:
+            return value[:3] + '*' * 11 + value[-4:]
+        return value
+
+class PhoneMaskRule:
+    def mask(self, value: str) -> str:
+        if len(value) == 11:
+            return value[:3] + '****' + value[-4:]
+        return value
+
+5.3 敏感检测器
+
+class SensitiveDetector:
+    def __init__(self):
+        self.patterns = {
+            'id_card': r'^\d{17}[\dXx]$',
+            'phone': r'^1[3-9]\d{9}$',
+            'bank_card': r'^\d{16,19}$',
+            'email': r'^[\w\.-]+@[\w\.-]+\.\w+$'
+        }
+        self.field_hints = {
+            'id_card': ['id_card', 'idcard', 'sfz', 'identity'],
+            'phone': ['phone', 'mobile', 'tel', 'telephone'],
+            'email': ['email', 'mail'],
+            'password': ['password', 'pwd', 'pass', 'secret'],
+            'name': ['name', 'realname', 'real_name', 'username'],
+            'address': ['address', 'addr', 'location']
+        }
+    
+    def detect(self, field_name: str, value: any) -> str:
+        # 1. 基于字段名提示
+        field_lower = field_name.lower()
+        for sensitive_type, hints in self.field_hints.items():
+            if any(hint in field_lower for hint in hints):
+                return sensitive_type
+        
+        # 2. 基于正则匹配
+        if isinstance(value, str):
+            for sensitive_type, pattern in self.patterns.items():
+                if re.match(pattern, value):
+                    return sensitive_type
+        
+        return None
+
+6. 数据池管理 (Data Pool Management)
+
+6.1 数据池概念
+
+数据池是测试数据的统一存储和管理中心：
+
+┌─────────────────────────────────────────────────────────────────┐
+│                          数据池 (Data Pool)                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐       │
+│  │   预生成池    │  │   临时数据池  │  │   共享数据池  │       │
+│  │  Pre-Generated│  │   Temporary   │  │    Shared     │       │
+│  │               │  │               │  │               │       │
+│  │  批量预热     │  │  用例级隔离   │  │  跨用例共享   │       │
+│  │  长期有效     │  │  用后即删     │  │  手动清理     │       │
+│  └───────────────┘  └───────────────┘  └───────────────┘       │
+│           │                 │                 │                 │
+│           └─────────────────┼─────────────────┘                 │
+│                             │                                   │
+│                             ▼                                   │
+│                    ┌───────────────┐                            │
+│                    │  生命周期管理  │                            │
+│                    │   Lifecycle   │                            │
+│                    └───────────────┘                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+6.2 数据池管理器
+
+class DataPool:
+    def __init__(self, storage: PoolStorage):
+        self.storage = storage
+        self.pre_generated = {}
+        self.temporary = {}
+        self.shared = {}
+    
+    async def acquire(self, pool_name: str, data_type: str, 
+                      count: int = 1, reusable: bool = False) -> list[dict]:
+        """从数据池获取数据"""
+        pool = self._get_pool(pool_name)
+        
+        if data_type not in pool or len(pool[data_type]) < count:
+            # 池中数据不足，生成新数据
+            await self._refill(pool_name, data_type, count * 2)
+        
+        # 获取数据
+        if reusable:
+            return pool[data_type][:count]
+        else:
+            # 非可复用，取出后从池中移除
+            data = pool[data_type][:count]
+            pool[data_type] = pool[data_type][count:]
+            return data
+    
+    async def release(self, pool_name: str, data: list[dict]):
+        """归还数据到池中"""
+        pool = self._get_pool(pool_name)
+        data_type = data[0].get('_type', 'default')
+        pool.setdefault(data_type, []).extend(data)
+    
+    async def cleanup(self, pool_name: str, 
+                      retention_hours: int = 24):
+        """清理过期数据"""
+        pool = self._get_pool(pool_name)
+        cutoff = datetime.now() - timedelta(hours=retention_hours)
+        
+        for data_type in pool:
+            pool[data_type] = [
+                d for d in pool[data_type] 
+                if d.get('_created_at', datetime.now()) > cutoff
+            ]
+
+6.3 生命周期策略
+
+lifecycle_config:
+  pools:
+    pre_generated:
+      retention_hours: 168  # 7 天
+      max_size: 10000
+      auto_refill: true
+      refill_threshold: 0.2  # 低于 20% 时自动补充
+    
+    temporary:
+      retention_hours: 1  # 1 小时
+      max_size: 1000
+      auto_cleanup: true
+      cleanup_interval_minutes: 10
+    
+    shared:
+      retention_hours: 24  # 1 天
+      max_size: 5000
+      manual_cleanup: true
+
+7. 数据驱动测试 (Data-Driven Testing)
+
+7.1 参数化支持
+
+class DataDrivenRunner:
+    def __init__(self, data_factory: DataFactory):
+        self.factory = data_factory
+    
+    async def run_parameterized(self, tc_ir: TCIR, 
+                                 data_source: DataSource) -> list[TestResult]:
+        results = []
+        
+        # 获取测试数据
+        test_data = await self._load_data(data_source)
+        
+        for index, data_row in enumerate(test_data):
+            # 注入数据到 TC-IR
+            parameterized_tc = self._inject_data(tc_ir, data_row)
+            parameterized_tc.name = f"{tc_ir.name} [{index + 1}]"
+            
+            # 执行测试
+            result = await self.executor.execute(parameterized_tc)
+            result.data_row = data_row
+            results.append(result)
+        
+        return results
+    
+    def _inject_data(self, tc_ir: TCIR, data: dict) -> TCIR:
+        """将数据注入到测试用例"""
+        tc_copy = tc_ir.copy()
+        
+        for step in tc_copy.steps:
+            if step.value:
+                step.value = self._replace_variables(step.value, data)
+            if step.expected:
+                step.expected = self._replace_variables(step.expected, data)
+        
+        return tc_copy
+    
+    def _replace_variables(self, text: str, data: dict) -> str:
+        pattern = r'\$\{data\.(\w+)\}'
+        def replacer(match):
+            key = match.group(1)
+            return str(data.get(key, match.group(0)))
+        return re.sub(pattern, replacer, text)
+
+7.2 数据源配置
+
+# TC-IR 中的数据驱动配置
+
+{
+  "id": "TC_LOGIN_DDT",
+  "name": "用户登录 - 多账号测试",
+  "mode": "UI",
+  "data_driven": {
+    "source": {
+      "type": "csv",
+      "path": "data/login_users.csv"
+    },
+    # 或使用模板
+    "source": {
+      "type": "template",
+      "template": "user_login",
+      "scenario": "normal_user",
+      "count": 10
+    },
+    # 或使用生成器
+    "source": {
+      "type": "generator",
+      "schema": "user_schema",
+      "count": 20
+    }
+  },
+  "steps": [
+    {"action": "input", "target": "#username", "value": "${data.username}"},
+    {"action": "input", "target": "#password", "value": "${data.password}"},
+    {"action": "click", "target": "登录按钮"},
+    {"action": "verify", "target": "欢迎信息", "expected": "欢迎, ${data.username}"}
+  ]
+}
+
+8. API 接口设计
+
+8.1 生成数据
+
+POST /api/v1/data-factory/generate
+{
+  "schema": "user_schema",
+  "count": 10,
+  "mode": "rule",  // rule, ai, faker
+  "constraints": {
+    "age": {"min": 20, "max": 30}
+  }
+}
+
+响应：
+{
+  "success": true,
+  "data": [
+    {"username": "user_abc123", "email": "user_abc123@example.com", ...},
+    ...
+  ],
+  "metadata": {
+    "generated_at": "2026-02-06T10:00:00Z",
+    "count": 10,
+    "schema": "user_schema"
+  }
+}
+
+8.2 使用模板
+
+POST /api/v1/data-factory/template/instantiate
+{
+  "template": "user_login",
+  "scenario": "admin",
+  "count": 5,
+  "variables": {
+    "env": "test"
+  }
+}
+
+8.3 数据脱敏
+
+POST /api/v1/data-factory/mask
+{
+  "data": [
+    {"name": "张三", "phone": "13812345678", "id_card": "110101199001011234"}
+  ],
+  "rules": {
+    "phone": "partial",  // full, partial, hash
+    "id_card": "partial"
+  }
+}
+
+响应：
+{
+  "masked_data": [
+    {"name": "张*", "phone": "138****5678", "id_card": "110***********1234"}
+  ]
+}
+
+8.4 数据池操作
+
+# 获取数据
+POST /api/v1/data-factory/pool/acquire
+{
+  "pool": "pre_generated",
+  "type": "user",
+  "count": 5
+}
+
+# 归还数据
+POST /api/v1/data-factory/pool/release
+{
+  "pool": "pre_generated",
+  "data": [...]
+}
+
+# 预热数据池
+POST /api/v1/data-factory/pool/warm-up
+{
+  "pool": "pre_generated",
+  "schema": "user_schema",
+  "count": 1000
+}
+
+9. 前端界面设计
+
++------------------------------------------------------------------+
+| 📦 数据工厂                                                       |
++------------------------------------------------------------------+
+|                                                                  |
+| 快速生成                                                         |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │ 选择模板: [用户数据 ▼]  数量: [10]  模式: [规则生成 ▼]     │  |
+| │                                                            │  |
+| │ [生成数据]  [导出 CSV]  [导出 JSON]                        │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| 数据预览                                                         |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │ username    │ email              │ phone       │ age      │  |
+| ├─────────────┼────────────────────┼─────────────┼──────────┤  |
+| │ user_8a3f   │ user_8a3f@test.com│ 138****1234 │ 25       │  |
+| │ user_b2e1   │ user_b2e1@test.com│ 139****5678 │ 32       │  |
+| │ ...         │ ...               │ ...         │ ...      │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| 数据池状态                                                       |
+| ┌───────────────┬───────────────┬───────────────┐               |
+| │  预生成池 🟢  │  临时数据池 🟡 │  共享数据池 🟢 │               |
+| │  8523 条      │  156 条        │  2341 条       │               |
+| │  [预热]       │  [清理]        │  [管理]        │               |
+| └───────────────┴───────────────┴───────────────┘               |
+|                                                                  |
+| [模板管理]  [Schema 配置]  [脱敏规则]                            |
++------------------------------------------------------------------+
+
+10. 配置说明
+
+data_factory:
+  # 生成配置
+  generator:
+    default_locale: "zh_CN"
+    batch_size: 100
+    ai_model: "qwen-long"
+  
+  # 模板配置
+  templates:
+    path: "templates/"
+    cache_enabled: true
+  
+  # 脱敏配置
+  masking:
+    default_strategy: "partial"
+    detect_auto: true
+    custom_rules:
+      - field: "custom_id"
+        pattern: "^[A-Z]{2}\\d{8}$"
+        strategy: "partial"
+        keep_first: 2
+        keep_last: 2
+  
+  # 数据池配置
+  pool:
+    storage: "redis"  # redis, memory, database
+    redis_url: "redis://localhost:6379/1"
+    warm_up_on_start: true
+    warm_up_schemas:
+      - name: "user_schema"
+        count: 1000
+      - name: "order_schema"
+        count: 500
+
+11. 与其他模块集成
+
+11.1 与神经设计层集成
+
+神经设计层生成 TC-IR
+       ↓
+   包含数据需求
+       ↓
+   数据工厂生成数据
+       ↓
+   注入到 TC-IR
+
+11.2 与执行引擎集成
+
+右瞳/左瞳/涡轮引擎
+       ↓
+   请求测试数据
+       ↓
+   数据池提供数据
+       ↓
+   执行完成后清理
+
+11.3 与涡轮引擎深度集成
+
+涡轮引擎需要大量压测数据：
+
+涡轮引擎请求
+    ↓
+数据工厂 AI 生成器
+    ↓
+批量生成 10000+ 条数据
+    ↓
+数据膨胀 (变体生成)
+    ↓
+注入 Locust 脚本
+
+End of Design Document

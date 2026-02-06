@@ -1,0 +1,448 @@
+重明 (ChongMing) 详细设计说明书：项目知识库 (Project Knowledge Base)
+所属层级：知识层 (Knowledge Layer) - 跨引擎共享
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+项目知识库 (Project Knowledge Base) 是重明架构中负责 "记" (Remember) 和 "联" (Associate) 的核心组件。它通过向量数据库存储项目相关的背景知识，让 AI 能够"理解"项目的业务领域、测试规范和历史经验。
+
+其核心设计哲学是 "Context-Aware, Memory-Persistent" (上下文感知，记忆持久)：
+- 领域适应：AI 学习项目特定的术语、规范和测试策略
+- 经验沉淀：将历史测试用例、缺陷模式等经验知识化存储
+- 智能检索：解析新需求时，自动关联相关的历史知识
+
+1.2 核心职责
+- 知识摄入 (Knowledge Ingestion)：解析并向量化各类项目文档
+- 知识存储 (Knowledge Storage)：持久化存储在 ChromaDB 中
+- 智能检索 (Intelligent Retrieval)：基于 RAG 为其他模块提供上下文
+- 知识演进 (Knowledge Evolution)：支持知识的更新、版本管理
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 知识源 (Knowledge Sources)
+        OUTLINE[测试大纲]
+        HISTORY[历史用例]
+        GLOSSARY[业务术语表]
+        DEFECT[缺陷知识库]
+        SPEC[项目规范]
+    end
+    
+    subgraph Project Knowledge Base
+        OUTLINE --> INGESTOR[知识摄入器]
+        HISTORY --> INGESTOR
+        GLOSSARY --> INGESTOR
+        DEFECT --> INGESTOR
+        SPEC --> INGESTOR
+        
+        INGESTOR --> |Chunking| CHUNKS[知识切片]
+        CHUNKS --> |Embedding| VECTORS[向量嵌入]
+        VECTORS --> CHROMA[(ChromaDB)]
+        
+        CHROMA --> RETRIEVER[RAG 检索器]
+    end
+    
+    subgraph 消费者 (Consumers)
+        RETRIEVER --> NEURAL[神经设计层]
+        RETRIEVER --> LEFT[左瞳引擎]
+        RETRIEVER --> RIGHT[右瞳引擎]
+    end
+
+2.2 知识类型定义
+
+| 知识类型 | Collection 名称 | 用途 |
+|---------|----------------|------|
+| 测试大纲 (Test Outline) | project_test_outline | 定义测试范围、策略、验收标准 |
+| 业务术语 (Glossary) | business_glossary | 项目特有术语和定义 |
+| 历史用例 (Historical Cases) | historical_test_cases | 已执行过的测试用例模板 |
+| 缺陷模式 (Defect Patterns) | defect_knowledge | 常见缺陷类型和检测方法 |
+| 项目规范 (Specifications) | project_specs | 编码规范、接口规范等 |
+
+3. 知识摄入流程 (Ingestion Workflow)
+
+3.1 测试大纲摄入示例
+
+=== Step 1: 上传测试大纲 ===
+
+用户上传文档：测试大纲_学习平台_v2.0.docx
+
+=== Step 2: 文档解析 ===
+
+解析器提取结构化内容：
+{
+  "doc_id": "DOC_OUTLINE_001",
+  "doc_type": "test_outline",
+  "title": "学习平台测试大纲 v2.0",
+  "sections": [
+    {
+      "section_id": "SEC_001",
+      "title": "1. 测试范围",
+      "content": "本次测试覆盖以下模块：用户管理、课程管理、排课推荐、学习进度追踪..."
+    },
+    {
+      "section_id": "SEC_002", 
+      "title": "2. 测试策略",
+      "content": "采用分层测试策略：API 层 60%，UI 层 30%，端到端 10%..."
+    },
+    {
+      "section_id": "SEC_003",
+      "title": "3. 验收标准",
+      "content": "功能测试通过率 ≥ 95%，P0 缺陷清零，P1 缺陷 ≤ 3..."
+    }
+  ],
+  "modules": [
+    {"name": "用户管理", "priority": "P0"},
+    {"name": "课程管理", "priority": "P0"},
+    {"name": "排课推荐", "priority": "P1"},
+    {"name": "学习进度追踪", "priority": "P1"}
+  ]
+}
+
+=== Step 3: 知识切片 (Chunking) ===
+
+将文档按语义单元切片，保留上下文关系：
+
+Chunk 1: {
+  "chunk_id": "CHUNK_001",
+  "doc_id": "DOC_OUTLINE_001",
+  "section": "测试范围",
+  "content": "排课推荐模块测试范围：1) 推荐算法准确性 2) 建议学习时间计算 3) 排序逻辑验证",
+  "metadata": {"module": "排课推荐", "priority": "P1"}
+}
+
+Chunk 2: {
+  "chunk_id": "CHUNK_002",
+  "doc_id": "DOC_OUTLINE_001",
+  "section": "验收标准",
+  "content": "排课推荐验收标准：推荐准确率 ≥ 80%，日期计算无跨月/跨年错误",
+  "metadata": {"module": "排课推荐", "criteria_type": "acceptance"}
+}
+
+=== Step 4: 向量嵌入 (Embedding) ===
+
+使用 Embedding 模型将文本转为向量：
+
+embedding_model = "text-embedding-3-small"  # 或本地 all-MiniLM-L6-v2
+
+for chunk in chunks:
+    vector = embedding_model.encode(chunk.content)
+    chroma.add(
+        collection="project_test_outline",
+        ids=[chunk.chunk_id],
+        embeddings=[vector],
+        documents=[chunk.content],
+        metadatas=[chunk.metadata]
+    )
+
+=== Step 5: 存储确认 ===
+
+知识已入库，可被 RAG 检索：
+- Collection: project_test_outline
+- 新增切片: 15 条
+- 覆盖模块: 用户管理、课程管理、排课推荐、学习进度追踪
+
+4. 智能检索与上下文注入 (RAG Retrieval)
+
+4.1 检索流程
+
+当神经设计层处理新需求时，自动检索相关知识：
+
+class KnowledgeRetriever:
+    def retrieve(self, query: str, top_k: int = 5) -> list[KnowledgeChunk]:
+        """
+        基于语义相似度检索相关知识
+        """
+        # 1. 将查询向量化
+        query_vector = self.embedding_model.encode(query)
+        
+        # 2. 在所有相关 Collection 中检索
+        results = []
+        for collection in ["project_test_outline", "business_glossary", "historical_test_cases"]:
+            hits = self.chroma.query(
+                collection_name=collection,
+                query_embeddings=[query_vector],
+                n_results=top_k
+            )
+            results.extend(hits)
+        
+        # 3. 按相关度排序，去重
+        return self._rank_and_dedupe(results)
+
+4.2 上下文注入示例
+
+用户输入需求："修改推荐排课的建议学习时间计算逻辑，改为20天"
+
+RAG 检索到相关知识：
+[
+  {
+    "source": "测试大纲",
+    "content": "排课推荐验收标准：日期计算无跨月/跨年错误",
+    "relevance": 0.92
+  },
+  {
+    "source": "历史用例",
+    "content": "TC_EDGE_SCHEDULE_BOUNDARY: 边界条件测试，验证跨月跨年计算",
+    "relevance": 0.88
+  },
+  {
+    "source": "缺陷知识库",
+    "content": "BUG_2025_123: 闰年2月边界计算错误",
+    "relevance": 0.75
+  }
+]
+
+LLM Prompt 注入上下文：
+"""
+【项目知识上下文】
+1. 验收标准：日期计算无跨月/跨年错误
+2. 历史用例：已有边界条件测试覆盖跨月跨年
+3. 历史缺陷：闰年2月边界曾出现计算错误
+
+【当前需求】
+修改推荐排课的建议学习时间计算逻辑，改为20天
+
+请生成测试用例，确保覆盖历史问题点。
+"""
+
+4.3 增强的 TC-IR 生成
+
+基于知识上下文，AI 自动补充测试点：
+
+生成用例时自动增加：
+- TC_EDGE_LEAP_YEAR: 闰年2月边界测试 (参考历史缺陷)
+- 验收标准断言: 确保日期计算无跨月/跨年错误
+
+5. 知识类型详细设计
+
+5.1 测试大纲 (Test Outline)
+
+Schema:
+{
+  "doc_id": "string",
+  "version": "string",
+  "modules": [
+    {
+      "name": "string",
+      "description": "string",
+      "priority": "P0|P1|P2",
+      "test_strategy": "string",
+      "acceptance_criteria": ["string"]
+    }
+  ],
+  "global_standards": {
+    "pass_rate_threshold": 0.95,
+    "p0_defect_tolerance": 0,
+    "p1_defect_tolerance": 3
+  }
+}
+
+5.2 业务术语表 (Business Glossary)
+
+Schema:
+{
+  "term": "string",           # 术语名称，如 "排课推荐"
+  "definition": "string",     # 定义
+  "aliases": ["string"],      # 别名，如 ["课程推荐", "智能排课"]
+  "related_modules": ["string"],  # 相关模块
+  "examples": ["string"]      # 使用示例
+}
+
+示例：
+{
+  "term": "建议学习时间",
+  "definition": "系统根据排课生成日期自动计算的推荐完成日期",
+  "aliases": ["建议完成时间", "推荐学习期限"],
+  "related_modules": ["排课推荐"],
+  "examples": ["建议完成时间：2026年2月21号前完成"]
+}
+
+5.3 历史用例 (Historical Test Cases)
+
+存储已确认执行过的 TC-IR，供新需求生成时参考：
+
+Schema:
+{
+  "tc_id": "string",
+  "name": "string",
+  "module": "string",
+  "mode": "UI|API|HYBRID",
+  "steps": [...],
+  "execution_count": 0,       # 执行次数
+  "last_result": "pass|fail", # 最近执行结果
+  "created_at": "datetime"
+}
+
+5.4 缺陷知识库 (Defect Knowledge)
+
+从历史缺陷中提取模式，防止回归：
+
+Schema:
+{
+  "defect_id": "string",
+  "title": "string",
+  "module": "string",
+  "root_cause": "string",
+  "pattern": "string",        # 缺陷模式，如 "边界计算错误"
+  "prevention_hints": ["string"],  # 预防建议
+  "related_test_points": ["string"]  # 相关测试点
+}
+
+6. API 接口设计
+
+6.1 知识上传接口
+
+POST /api/v1/knowledge/upload
+Content-Type: multipart/form-data
+
+参数：
+- file: 文档文件 (支持 .docx, .md, .txt, .pdf)
+- type: 知识类型 (test_outline, glossary, spec)
+- replace_existing: 是否替换同名文档 (默认 false)
+
+响应：
+{
+  "status": "success",
+  "doc_id": "DOC_001",
+  "chunks_created": 15,
+  "modules_detected": ["用户管理", "排课推荐"]
+}
+
+6.2 知识检索接口
+
+POST /api/v1/knowledge/search
+Content-Type: application/json
+
+参数：
+{
+  "query": "建议学习时间计算",
+  "types": ["test_outline", "defect_knowledge"],  # 可选，限定类型
+  "top_k": 5
+}
+
+响应：
+{
+  "results": [
+    {
+      "chunk_id": "CHUNK_001",
+      "source": "测试大纲_v2.0",
+      "content": "...",
+      "relevance_score": 0.92,
+      "metadata": {"module": "排课推荐"}
+    }
+  ]
+}
+
+6.3 术语添加接口
+
+POST /api/v1/knowledge/glossary
+Content-Type: application/json
+
+参数：
+{
+  "term": "建议学习时间",
+  "definition": "系统根据排课生成日期自动计算的推荐完成日期",
+  "aliases": ["建议完成时间"]
+}
+
+7. 与其他模块集成
+
+7.1 与神经设计层集成
+
+class NeuralDesigner:
+    def generate_tc_ir(self, prd: str) -> list[TCIR]:
+        # 1. 检索项目知识
+        knowledge_context = self.knowledge_retriever.retrieve(prd)
+        
+        # 2. 构建增强 Prompt
+        enhanced_prompt = f"""
+        【项目知识上下文】
+        {self._format_knowledge(knowledge_context)}
+        
+        【产品需求】
+        {prd}
+        
+        请基于上下文生成测试用例。
+        """
+        
+        # 3. LLM 生成
+        return self.llm.generate(enhanced_prompt)
+
+7.2 与右瞳引擎集成
+
+右瞳引擎执行 UI 测试时，可检索业务术语理解页面元素：
+
+# 用户意图："点击建议学习时间"
+# 术语库返回："建议学习时间" = "建议完成时间" = "推荐学习期限"
+# 右瞳引擎搜索所有别名，提高识别准确率
+
+8. 部署与配置
+
+8.1 ChromaDB 配置
+
+# docker-compose.yml
+services:
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./chroma_data:/chroma/chroma  # 持久化存储
+    environment:
+      - ANONYMIZED_TELEMETRY=False
+
+8.2 Embedding 模型配置
+
+knowledge_base:
+  embedding_model: "text-embedding-3-small"  # OpenAI
+  # 或本地部署：
+  # embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  chunk_size: 500           # 每个切片的最大字符数
+  chunk_overlap: 50         # 切片重叠字符数
+  collections:
+    - project_test_outline
+    - business_glossary
+    - historical_test_cases
+    - defect_knowledge
+
+9. 前端界面设计
+
+9.1 知识库管理页面
+
++------------------------------------------------------------------+
+| 📚 项目知识库                                                     |
++------------------------------------------------------------------+
+| 📄 测试大纲          📖 业务术语         📋 历史用例        🐛 缺陷库 |
++------------------------------------------------------------------+
+|                                                                  |
+| +------------------------+  +----------------------------------+ |
+| | 已上传文档             |  | 文档详情                         | |
+| |------------------------|  |----------------------------------| |
+| | 📄 测试大纲_v2.0 [✓]   |  | 名称: 测试大纲_v2.0              | |
+| | 📄 业务术语表    [✓]   |  | 类型: test_outline               | |
+| | 📄 接口规范      [✓]   |  | 切片数: 15                       | |
+| +------------------------+  | 覆盖模块: 用户管理, 排课推荐...   | |
+|                             | 上传时间: 2026-02-06             | |
+| [+ 上传新文档]              +----------------------------------+ |
+|                                                                  |
++------------------------------------------------------------------+
+
+9.2 术语快速添加
+
++------------------------------------------+
+| 添加业务术语                              |
++------------------------------------------+
+| 术语名称: [建议学习时间          ]       |
+| 定义:     [系统根据排课生成日期...   ]   |
+| 别名:     [建议完成时间, 推荐期限    ]   |
+| 相关模块: [排课推荐 ▼]                   |
+|                                          |
+| [取消]                    [保存]         |
++------------------------------------------+
+
+End of Design Document

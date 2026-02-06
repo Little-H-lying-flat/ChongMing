@@ -1,0 +1,1 @@
+2026-02-06 16:09:46.326 | ERROR    | app.core.request_logger:request_logging_middleware:111 - [8f89596a] <-- ERROR: ModuleNotFoundError: No module named 'playwright' (11.21ms)

@@ -1,0 +1,721 @@
+重明 (ChongMing) 详细设计说明书：环境管理模块 (Environment Manager)
+所属层级：基础设施层 (Infrastructure Layer) - 配置侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+环境管理模块 (Environment Manager) 是重明架构中负责 "配" (Configure) 和 "切" (Switch) 的基础组件。它像一个智能的环境调度员，管理测试执行所需的各类环境配置，支持一键切换开发/测试/预发/生产环境。
+
+其核心设计哲学是 "Config-as-Code, Environment-Agnostic" (配置即代码，环境无关)：
+- 配置集中：统一管理所有环境配置
+- 一键切换：快速切换目标环境
+- 变量注入：自动注入环境变量到测试用例
+- 敏感加密：加密存储敏感信息 (密码、Token)
+
+1.2 核心职责
+- 环境定义 (Environment Definition)：定义各环境的配置结构
+- 配置管理 (Config Management)：集中管理 URL、凭证、参数
+- 环境切换 (Environment Switch)：一键切换目标环境
+- 变量注入 (Variable Injection)：运行时注入环境变量
+- 敏感加密 (Secret Encryption)：安全存储敏感配置
+- 健康检查 (Health Check)：验证环境可用性
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 输入层 (Input Layer)
+        CONFIG[环境配置文件]
+        SECRETS[加密密钥库]
+        USER[用户选择]
+    end
+    
+    subgraph Environment Manager
+        subgraph Parser [解析层]
+            CONFIG --> LOADER[配置加载器]
+            SECRETS --> DECRYPTOR[解密器]
+            LOADER --> ENVS[环境列表]
+        end
+        
+        subgraph Selector [选择层]
+            USER --> SWITCHER[环境切换器]
+            ENVS --> SWITCHER
+            SWITCHER --> ACTIVE[当前活动环境]
+        end
+        
+        subgraph Injector [注入层]
+            ACTIVE --> RESOLVER[变量解析器]
+            DECRYPTOR --> RESOLVER
+            RESOLVER --> CONTEXT[执行上下文]
+        end
+        
+        subgraph Checker [健康检查层]
+            ACTIVE --> HEALTH[健康检查器]
+            HEALTH --> STATUS[环境状态]
+        end
+    end
+    
+    subgraph 输出层 (Output Layer)
+        CONTEXT --> ENGINE[执行引擎]
+        STATUS --> DASHBOARD[监控面板]
+    end
+
+2.2 核心类图
+
+- EnvironmentManager: 环境管理器入口
+- ConfigLoader: 配置加载器
+- EnvironmentSwitcher: 环境切换器
+- VariableResolver: 变量解析器
+- SecretManager: 敏感信息管理器
+- HealthChecker: 健康检查器
+
+3. 环境定义 (Environment Definition)
+
+3.1 环境类型
+
+| 环境类型 | 代号 | 用途 | 典型配置 |
+|---------|------|------|---------|
+| 开发环境 | DEV | 本地开发调试 | localhost:8080 |
+| 测试环境 | TEST | 功能测试 | test.example.com |
+| 预发环境 | STAGING | 上线前验证 | staging.example.com |
+| 生产环境 | PROD | 生产验证 (只读) | prod.example.com |
+| 沙箱环境 | SANDBOX | 隔离测试 | sandbox.example.com |
+
+3.2 环境配置结构
+
+# environments.yaml
+
+environments:
+  # 开发环境
+  dev:
+    name: "开发环境"
+    description: "本地开发调试环境"
+    active: true
+    
+    urls:
+      web: "http://localhost:3000"
+      api: "http://localhost:8080/api"
+      admin: "http://localhost:8081"
+    
+    database:
+      host: "localhost"
+      port: 3306
+      name: "testdb_dev"
+      user: "dev_user"
+      password: "${secrets.dev_db_password}"
+    
+    credentials:
+      admin:
+        username: "admin"
+        password: "${secrets.dev_admin_password}"
+      test_user:
+        username: "testuser"
+        password: "${secrets.dev_test_password}"
+    
+    features:
+      debug_mode: true
+      mock_payment: true
+      skip_captcha: true
+    
+    timeouts:
+      page_load_ms: 10000
+      api_response_ms: 5000
+    
+    tags:
+      - "local"
+      - "debug"
+  
+  # 测试环境
+  test:
+    name: "测试环境"
+    description: "功能测试环境"
+    
+    urls:
+      web: "https://test.example.com"
+      api: "https://test-api.example.com/api"
+    
+    database:
+      host: "test-db.example.com"
+      port: 3306
+      name: "testdb_test"
+      user: "test_user"
+      password: "${secrets.test_db_password}"
+    
+    credentials:
+      admin:
+        username: "test_admin"
+        password: "${secrets.test_admin_password}"
+    
+    features:
+      debug_mode: false
+      mock_payment: true
+      skip_captcha: true
+    
+    tags:
+      - "test"
+      - "ci"
+  
+  # 预发环境
+  staging:
+    name: "预发环境"
+    description: "上线前验证环境"
+    
+    urls:
+      web: "https://staging.example.com"
+      api: "https://staging-api.example.com/api"
+    
+    features:
+      debug_mode: false
+      mock_payment: false
+      skip_captcha: false
+    
+    restrictions:
+      - "no_destructive_operations"
+      - "read_heavy"
+    
+    tags:
+      - "staging"
+      - "pre-prod"
+  
+  # 生产环境
+  prod:
+    name: "生产环境"
+    description: "生产环境 (仅只读验证)"
+    read_only: true
+    
+    urls:
+      web: "https://www.example.com"
+      api: "https://api.example.com/api"
+    
+    restrictions:
+      - "read_only"
+      - "no_create"
+      - "no_update"
+      - "no_delete"
+    
+    allowed_operations:
+      - "verify"
+      - "screenshot"
+      - "health_check"
+    
+    tags:
+      - "production"
+      - "read-only"
+
+4. 配置加载层 (Config Loader Layer)
+
+4.1 配置加载器
+
+class ConfigLoader:
+    def __init__(self, config_path: str = "environments.yaml"):
+        self.config_path = config_path
+        self.environments = {}
+    
+    def load(self) -> dict[str, Environment]:
+        # 1. 加载主配置文件
+        with open(self.config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # 2. 加载环境变量覆盖
+        overrides = self._load_env_overrides()
+        
+        # 3. 解析每个环境
+        for env_key, env_config in config['environments'].items():
+            # 应用覆盖
+            if env_key in overrides:
+                env_config = self._merge_config(env_config, overrides[env_key])
+            
+            self.environments[env_key] = Environment(
+                key=env_key,
+                **env_config
+            )
+        
+        return self.environments
+    
+    def _load_env_overrides(self) -> dict:
+        """从环境变量加载覆盖配置"""
+        overrides = {}
+        prefix = "CHONGMING_ENV_"
+        
+        for key, value in os.environ.items():
+            if key.startswith(prefix):
+                # CHONGMING_ENV_DEV_API_URL → dev.urls.api
+                parts = key[len(prefix):].lower().split('_')
+                env_key = parts[0]
+                config_path = '.'.join(parts[1:])
+                
+                if env_key not in overrides:
+                    overrides[env_key] = {}
+                self._set_nested(overrides[env_key], config_path, value)
+        
+        return overrides
+
+4.2 多格式支持
+
+| 格式 | 文件扩展名 | 适用场景 |
+|------|-----------|---------|
+| YAML | .yaml, .yml | 主配置文件 |
+| JSON | .json | API 导入 |
+| TOML | .toml | 简洁配置 |
+| ENV | .env | 敏感变量 |
+
+5. 敏感信息管理 (Secret Management)
+
+5.1 加密存储
+
+class SecretManager:
+    def __init__(self, key_path: str = ".chongming_key"):
+        self.cipher = self._load_or_create_key(key_path)
+        self.secrets = {}
+    
+    def encrypt(self, plaintext: str) -> str:
+        """加密敏感信息"""
+        encrypted = self.cipher.encrypt(plaintext.encode())
+        return base64.b64encode(encrypted).decode()
+    
+    def decrypt(self, ciphertext: str) -> str:
+        """解密敏感信息"""
+        encrypted = base64.b64decode(ciphertext.encode())
+        return self.cipher.decrypt(encrypted).decode()
+    
+    def load_secrets(self, secrets_file: str = "secrets.enc"):
+        """加载加密的密钥文件"""
+        with open(secrets_file, 'r') as f:
+            encrypted_data = json.load(f)
+        
+        for key, value in encrypted_data.items():
+            self.secrets[key] = self.decrypt(value)
+    
+    def get(self, key: str) -> str:
+        return self.secrets.get(key)
+
+5.2 密钥文件结构
+
+# secrets.enc (加密存储)
+{
+  "dev_db_password": "gAAAAABf...(encrypted)",
+  "dev_admin_password": "gAAAAABf...(encrypted)",
+  "test_db_password": "gAAAAABf...(encrypted)",
+  "api_key": "gAAAAABf...(encrypted)"
+}
+
+5.3 密钥管理命令
+
+# 初始化密钥
+chongming secrets init
+
+# 添加密钥
+chongming secrets set dev_db_password "mypassword123"
+
+# 查看密钥 (脱敏)
+chongming secrets list
+# dev_db_password: ****word123
+# dev_admin_password: ****1234
+
+# 导出密钥 (CI/CD 用)
+chongming secrets export --format env > .env
+
+6. 环境切换层 (Environment Switcher)
+
+6.1 环境切换器
+
+class EnvironmentSwitcher:
+    def __init__(self, config_loader: ConfigLoader):
+        self.loader = config_loader
+        self.current_env = None
+    
+    def switch(self, env_key: str) -> Environment:
+        """切换到指定环境"""
+        environments = self.loader.load()
+        
+        if env_key not in environments:
+            raise EnvironmentNotFoundError(f"环境 '{env_key}' 不存在")
+        
+        target_env = environments[env_key]
+        
+        # 1. 验证环境权限
+        self._validate_permissions(target_env)
+        
+        # 2. 健康检查
+        if not self._health_check(target_env):
+            raise EnvironmentUnavailableError(f"环境 '{env_key}' 不可用")
+        
+        # 3. 切换
+        self.current_env = target_env
+        
+        # 4. 通知观察者
+        self._notify_switch(target_env)
+        
+        return target_env
+    
+    def get_current(self) -> Environment:
+        return self.current_env
+    
+    def _validate_permissions(self, env: Environment):
+        # 生产环境需要额外确认
+        if env.key == "prod" and not os.getenv("ALLOW_PROD_ACCESS"):
+            raise PermissionError("访问生产环境需要设置 ALLOW_PROD_ACCESS=true")
+
+6.2 切换命令
+
+# CLI 切换
+chongming env switch test
+# ✅ 已切换到测试环境 (test.example.com)
+
+# 查看当前环境
+chongming env current
+# 当前环境: test
+# Web URL: https://test.example.com
+# API URL: https://test-api.example.com/api
+
+# 列出所有环境
+chongming env list
+# DEV      开发环境     http://localhost:3000
+# TEST     测试环境     https://test.example.com     [当前]
+# STAGING  预发环境     https://staging.example.com
+# PROD     生产环境     https://www.example.com      [只读]
+
+7. 变量注入层 (Variable Injection)
+
+7.1 变量解析器
+
+class VariableResolver:
+    def __init__(self, env: Environment, secrets: SecretManager):
+        self.env = env
+        self.secrets = secrets
+        self.pattern = re.compile(r'\$\{(\w+(?:\.\w+)*)\}')
+    
+    def resolve(self, text: str) -> str:
+        """解析并替换变量引用"""
+        def replacer(match):
+            var_path = match.group(1)
+            return self._get_value(var_path)
+        
+        return self.pattern.sub(replacer, text)
+    
+    def _get_value(self, var_path: str) -> str:
+        # 处理 secrets 引用
+        if var_path.startswith("secrets."):
+            secret_key = var_path[8:]  # 去掉 "secrets." 前缀
+            return self.secrets.get(secret_key)
+        
+        # 处理环境变量引用
+        if var_path.startswith("env."):
+            env_key = var_path[4:]
+            return os.getenv(env_key, "")
+        
+        # 处理环境配置引用
+        return self._get_nested(self.env, var_path)
+    
+    def inject_to_tc(self, tc_ir: TCIR) -> TCIR:
+        """将环境变量注入到测试用例"""
+        # 替换 URL
+        for step in tc_ir.steps:
+            if step.target:
+                step.target = self.resolve(step.target)
+            if step.value:
+                step.value = self.resolve(step.value)
+        
+        return tc_ir
+
+7.2 变量引用语法
+
+| 语法 | 说明 | 示例 |
+|------|------|------|
+| `${urls.web}` | 环境 URL | https://test.example.com |
+| `${credentials.admin.username}` | 凭证信息 | admin |
+| `${secrets.db_password}` | 加密密钥 | mypassword123 |
+| `${env.CI}` | 系统环境变量 | true |
+| `${features.skip_captcha}` | 特性开关 | true |
+
+7.3 TC-IR 中使用变量
+
+{
+  "id": "TC_LOGIN_001",
+  "name": "用户登录测试",
+  "steps": [
+    {
+      "action": "navigate",
+      "target": "${urls.web}/login"
+    },
+    {
+      "action": "input",
+      "target": "#username",
+      "value": "${credentials.test_user.username}"
+    },
+    {
+      "action": "input",
+      "target": "#password", 
+      "value": "${credentials.test_user.password}"
+    }
+  ]
+}
+
+8. 健康检查层 (Health Checker)
+
+8.1 健康检查器
+
+class HealthChecker:
+    def __init__(self):
+        self.checks = {
+            "web": self._check_web,
+            "api": self._check_api,
+            "database": self._check_database
+        }
+    
+    async def check_all(self, env: Environment) -> HealthReport:
+        results = {}
+        
+        for check_name, check_func in self.checks.items():
+            try:
+                result = await check_func(env)
+                results[check_name] = HealthResult(
+                    status="healthy" if result else "unhealthy",
+                    latency_ms=result.latency if result else None
+                )
+            except Exception as e:
+                results[check_name] = HealthResult(
+                    status="error",
+                    error=str(e)
+                )
+        
+        return HealthReport(
+            environment=env.key,
+            timestamp=datetime.now(),
+            overall_status=self._calculate_overall(results),
+            details=results
+        )
+    
+    async def _check_web(self, env: Environment) -> CheckResult:
+        start = time.time()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(env.urls.web, timeout=10)
+            latency = (time.time() - start) * 1000
+            return CheckResult(
+                success=response.status_code == 200,
+                latency=latency
+            )
+    
+    async def _check_api(self, env: Environment) -> CheckResult:
+        start = time.time()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{env.urls.api}/health", timeout=10)
+            latency = (time.time() - start) * 1000
+            return CheckResult(
+                success=response.status_code == 200,
+                latency=latency
+            )
+
+8.2 健康报告
+
+{
+  "environment": "test",
+  "timestamp": "2026-02-06T10:00:00Z",
+  "overall_status": "healthy",
+  "details": {
+    "web": {
+      "status": "healthy",
+      "latency_ms": 120
+    },
+    "api": {
+      "status": "healthy", 
+      "latency_ms": 85
+    },
+    "database": {
+      "status": "healthy",
+      "latency_ms": 15
+    }
+  }
+}
+
+9. 环境隔离与限制 (Environment Isolation)
+
+9.1 生产环境保护
+
+class ProductionGuard:
+    """生产环境保护机制"""
+    
+    DANGEROUS_OPERATIONS = [
+        "delete", "drop", "truncate", "update", "insert",
+        "click_delete", "click_submit", "fill_form"
+    ]
+    
+    def validate_operation(self, env: Environment, operation: str) -> bool:
+        if not env.read_only:
+            return True
+        
+        # 检查是否为危险操作
+        if any(op in operation.lower() for op in self.DANGEROUS_OPERATIONS):
+            raise ProductionGuardError(
+                f"禁止在生产环境执行危险操作: {operation}"
+            )
+        
+        # 检查是否在允许列表
+        if env.allowed_operations:
+            if operation not in env.allowed_operations:
+                raise ProductionGuardError(
+                    f"操作 '{operation}' 不在生产环境允许列表中"
+                )
+        
+        return True
+
+9.2 限制配置
+
+# 生产环境限制
+prod:
+  read_only: true
+  
+  restrictions:
+    - "read_only"
+    - "no_create"
+    - "no_update"
+    - "no_delete"
+  
+  allowed_operations:
+    - "verify"
+    - "screenshot"
+    - "health_check"
+    - "get_request"
+  
+  blocked_endpoints:
+    - "/api/admin/*"
+    - "/api/users/*/delete"
+    - "/api/orders/*/cancel"
+  
+  require_confirmation: true
+  max_requests_per_minute: 10
+
+10. API 接口设计
+
+10.1 获取环境列表
+
+GET /api/v1/environments
+
+响应：
+{
+  "environments": [
+    {"key": "dev", "name": "开发环境", "status": "healthy"},
+    {"key": "test", "name": "测试环境", "status": "healthy", "current": true},
+    {"key": "staging", "name": "预发环境", "status": "healthy"},
+    {"key": "prod", "name": "生产环境", "status": "healthy", "read_only": true}
+  ]
+}
+
+10.2 切换环境
+
+POST /api/v1/environments/switch
+{
+  "target": "staging"
+}
+
+10.3 健康检查
+
+GET /api/v1/environments/{env_key}/health
+
+10.4 获取环境变量
+
+GET /api/v1/environments/{env_key}/variables
+
+11. 前端界面设计
+
++------------------------------------------------------------------+
+| 🌍 环境管理                                                       |
++------------------------------------------------------------------+
+|                                                                  |
+| 当前环境                                                         |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │  🟢 TEST - 测试环境                                         │  |
+| │  Web: https://test.example.com                             │  |
+| │  API: https://test-api.example.com/api                     │  |
+| │  状态: 健康 (延迟 85ms)                        [切换环境 ▼] │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| 环境列表                                                         |
+| ┌──────────┬────────────┬──────────────────────┬────────┐       |
+| │ 环境     │ 名称       │ URL                  │ 状态   │       |
+| ├──────────┼────────────┼──────────────────────┼────────┤       |
+| │ DEV      │ 开发环境   │ http://localhost:3000│ 🟢    │       |
+| │ TEST     │ 测试环境   │ test.example.com     │ 🟢 ✓  │       |
+| │ STAGING  │ 预发环境   │ staging.example.com  │ 🟢    │       |
+| │ PROD     │ 生产环境   │ www.example.com      │ 🟢 🔒 │       |
+| └──────────┴────────────┴──────────────────────┴────────┘       |
+|                                                                  |
+| 特性开关                                                         |
+| ┌────────────────────────────────────────────────────────────┐  |
+| │ ☑ 跳过验证码   ☑ Mock 支付   ☐ 调试模式                    │  |
+| └────────────────────────────────────────────────────────────┘  |
+|                                                                  |
+| [刷新状态]  [编辑配置]  [健康检查]                               |
++------------------------------------------------------------------+
+
+12. CI/CD 集成
+
+12.1 GitHub Actions 示例
+
+# .github/workflows/test.yml
+name: Run Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [dev, test]
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup ChongMing
+        run: pip install chongming-cli
+      
+      - name: Switch Environment
+        run: chongming env switch ${{ matrix.environment }}
+        env:
+          CHONGMING_SECRETS_KEY: ${{ secrets.CHONGMING_KEY }}
+      
+      - name: Run Tests
+        run: chongming run --all
+        env:
+          CHONGMING_ENV: ${{ matrix.environment }}
+
+12.2 环境变量注入
+
+# CI 环境变量
+CHONGMING_ENV=test
+CHONGMING_SECRETS_KEY=xxx
+CHONGMING_ENV_TEST_API_URL=https://ci-api.example.com
+
+13. 配置说明
+
+environment_manager:
+  config_file: "environments.yaml"
+  secrets_file: "secrets.enc"
+  
+  defaults:
+    environment: "dev"
+    timeout_ms: 10000
+  
+  health_check:
+    enabled: true
+    interval_seconds: 60
+    endpoints:
+      - "/health"
+      - "/api/ping"
+  
+  security:
+    encrypt_secrets: true
+    mask_sensitive_logs: true
+    require_prod_confirmation: true
+  
+  isolation:
+    prod_read_only: true
+    rate_limit_prod: 10  # 请求/分钟
+
+End of Design Document

@@ -1,0 +1,720 @@
+重明 (ChongMing) 详细设计说明书：神经设计层 (Neural Design Layer)
+所属层级：意图层 (Intent Layer) - 顶层决策
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+神经设计层 (Neural Design Layer) 是重明架构中负责 "想" (Think) 和 "审" (Review) 的顶层决策组件。它位于执行层之上，负责将产品需求文档 (PRD) 或自然语言需求转化为可执行的测试用例资产。
+
+其核心设计哲学是 "PRD-Driven, Dev-Test-Unified" (需求驱动，测开一体)：
+- 需求驱动：直接解析开发与测试共用的产品需求文档，而非单独的测试需求
+- 意图理解：深度解析功能描述、数据模型、业务规则，推断隐含的边界条件与异常场景
+- 智能生成：基于 LLM 自动生成多场景、多粒度的测试用例草稿
+- 协作评审：引入 Critic Agent 进行自我评审，人工确认后固化
+
+1.2 核心职责
+- PRD 解析 (PRD Parsing)：解析产品需求文档，提取功能点、业务规则、数据模型
+- 场景推理 (Scenario Inference)：基于需求推理正向流程、边界条件、异常场景
+- 用例生成 (Case Generation)：自动生成多场景、多粒度的 TC-IR 用例集
+- 质量评审 (Quality Review)：通过 Critic Agent 评估用例完备性与可执行性
+- 资产固化 (Asset Solidification)：用户确认后，将 TC-IR 存入资产库
+
+1.3 测开一体：输入即需求
+
+重明的神经设计层打破传统"先有需求文档，再写测试用例"的模式：
+
+传统模式：
+  产品需求 → 开发实现 → 测试编写用例 → 执行测试
+  ↓           ↓           ↓
+  (信息丢失)  (理解偏差)   (覆盖不全)
+
+重明模式：
+  产品需求 (PRD) ──────────────────────────────┐
+       │                                        │
+       ▼                                        ▼
+  开发实现                              AI 自动生成 TC-IR
+       │                                        │
+       └─────────── 同步验证 ──────────────────┘
+
+优势：
+- 需求同源：测试用例直接基于产品需求生成，避免理解偏差
+- 覆盖全面：AI 自动推理边界条件和异常场景
+- 实时同步：需求变更时，可重新生成对应用例
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+神经设计层由四个核心子系统组成：意图解析器 (Intent Parser)、用例工厂 (TC Factory)、评审代理 (Critic Agent) 和 确认网关 (Confirm Gate)。
+
+graph TD
+    User[用户输入: "测试登录功能"] --> PARSER[Intent Parser]
+
+    subgraph Neural Design Layer
+        subgraph Intent Parser [意图解析层]
+            PARSER --> |NLU| INTENT[结构化意图]
+            INTENT --> |场景推理| COVERAGE[覆盖范围分析]
+        end
+
+        subgraph TC Factory [用例工厂]
+            COVERAGE --> GENERATOR[Case Generator]
+            GENERATOR --> |Draft| CASES[TC-IR 草稿集]
+        end
+
+        subgraph Critic Agent [评审代理]
+            CASES --> CRITIC[Critic LLM]
+            CRITIC --> |评审意见| FEEDBACK[改进建议]
+            FEEDBACK --> GENERATOR
+        end
+
+        subgraph Confirm Gate [确认网关]
+            CASES --> GATE[人工确认界面]
+            GATE --> |Approved| ASSET[资产库]
+            GATE --> |Rejected| GENERATOR
+        end
+    end
+
+2.2 核心类图 (Class Diagram)
+
+- NeuralDesigner: 神经设计层入口，协调全流程。
+- IntentParser: 意图解析器，将自然语言转为结构化意图。
+- TestCaseFactory: 用例生成工厂，基于意图生成 TC-IR。
+- CriticAgent: 评审代理，评估用例质量并提出改进。
+- ConfirmGateway: 确认网关，管理人机交互确认流程。
+
+3. 详细流程设计 (Workflow Design)
+
+3.1 智能用例生成流程 (The Intelligent Generation Flow)
+
+这是神经设计层生成高质量测试用例的标准流程，采用 Draft → Review → Confirm 三阶段状态机。
+
+=== Phase 1: Draft (草拟阶段) ===
+
+Step 1: PRD 需求解析 (PRD Parsing)
+
+输入示例（开发/测试共用的产品需求文档）：
+---
+1、背景描述
+增加推荐的排课，建议学习时间，修改推荐排课的展示形式。
+
+2、功能描述
+2.1 建议学习时间
+功能描述：根据该排课推荐出的时间，计算15天之后的日期。
+数据来源：系统自动推荐的排课。
+排序：排课结束正序。
+数据模型：
+原有展示字段不变，仅修改展示形式，去掉课程封面图片，见下方布局参考
+建议完成时间：X年X月X号前完成
+以当前排课生成为推荐内容之日起，计算15天之后的日期，在此展示
+---
+
+PRD Parser 输出结构化需求：
+{
+  "requirement_id": "REQ_SCHEDULE_001",
+  "feature_name": "推荐排课 - 建议学习时间",
+  "business_rules": [
+    {
+      "rule_id": "BR_001",
+      "description": "建议完成时间 = 排课生成日期 + 15天",
+      "formula": "suggested_deadline = created_at + 15 days"
+    },
+    {
+      "rule_id": "BR_002", 
+      "description": "排序规则：按排课结束时间正序排列",
+      "sort_field": "end_time",
+      "sort_order": "asc"
+    }
+  ],
+  "ui_changes": [
+    {
+      "change_id": "UI_001",
+      "description": "去掉课程封面图片",
+      "action": "remove",
+      "element": "课程封面图片"
+    },
+    {
+      "change_id": "UI_002",
+      "description": "展示建议完成时间",
+      "format": "X年X月X号前完成"
+    }
+  ],
+  "data_source": "系统自动推荐的排课",
+  "suggested_test_modes": ["UI", "API", "HYBRID"]
+}
+
+Step 2: 场景推理 (Scenario Inference)
+
+基于结构化需求，LLM 自动推理测试场景：
+
+| 场景类型 | 推理来源 | 测试点 |
+|---------|---------|--------|
+| 正向流程 | BR_001 | 验证 +15 天计算结果正确 |
+| 正向流程 | BR_002 | 验证按结束时间正序排列 |
+| UI 验证 | UI_001 | 验证无课程封面图片 |
+| UI 验证 | UI_002 | 验证日期格式正确展示 |
+| 边界条件 | BR_001 | 跨月计算 (如1月20日+15=2月4日) |
+| 边界条件 | BR_001 | 跨年计算 (如12月25日+15=次年1月9日) |
+| 端到端 | 全流程 | 从生成到展示的完整验证 |
+
+Step 3: TC-IR 自动生成
+
+为每个场景生成 TC-IR 草稿（示例见: TC-IR-推荐排课建议学习时间需求示例.js）：
+
+{
+  "id": "DRAFT_TC_SCHEDULE_001",
+  "status": "draft",
+  "name": "建议学习时间计算逻辑验证",
+  "source_requirement": "REQ_SCHEDULE_001 - BR_001",
+  "mode": "API",
+  "steps": [
+    {"action": "call_api", "target": "获取推荐排课接口"},
+    {"action": "verify", "target": "suggested_deadline", "condition": "equals", "expected_value": "${today + 15 days}"}
+  ]
+}
+
+=== Phase 2: Review (评审阶段) ===
+
+Step 4: Critic Agent 自评
+- Critic Agent 对每个草稿进行多维度评估：
+
+| 评审维度 | 检查项 | 评分 |
+|---------|-------|------|
+| 完备性 | 是否覆盖所有场景？ | 0.85 |
+| 可执行性 | 步骤是否可自动化执行？ | 0.92 |
+| 边界覆盖 | 边界条件是否充分？ | 0.78 |
+| 断言明确性 | 预期结果是否可验证？ | 0.88 |
+
+Step 5: 改进迭代
+- 如果综合评分 < 0.80，自动触发改进：
+  - Critic 输出改进建议：
+    "建议补充：账号不存在场景、特殊字符用户名场景"
+  - Generator 重新生成补充用例
+  - 最多迭代 3 轮
+
+=== Phase 3: Confirm (确认阶段) ===
+
+Step 6: 人工确认
+- 前端展示用例确认卡片：
+  - 显示用例名称、步骤、预期结果
+  - 提供 [确认] [修改] [拒绝] 三个操作
+- 用户可以：
+  - 直接确认：用例进入资产库
+  - 请求修改：附加修改意见，返回 Draft 阶段
+  - 拒绝：标记为 Abandoned，不生成资产
+
+Step 7: 资产固化
+- 确认的用例存入资产库，状态变为 "confirmed"
+- 可被 Dispatcher 分发到左瞳/右瞳引擎执行
+
+4. 接口定义 (API Specs)
+
+4.1 输入：自然语言需求
+
+class DesignRequest:
+    intent: str              # 用户输入，如 "测试商品搜索功能"
+    constraints: dict|None   # 可选约束，如 {"max_cases": 10, "priority": "P0"}
+    context: list[str]       # 历史上下文，支持多轮对话
+
+4.2 内部协议：Draft TC-IR
+
+生成阶段使用的中间格式，包含元数据与状态信息。
+
+{
+  "id": "DRAFT_TC_001",
+  "status": "draft",           // draft | reviewed | confirmed | abandoned
+  "name": "用户登录正向测试",
+  "description": "验证正确账号密码可成功登录",
+  "mode": "UI",
+  "priority": "P0",
+  "coverage_tag": "正向流程",
+  "critic_score": null,        // 评审后填充
+  "critic_feedback": null,     // 评审后填充
+  "steps": [
+    {"action": "open", "target": "登录页面"},
+    {"action": "input", "target": "用户名输入框", "value": "admin"},
+    {"action": "input", "target": "密码输入框", "value": "Admin123"},
+    {"action": "click", "target": "登录按钮"},
+    {"action": "verify", "target": "欢迎信息", "condition": "contains_text", "expected_value": "欢迎"}
+  ],
+  "created_at": "2026-02-06T09:00:00Z",
+  "iteration_count": 1
+}
+
+4.3 输出：Critic 评审报告
+
+{
+  "tc_id": "DRAFT_TC_001",
+  "overall_score": 0.86,
+  "dimensions": {
+    "completeness": 0.85,
+    "executability": 0.92,
+    "boundary_coverage": 0.78,
+    "assertion_clarity": 0.88
+  },
+  "passed": true,
+  "suggestions": [],
+  "reviewed_at": "2026-02-06T09:01:00Z"
+}
+
+5. 关键模块实现细节
+
+5.1 意图解析策略 (Intent Parsing Strategy)
+
+采用 "Structured Extraction + Reasoning" 双阶段解析：
+
+阶段1: 结构化抽取
+- 使用 LLM 从自然语言中抽取关键字段
+- Prompt 模板：
+  """
+  请从以下测试需求中提取结构化信息：
+  需求：{user_input}
+  
+  请输出 JSON 格式：
+  - target_feature: 被测功能名称
+  - test_scope: 测试范围列表 (正向/边界/异常)
+  - suggested_mode: 建议模式 (UI/API/HYBRID)
+  - coverage_hints: 可能需要覆盖的场景提示
+  """
+
+阶段2: 场景推理
+- 基于抽取结果，LLM 进行深度推理
+- 推断隐含的边界条件与异常路径
+- 参考历史用例库，补充遗漏场景
+
+5.2 Critic Agent 实现
+
+Critic Agent 使用独立的 LLM 调用，与 Generator 形成对抗评审：
+
+class CriticAgent:
+    def review(self, tc_draft: dict) -> CriticReport:
+        prompt = f"""
+        请作为测试专家评审以下测试用例：
+        {json.dumps(tc_draft, ensure_ascii=False)}
+        
+        评审维度：
+        1. 完备性：是否覆盖了功能的主要场景？
+        2. 可执行性：步骤描述是否足够清晰，可被自动化执行？
+        3. 边界覆盖：是否考虑了边界条件和异常输入？
+        4. 断言明确性：预期结果是否具体、可验证？
+        
+        请输出 JSON 格式的评审报告。
+        """
+        return llm.generate(prompt)
+
+5.3 状态机编排 (LangGraph State Machine)
+
+使用 LangGraph 实现 Draft → Review → Confirm 状态流转：
+
+from langgraph.graph import StateGraph
+
+graph = StateGraph(DesignState)
+
+# 节点定义
+graph.add_node("parse_intent", parse_intent)
+graph.add_node("generate_draft", generate_draft)
+graph.add_node("critic_review", critic_review)
+graph.add_node("check_score", check_score)
+graph.add_node("await_confirm", await_confirm)
+graph.add_node("finalize", finalize)
+
+# 边定义
+graph.add_edge("parse_intent", "generate_draft")
+graph.add_edge("generate_draft", "critic_review")
+graph.add_conditional_edges(
+    "critic_review",
+    check_score,
+    {
+        "pass": "await_confirm",
+        "fail": "generate_draft",  # 回到生成，进行迭代
+        "max_iterations": "await_confirm"  # 达到最大迭代次数，强制进入确认
+    }
+)
+graph.add_edge("await_confirm", "finalize")
+
+5.4 人机交互设计
+
+确认网关采用前端卡片式交互，支持批量操作：
+
+interface TestCaseCard {
+  id: string;
+  name: string;
+  description: string;
+  steps: Step[];
+  criticScore: number;
+  criticFeedback: string;
+}
+
+// 用户操作
+type UserAction = 
+  | { type: 'confirm'; tcId: string }
+  | { type: 'modify'; tcId: string; feedback: string }
+  | { type: 'reject'; tcId: string; reason: string };
+
+6. LLM 选型配置
+
+根据神经设计层的智能需求，采用高智能模型：
+
+| 子模块 | 推荐模型 | 理由 |
+|-------|---------|------|
+| Intent Parser | Qwen3-Max | 需要深度理解用户意图 |
+| TC Generator | Qwen3-Max | 需要丰富的用例设计知识 |
+| Critic Agent | Qwen3-Max | 需要专业的质量评估能力 |
+
+配置示例：
+{
+  "neural_layer": {
+    "model": "qwen3-max",
+    "temperature": 0.7,
+    "max_tokens": 4096,
+    "retry_count": 3
+  }
+}
+
+7. 异常处理
+
+意图模糊：
+- 如果用户意图过于模糊（如"测试一下这个功能"）
+- 处理：返回澄清问题，要求用户补充详情
+
+生成超时：
+- 如果 LLM 响应时间 > 30s
+- 处理：返回部分结果，标记为 "partial"，允许人工补充
+
+评审死循环：
+- 如果迭代次数 > 3 仍未达标
+- 处理：强制进入确认阶段，在 UI 上标注"低质量警告"
+
+8. 前端组件设计
+
+8.1 用例确认卡片 (TestCaseCard)
+
++------------------------------------------+
+| 🧪 正常登录测试                    [P0]  |
++------------------------------------------+
+| 📊 评审得分: 86/100  ✅ 通过             |
+|------------------------------------------|
+| 步骤:                                    |
+| 1. 打开登录页面                          |
+| 2. 输入用户名: admin                     |
+| 3. 输入密码: ****                        |
+| 4. 点击登录按钮                          |
+| 5. 验证欢迎信息包含 "欢迎"               |
+|------------------------------------------|
+| [✓ 确认]  [✏️ 修改]  [✗ 拒绝]           |
++------------------------------------------+
+
+8.2 批量操作面板
+
++------------------------------------------+
+| 本次生成 5 个用例                        |
+| [全部确认] [全部拒绝] [逐个审核]          |
++------------------------------------------+
+
+9. 与其他层的交互
+
+9.1 向下交互 (→ 执行层)
+
+- 确认的 TC-IR 通过 Dispatcher 分发
+- 根据 mode 字段路由：
+  - UI → 右瞳引擎
+  - API → 左瞳引擎
+  - HYBRID → 两者协作
+
+9.2 向上交互 (→ 用户/前端)
+
+- SSE 实时推送生成进度
+- 确认操作通过 REST API 接收
+- WebSocket 可选（如需双向交互）
+
+10. 用例优先级自动推荐 (Priority Auto-Recommendation)
+
+10.1 设计目标
+
+智能推荐测试用例优先级，帮助测试团队聚焦最关键的测试：
+- 基于多维度因素自动计算优先级
+- 结合业务价值、变更风险、历史缺陷等信号
+- 支持动态调整，适应敏捷迭代
+
+10.2 优先级评分模型
+
+=== 多因子加权模型 ===
+
+PriorityScore = Σ(Factor_i × Weight_i)
+
+| 因子 (Factor) | 权重 (Weight) | 计算方式 |
+|--------------|---------------|---------|
+| 业务影响度 (Business Impact) | 0.30 | 核心功能=10, 重要=7, 一般=4, 边缘=1 |
+| 代码变更热度 (Change Hotspot) | 0.25 | 基于 Git commit 频率和范围 |
+| 历史缺陷密度 (Defect Density) | 0.20 | 该模块历史 Bug 数量 / 代码行数 |
+| 功能复杂度 (Complexity) | 0.15 | 圈复杂度、代码耦合度 |
+| 用户使用频率 (Usage Frequency) | 0.10 | 基于埋点/日志的使用统计 |
+
+=== 优先级映射 ===
+
+| 得分区间 | 优先级 | 说明 |
+|---------|--------|------|
+| 8.0 - 10.0 | P0 | 必须测试，阻塞发布 |
+| 6.0 - 7.9 | P1 | 高优先级，应覆盖 |
+| 4.0 - 5.9 | P2 | 中优先级，资源允许时覆盖 |
+| 0.0 - 3.9 | P3 | 低优先级，可延后 |
+
+10.3 核心实现
+
+class PriorityRecommender:
+    """用例优先级推荐器"""
+    
+    def __init__(self, config: PriorityConfig):
+        self.weights = config.factor_weights
+        self.analyzers = {
+            "business_impact": BusinessImpactAnalyzer(),
+            "change_hotspot": ChangeHotspotAnalyzer(),
+            "defect_density": DefectDensityAnalyzer(),
+            "complexity": ComplexityAnalyzer(),
+            "usage_frequency": UsageFrequencyAnalyzer()
+        }
+    
+    def recommend_priority(self, test_case: DraftTCIR, context: PriorityContext) -> PriorityResult:
+        """为测试用例推荐优先级"""
+        scores = {}
+        
+        # 计算各因子得分
+        for factor_name, analyzer in self.analyzers.items():
+            scores[factor_name] = analyzer.analyze(test_case, context)
+        
+        # 加权求和
+        total_score = sum(
+            scores[factor] * self.weights.get(factor, 0)
+            for factor in scores
+        )
+        
+        # 映射到优先级
+        priority = self._map_to_priority(total_score)
+        
+        return PriorityResult(
+            test_case_id=test_case.id,
+            score=total_score,
+            priority=priority,
+            factor_scores=scores,
+            explanation=self._generate_explanation(scores, priority)
+        )
+    
+    def _map_to_priority(self, score: float) -> str:
+        if score >= 8.0: return "P0"
+        if score >= 6.0: return "P1"
+        if score >= 4.0: return "P2"
+        return "P3"
+    
+    def _generate_explanation(self, scores: dict, priority: str) -> str:
+        """生成优先级解释"""
+        top_factors = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:2]
+        factor_names = {"business_impact": "业务影响度高", "change_hotspot": "近期频繁变更",
+                       "defect_density": "历史缺陷多", "complexity": "功能复杂", "usage_frequency": "使用频率高"}
+        
+        reasons = [factor_names.get(f[0], f[0]) for f in top_factors]
+        return f"建议 {priority}：{', '.join(reasons)}"
+
+10.4 因子分析器
+
+=== 业务影响度分析 ===
+
+class BusinessImpactAnalyzer:
+    """基于 LLM 分析功能的业务影响度"""
+    
+    def analyze(self, test_case: DraftTCIR, context: PriorityContext) -> float:
+        prompt = f"""
+        请评估以下测试用例对应功能的业务影响度 (0-10分):
+        
+        功能名称: {test_case.name}
+        功能描述: {test_case.description}
+        涉及模块: {test_case.target_feature}
+        
+        评分标准:
+        - 10-8分: 核心功能 (登录/支付/核心交易)
+        - 7-5分: 重要功能 (用户信息/订单查询)
+        - 4-2分: 一般功能 (设置/偏好/辅助)
+        - 1-0分: 边缘功能 (关于页/帮助)
+        
+        仅输出数字分数。
+        """
+        
+        score_text = self.llm.generate(prompt)
+        return float(score_text.strip())
+
+=== 代码变更热度分析 ===
+
+class ChangeHotspotAnalyzer:
+    """基于 Git 历史分析变更热度"""
+    
+    def analyze(self, test_case: DraftTCIR, context: PriorityContext) -> float:
+        # 获取相关代码文件
+        related_files = context.get_related_files(test_case.target_feature)
+        
+        total_score = 0
+        for file_path in related_files:
+            # 查询最近 N 天的 commit 数量
+            commits = self.git_analyzer.get_recent_commits(file_path, days=14)
+            
+            # 变更行数
+            lines_changed = sum(c.additions + c.deletions for c in commits)
+            
+            # 计算热度分数 (归一化)
+            file_score = min(10, len(commits) * 1.5 + lines_changed / 100)
+            total_score += file_score
+        
+        return min(10, total_score / max(1, len(related_files)))
+
+=== 历史缺陷密度分析 ===
+
+class DefectDensityAnalyzer:
+    """基于历史 Bug 数据分析缺陷密度"""
+    
+    def analyze(self, test_case: DraftTCIR, context: PriorityContext) -> float:
+        module = test_case.target_feature
+        
+        # 查询该模块历史缺陷
+        defects = context.defect_tracker.query_by_module(module, days=90)
+        
+        # 严重程度加权
+        weighted_count = sum(
+            self._severity_weight(d.severity) for d in defects
+        )
+        
+        # 归一化到 0-10
+        return min(10, weighted_count / 2)
+    
+    def _severity_weight(self, severity: str) -> float:
+        return {"critical": 4.0, "major": 2.0, "minor": 1.0, "trivial": 0.5}.get(severity, 1.0)
+
+10.5 集成到用例生成流程
+
+在神经设计层的用例生成流程中，自动加入优先级推荐：
+
+修改后的 Phase 1: Draft 阶段
+
+Step 3.5: 优先级自动推荐 (新增)
+
+在 TC-IR 生成后，自动计算并分配优先级：
+
+async def generate_draft_with_priority(state: DesignState) -> DesignState:
+    # 原有生成逻辑
+    tc_ir = await generate_tc_ir(state)
+    
+    # 新增：优先级推荐
+    priority_context = PriorityContext(
+        git_analyzer=GitAnalyzer(state.project_root),
+        defect_tracker=DefectTracker(state.defect_db),
+        usage_stats=UsageStats(state.analytics_api)
+    )
+    
+    priority_result = recommender.recommend_priority(tc_ir, priority_context)
+    
+    # 将推荐优先级写入 TC-IR
+    tc_ir.priority = priority_result.priority
+    tc_ir.priority_score = priority_result.score
+    tc_ir.priority_explanation = priority_result.explanation
+    
+    return state.update(tc_ir=tc_ir)
+
+10.6 优先级确认 UI
+
+在用例确认卡片中展示优先级推荐：
+
++------------------------------------------+
+| 🧪 正常登录测试                           |
++------------------------------------------+
+| 📊 评审得分: 86/100  ✅ 通过              |
+|------------------------------------------|
+| 🎯 推荐优先级: [P0] (得分: 8.5/10)        |
+|    理由: 业务影响度高, 近期频繁变更         |
+|    [接受推荐]  [调整为 P1]  [调整为 P2]    |
+|------------------------------------------|
+| 步骤:                                     |
+| 1. 打开登录页面                           |
+| ...                                       |
++------------------------------------------+
+
+10.7 配置选项
+
+priority_recommendation:
+  enabled: true
+  
+  # 因子权重配置 (总和=1.0)
+  weights:
+    business_impact: 0.30
+    change_hotspot: 0.25
+    defect_density: 0.20
+    complexity: 0.15
+    usage_frequency: 0.10
+  
+  # 分析参数
+  git_lookback_days: 14
+  defect_lookback_days: 90
+  
+  # LLM 配置
+  llm_model: "qwen3-max"
+  
+  # 是否允许用户覆盖
+  allow_user_override: true
+
+12. 竞品参考与设计灵感 (Competitor References) 【v2.1 新增】
+
+12.1 LaVague World Model 参考
+
+LaVague 的 World Model 架构与神经设计层高度相似:
+
+    ┌────────────────────────┬─────────────────────────────────────────────┐
+    │  LaVague 概念          │  重明神经设计层对应                         │
+    ├────────────────────────┼─────────────────────────────────────────────┤
+    │  World Model           │  Intent Parser + TC Factory                │
+    │  理解目标 + 分析状态   │  PRD 解析 + 场景推理                       │
+    │  输出操作指令          │  输出 TC-IR 草稿                           │
+    │  Built-in Contexts     │  测试上下文/配置                           │
+    │  LaVague QA            │  Gherkin → 自动化测试 (类似 PRD → TC-IR) │
+    └────────────────────────┴─────────────────────────────────────────────┘
+
+    建议参考:
+    • LaVague QA 的 Gherkin 转换逻辑
+    • Token Counter 实现
+
+12.2 Microsoft UFO Human-in-the-loop 参考
+
+UFO 的人机交互设计与 Confirm Gate 模式一致:
+
+    UFO Human-in-the-loop:
+    └── 当 Agent 不确定时弹窗询问人类
+    └── 记录人类操作用于后续学习
+
+    重明 Confirm Gate:
+    └── 用例确认卡片 (确认/修改/拒绝)
+    └── 用户反馈用于 Generator 迭代改进
+
+    建议参考:
+    • UFO 的 Windows Step Recorder (从人类演示中学习)
+    • RAG 增强 (离线文档 + 在线搜索 + 历史用例)
+
+12.3 Skyvern Workflows 参考
+
+Skyvern 的工作流编排对多用例批量生成有借鉴意义:
+
+    Skyvern Workflow Features:
+    • Browser Task / Browser Action
+    • Data Extraction / Validation
+    • For Loops / Conditionals
+    • HTTP Request Block / Custom Code Block
+
+    重明神经设计层可借鉴:
+    • 批量用例生成的并行调度
+    • 条件分支的场景覆盖
+
+13. 部署说明
+
+- LLM 接入：使用阿里云百炼 Qwen3-Max，配置 API Key
+- 状态持久化：使用 Redis 存储状态机中间状态（支持断点恢复）
+- 资产库：使用 SQLite/PostgreSQL 存储确认后的 TC-IR
+
+End of Design Document
+

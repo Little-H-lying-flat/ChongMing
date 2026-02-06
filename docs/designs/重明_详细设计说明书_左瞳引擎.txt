@@ -1,0 +1,935 @@
+﻿重明 (ChongMing) 详细设计说明书：左瞳引擎 (Left Pupil Engine)
+所属层级：执行层 (Execution Layer) - API 侧
+版本：v2.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+左瞳引擎 (Left Pupil Engine) 是重明架构中负责 "读" (Read) 和 "思" (Reason) 的核心组件。它像人类阅读 API 文档一样理解接口规范，并自动推理出完整的调用链路。
+
+其核心设计哲学是 "Documentation-Driven, Dependency-Aware" (文档驱动，依赖感知)：
+- 知识驱动：不依赖硬编码，而是实时检索向量数据库中的 API 定义
+- 逻辑推理：自动解决接口间的参数依赖（如自动先登录获取 Token）
+- 链式执行：支持复杂业务流程的自动编排
+- 资产沉淀：执行轨迹固化为 API-IR 资产，供涡轮引擎复用
+
+1.2 核心职责
+- 文档摄入 (Ingestion)：解析 Swagger/OpenAPI 文档，向量化存储至 ChromaDB
+- 依赖规划 (Dependency Planning)：分析用户意图，构建 API 调用链（DAG）
+- 上下文执行 (Contextual Execution)：执行 API 请求，从响应中提取数据传递
+- 断言验证 (Assertion)：验证响应状态码、Schema、业务规则
+- 资产生成 (Asset Generation)：生成可复用的 API-IR 资产
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 输入层 (Input Layer)
+        USER[用户意图/TC-IR]
+        SWAGGER[Swagger/OpenAPI 文档]
+    end
+    
+    subgraph Left Pupil Engine
+        subgraph Knowledge Base [知识库层]
+            SWAGGER --> PARSER[文档解析器]
+            PARSER --> CHUNKER[智能切片器]
+            CHUNKER --> EMBEDDER[向量嵌入器]
+            EMBEDDER --> CHROMA[(ChromaDB)]
+        end
+        
+        subgraph Retriever [检索层]
+            USER --> QUERY[查询构建器]
+            QUERY --> RAG[RAG 检索器]
+            CHROMA --> RAG
+            RAG --> CONTEXT[API 上下文]
+        end
+        
+        subgraph Planner [规划层]
+            CONTEXT --> ANALYZER[依赖分析器]
+            ANALYZER --> GRAPH[依赖图构建器]
+            GRAPH --> CHAIN[执行链生成器]
+            CHAIN --> APIIR[API-IR 指令集]
+        end
+        
+        subgraph Executor [执行层]
+            APIIR --> RUNNER[Httpx 执行器]
+            RUNNER --> EXTRACTOR[数据提取器]
+            EXTRACTOR --> MEMORY[(上下文内存)]
+            MEMORY --> INJECTOR[参数注入器]
+            INJECTOR --> RUNNER
+        end
+        
+        subgraph Validator [验证层]
+            RUNNER --> ASSERTER[断言器]
+            ASSERTER --> TRACE[Trace Log]
+        end
+    end
+    
+    subgraph 输出层 (Output Layer)
+        TRACE --> REPORT[执行报告]
+        APIIR --> ASSET[(API-IR 资产库)]
+    end
+
+2.2 核心类图 (Class Diagram)
+
+- LeftPupilEngine: 引擎入口，编排全流程
+- SwaggerParser: Swagger/OpenAPI 解析器
+- SpecIngestor: 文档摄入与向量化
+- RagRetriever: RAG 检索器
+- DependencyPlanner: 依赖分析与规划
+- ApiRunner: HTTP 请求执行器
+- ContextMemory: 上下文变量存储
+- Asserter: 断言验证器
+
+3. 知识库层 (Knowledge Base Layer)
+
+3.1 文档解析器 (Swagger Parser)
+
+支持多种 API 文档格式：
+
+| 格式 | 版本 | 说明 |
+|------|------|------|
+| OpenAPI | 3.0, 3.1 | 推荐格式 |
+| Swagger | 2.0 | 兼容旧版 |
+| Postman Collection | v2.1 | 转换处理 |
+| HAR | 1.2 | 录制导入 |
+
+解析示例：
+
+class SwaggerParser:
+    def parse(self, spec_path: str) -> list[ApiEndpoint]:
+        spec = load_spec(spec_path)
+        endpoints = []
+        
+        for path, methods in spec["paths"].items():
+            for method, details in methods.items():
+                endpoints.append(ApiEndpoint(
+                    id=f"{method.upper()} {path}",
+                    path=path,
+                    method=method.upper(),
+                    summary=details.get("summary", ""),
+                    description=details.get("description", ""),
+                    parameters=self._parse_parameters(details),
+                    request_body=self._parse_request_body(details),
+                    responses=self._parse_responses(details),
+                    security=details.get("security", [])
+                ))
+        
+        return endpoints
+
+3.2 智能切片器 (Smart Chunker)
+
+采用 "Path-Level Chunking + Cross-Reference" 策略：
+
+=== 切片策略 ===
+
+策略1: 接口级切片
+- 每个 Path + Method 为一个独立文档
+- 保留完整的参数、响应定义
+
+策略2: Schema 关联
+- 提取共享的 Schema 定义
+- 建立接口与 Schema 的引用关系
+
+策略3: 依赖标注
+- 分析参数来源（如 {user_id} 来自 GET /users）
+- 在文档中标注潜在依赖
+
+切片示例：
+
+原始 Swagger 接口：
+POST /api/v1/orders
+  - 参数: buyer_id (required), product_id, quantity
+  - 响应: order_id, status
+
+切片后文档：
+{
+  "chunk_id": "POST_orders",
+  "content": "创建订单接口 POST /api/v1/orders。必填参数：buyer_id（用户ID）、product_id（商品ID）、quantity（数量）。返回订单ID和状态。需要 Bearer Token 认证。",
+  "metadata": {
+    "path": "/api/v1/orders",
+    "method": "POST",
+    "requires_auth": true,
+    "input_params": ["buyer_id", "product_id", "quantity"],
+    "output_fields": ["order_id", "status"],
+    "potential_dependencies": ["POST /api/v1/login"]
+  }
+}
+
+3.3 向量嵌入器 (Embedder)
+
+class SpecEmbedder:
+    def __init__(self, model: str = "text-embedding-3-small"):
+        self.model = model
+    
+    def embed_and_store(self, chunks: list[ApiChunk]):
+        for chunk in chunks:
+            # 生成向量
+            embedding = self.model.encode(chunk.content)
+            
+            # 存入 ChromaDB
+            self.chroma.add(
+                collection_name="api_specs",
+                ids=[chunk.chunk_id],
+                embeddings=[embedding],
+                documents=[chunk.content],
+                metadatas=[chunk.metadata]
+            )
+
+4. 检索层 (Retriever Layer)
+
+4.1 RAG 检索器
+
+class RagRetriever:
+    def retrieve(self, intent: str, top_k: int = 5) -> list[ApiContext]:
+        # 1. 意图增强：将用户意图扩展为多个查询
+        queries = self._expand_intent(intent)
+        # "购买商品" -> ["购买", "下单", "创建订单", "order", "buy"]
+        
+        # 2. 多查询检索
+        results = []
+        for query in queries:
+            hits = self.chroma.query(
+                collection_name="api_specs",
+                query_texts=[query],
+                n_results=top_k
+            )
+            results.extend(hits)
+        
+        # 3. 去重与排序
+        return self._dedupe_and_rank(results)
+    
+    def _expand_intent(self, intent: str) -> list[str]:
+        prompt = f"""
+        请将以下用户意图扩展为多个相关的搜索词（中英文均可）：
+        意图：{intent}
+        
+        输出格式：["词1", "词2", "词3", ...]
+        """
+        return self.llm.generate(prompt)
+
+4.2 上下文构建
+
+将检索到的 API 定义组装为 LLM 可理解的上下文：
+
+def build_context(self, retrieved_apis: list[ApiContext]) -> str:
+    context = "【可用 API 列表】\n\n"
+    
+    for api in retrieved_apis:
+        context += f"""
+接口: {api.method} {api.path}
+描述: {api.description}
+参数: {json.dumps(api.parameters, ensure_ascii=False)}
+响应: {json.dumps(api.responses, ensure_ascii=False)}
+认证: {"需要 Token" if api.requires_auth else "无需认证"}
+---
+"""
+    return context
+
+5. 规划层 (Planner Layer)
+
+5.1 依赖分析器 (Dependency Analyzer)
+
+核心能力：自动识别接口间的参数依赖关系
+
+class DependencyAnalyzer:
+    def analyze(self, target_api: ApiContext, memory: dict) -> DependencyResult:
+        # 1. 提取目标接口的必填参数
+        required_params = self._get_required_params(target_api)
+        
+        # 2. 检查内存中是否已有
+        missing_params = []
+        for param in required_params:
+            if param.name not in memory:
+                missing_params.append(param)
+        
+        # 3. 对于缺失参数，搜索提供该参数的接口
+        dependencies = []
+        for param in missing_params:
+            provider = self._find_param_provider(param)
+            if provider:
+                dependencies.append(Dependency(
+                    param=param.name,
+                    provider_api=provider,
+                    extraction_path=provider.output_path
+                ))
+        
+        return DependencyResult(
+            target_api=target_api,
+            missing_params=missing_params,
+            dependencies=dependencies,
+            is_ready=len(missing_params) == 0
+        )
+
+5.2 依赖图构建器 (Dependency Graph Builder)
+
+构建有向无环图 (DAG) 表示接口调用顺序：
+
+示例：用户意图 "购买商品 1001"
+
+依赖分析结果：
+- POST /orders 需要: buyer_id, token
+- buyer_id 来自: GET /users/me (需要 token)
+- token 来自: POST /login
+
+生成的 DAG：
+┌──────────┐     ┌──────────────┐     ┌─────────────┐
+│  Login   │ --> │ Get User Me  │ --> │ Create Order│
+│ (获取Token)│     │ (获取buyer_id)│     │   (下单)     │
+└──────────┘     └──────────────┘     └─────────────┘
+     │                   │                    │
+     ▼                   ▼                    ▼
+  token             buyer_id              order_id
+
+5.3 执行链生成器 (Chain Generator)
+
+将 DAG 转换为可执行的 API-IR 序列：
+
+def generate_api_ir_chain(self, dag: DependencyGraph) -> list[ApiIR]:
+    chain = []
+    
+    # 拓扑排序，确保依赖在前
+    for node in dag.topological_sort():
+        api_ir = ApiIR(
+            id=f"STEP_{len(chain) + 1:02d}",
+            method=node.api.method,
+            url=node.api.path,
+            headers=self._build_headers(node),
+            body=self._build_body(node),
+            dependencies=[dep.id for dep in node.dependencies],
+            extraction=self._build_extraction(node),
+            assertion=self._build_assertion(node)
+        )
+        chain.append(api_ir)
+    
+    return chain
+
+6. 执行层 (Executor Layer)
+
+6.1 上下文内存 (Context Memory)
+
+管理跨接口的变量传递：
+
+class ContextMemory:
+    def __init__(self):
+        self._store = {}
+        self._history = []  # 变量变更历史
+    
+    def set(self, key: str, value: any, source: str):
+        self._store[key] = value
+        self._history.append({
+            "action": "set",
+            "key": key,
+            "value": value,
+            "source": source,
+            "timestamp": datetime.now()
+        })
+    
+    def get(self, key: str, default=None) -> any:
+        return self._store.get(key, default)
+    
+    def inject(self, template: str) -> str:
+        """将模板中的 ${var} 替换为实际值"""
+        result = template
+        for key, value in self._store.items():
+            result = result.replace(f"${{{key}}}", str(value))
+        return result
+
+6.2 Httpx 执行器 (Api Runner)
+
+class ApiRunner:
+    def __init__(self, base_url: str):
+        self.client = httpx.AsyncClient(base_url=base_url, timeout=30.0)
+        self.memory = ContextMemory()
+    
+    async def execute(self, api_ir: ApiIR) -> ExecutionResult:
+        # 1. 参数注入
+        url = self.memory.inject(api_ir.url)
+        headers = {k: self.memory.inject(v) for k, v in api_ir.headers.items()}
+        body = self._inject_body(api_ir.body)
+        
+        # 2. 发送请求
+        start_time = time.time()
+        try:
+            response = await self.client.request(
+                method=api_ir.method,
+                url=url,
+                headers=headers,
+                json=body
+            )
+            duration = time.time() - start_time
+            
+            # 3. 数据提取
+            for var_name, json_path in api_ir.extraction.items():
+                value = jsonpath.extract(response.json(), json_path)
+                self.memory.set(var_name, value, source=api_ir.id)
+            
+            # 4. 断言验证
+            assertion_result = self._run_assertions(response, api_ir.assertion)
+            
+            return ExecutionResult(
+                api_ir_id=api_ir.id,
+                status="passed" if assertion_result.passed else "failed",
+                status_code=response.status_code,
+                response_body=response.json(),
+                duration_ms=duration * 1000,
+                extracted_values=dict(self.memory._store),
+                assertion_result=assertion_result
+            )
+            
+        except Exception as e:
+            return ExecutionResult(
+                api_ir_id=api_ir.id,
+                status="error",
+                error=str(e),
+                duration_ms=(time.time() - start_time) * 1000
+            )
+
+6.3 数据提取器 (Data Extractor)
+
+支持多种提取方式：
+
+| 提取方式 | 语法 | 示例 |
+|---------|------|------|
+| JsonPath | $.data.xxx | $.data.token |
+| Header | header:xxx | header:X-Request-Id |
+| Cookie | cookie:xxx | cookie:session_id |
+| Regex | regex:pattern | regex:order_(\d+) |
+
+示例配置：
+
+"extraction": {
+  "access_token": "$.data.token",
+  "request_id": "header:X-Request-Id",
+  "user_id": "$.data.user.id",
+  "order_no": "regex:ORD(\\d{10})"
+}
+
+7. 验证层 (Validator Layer)
+
+7.1 断言器 (Asserter)
+
+支持多维度断言：
+
+class Asserter:
+    def assert_all(self, response: Response, rules: AssertionRules) -> AssertionResult:
+        results = []
+        
+        # 1. 状态码断言
+        if rules.status_code:
+            results.append(self._assert_status(response, rules.status_code))
+        
+        # 2. Schema 验证
+        if rules.schema_validate:
+            results.append(self._assert_schema(response, rules.expected_schema))
+        
+        # 3. 响应体断言
+        if rules.body_contains:
+            results.append(self._assert_contains(response, rules.body_contains))
+        
+        # 4. JsonPath 断言
+        for path, expected in rules.json_assertions.items():
+            actual = jsonpath.extract(response.json(), path)
+            results.append(self._assert_equals(path, actual, expected))
+        
+        # 5. 自定义表达式断言
+        if rules.expression:
+            results.append(self._assert_expression(response, rules.expression))
+        
+        return AssertionResult(
+            passed=all(r.passed for r in results),
+            details=results
+        )
+
+7.2 断言配置示例
+
+"assertion": {
+  "status_code": 201,
+  "schema_validate": true,
+  "body_contains": "success",
+  "json_assertions": {
+    "$.data.status": "created",
+    "$.data.id": {"type": "not_null"}
+  },
+  "expression": "response.data.total > 0"
+}
+
+8. API-IR 协议定义
+
+8.1 完整 API-IR 结构
+
+{
+  "protocol": "API-IR",
+  "version": "1.0",
+  "id": "STEP_02",
+  "name": "创建订单",
+  "description": "调用订单接口创建新订单",
+  
+  "request": {
+    "method": "POST",
+    "url": "/api/v1/orders",
+    "headers": {
+      "Authorization": "Bearer ${access_token}",
+      "Content-Type": "application/json",
+      "X-Request-Id": "${uuid()}"
+    },
+    "body": {
+      "buyer_id": "${user_id}",
+      "product_id": "PROD_1001",
+      "quantity": 2,
+      "address_id": 501
+    },
+    "query_params": {},
+    "timeout_ms": 5000
+  },
+  
+  "dependencies": ["STEP_01"],
+  
+  "extraction": {
+    "order_id": "$.data.id",
+    "order_status": "$.data.status"
+  },
+  
+  "assertion": {
+    "status_code": 201,
+    "schema_validate": true,
+    "json_assertions": {
+      "$.data.status": "pending"
+    }
+  },
+  
+  "retry": {
+    "max_attempts": 3,
+    "delay_ms": 1000,
+    "retry_on": [500, 502, 503]
+  },
+  
+  "metadata": {
+    "source_tc": "TC_API_ORDER_001",
+    "created_at": "2026-02-06T10:00:00Z",
+    "tags": ["order", "critical"]
+  }
+}
+
+9. 异常处理与重试
+
+9.1 异常类型与处理策略
+
+| 异常类型 | 描述 | 处理策略 |
+|---------|------|---------|
+| ConnectionError | 网络连接失败 | 重试 3 次，间隔递增 |
+| TimeoutError | 请求超时 | 重试 2 次 |
+| 4xx 错误 | 客户端错误 | 不重试，标记失败 |
+| 5xx 错误 | 服务端错误 | 重试 3 次 |
+| Schema Mismatch | 响应结构不匹配 | 记录警告，继续执行 |
+| Dependency Break | 依赖接口失败 | 跳过后续依赖步骤 |
+
+9.2 重试机制
+
+class RetryHandler:
+    async def execute_with_retry(self, api_ir: ApiIR, runner: ApiRunner) -> ExecutionResult:
+        retry_config = api_ir.retry or default_retry_config
+        last_error = None
+        
+        for attempt in range(retry_config.max_attempts):
+            result = await runner.execute(api_ir)
+            
+            if result.status == "passed":
+                return result
+            
+            if result.status_code not in retry_config.retry_on:
+                return result  # 不可重试的错误
+            
+            last_error = result
+            delay = retry_config.delay_ms * (2 ** attempt)  # 指数退避
+            await asyncio.sleep(delay / 1000)
+        
+        return last_error
+
+10. LLM 选型配置
+
+| 子模块 | 推荐模型 | 理由 |
+|-------|---------|------|
+| 意图扩展 | Qwen-Turbo | 简单任务，需要快速响应 |
+| 依赖分析 | Qwen3-Max | 需要复杂推理能力 |
+| 参数推导 | Qwen3-Max | 需要理解 API 语义 |
+
+配置示例：
+{
+  "left_pupil": {
+    "intent_expander": {
+      "model": "qwen-turbo",
+      "temperature": 0.3
+    },
+    "dependency_planner": {
+      "model": "qwen3-max",
+      "temperature": 0.1,
+      "max_tokens": 4096
+    }
+  }
+}
+
+11. 与其他模块集成
+
+11.1 与神经设计层集成
+
+接收 TC-IR 中的 API 模式测试用例：
+
+TC-IR (mode: "API")
+       ↓
+  左瞳引擎解析
+       ↓
+  检索相关 API → 构建依赖链 → 执行 → 验证
+
+11.2 与涡轮引擎集成
+
+输出 API-IR 资产供压测复用：
+
+左瞳引擎执行轨迹
+       ↓
+  固化为 API-IR 资产
+       ↓
+  涡轮引擎读取 → 生成 Locust 脚本 → 压测
+
+11.3 与项目知识库集成
+
+检索业务术语辅助理解：
+
+用户意图: "购买会员"
+       ↓
+  术语库检索: "会员" = "VIP 订阅服务"
+       ↓
+  更准确定位 API: POST /api/v1/subscriptions
+
+12. GraphQL 支持 (GraphQL Support)
+
+12.1 设计目标
+
+扩展左瞳引擎对 GraphQL API 的支持能力：
+- Schema 自动解析与摄入
+- Query/Mutation 智能构建
+- 变量注入与依赖管理
+- 响应验证与断言
+
+12.2 GraphQL Schema 摄入
+
+=== GraphQL Introspection ===
+
+通过 Introspection 查询获取 Schema：
+
+class GraphQLSchemaParser:
+    async def introspect(self, endpoint: str, headers: dict = None) -> GraphQLSchema:
+        """通过 Introspection 获取完整 Schema"""
+        introspection_query = """
+        query IntrospectionQuery {
+          __schema {
+            types { name kind fields { name type { name kind ofType { name } } } }
+            queryType { name }
+            mutationType { name }
+            subscriptionType { name }
+          }
+        }
+        """
+        
+        response = await httpx.AsyncClient().post(
+            endpoint,
+            json={"query": introspection_query},
+            headers=headers
+        )
+        
+        return self._parse_introspection(response.json())
+    
+    def _parse_introspection(self, data: dict) -> GraphQLSchema:
+        """解析 Introspection 结果"""
+        schema = data["data"]["__schema"]
+        
+        return GraphQLSchema(
+            queries=self._extract_operations(schema, "queryType"),
+            mutations=self._extract_operations(schema, "mutationType"),
+            types=self._extract_types(schema["types"])
+        )
+
+=== Schema 向量化存储 ===
+
+与 REST API 类似，将 GraphQL 操作向量化存储：
+
+class GraphQLSpecIngestor(SpecIngestor):
+    def ingest_graphql(self, schema: GraphQLSchema) -> None:
+        """摄入 GraphQL Schema 到向量库"""
+        
+        # 处理 Query 操作
+        for query in schema.queries:
+            chunk = self._create_chunk(
+                chunk_id=f"GQL_QUERY_{query.name}",
+                content=self._format_operation(query),
+                metadata={
+                    "type": "graphql",
+                    "operation": "query",
+                    "name": query.name,
+                    "arguments": query.arguments,
+                    "return_type": query.return_type
+                }
+            )
+            self._store_chunk(chunk)
+        
+        # 处理 Mutation 操作
+        for mutation in schema.mutations:
+            chunk = self._create_chunk(
+                chunk_id=f"GQL_MUTATION_{mutation.name}",
+                content=self._format_operation(mutation),
+                metadata={
+                    "type": "graphql",
+                    "operation": "mutation",
+                    "name": mutation.name,
+                    "arguments": mutation.arguments,
+                    "return_type": mutation.return_type
+                }
+            )
+            self._store_chunk(chunk)
+
+12.3 GraphQL Query 构建器
+
+=== 意图到 Query 的转换 ===
+
+class GraphQLQueryBuilder:
+    def build_query(
+        self, 
+        operation: GraphQLOperation,
+        variables: dict,
+        field_selector: list[str] = None
+    ) -> str:
+        """根据操作定义和变量构建 GraphQL Query"""
+        
+        operation_type = operation.type  # query 或 mutation
+        op_name = operation.name
+        
+        # 构建变量声明
+        var_declarations = self._build_variable_declarations(operation.arguments)
+        
+        # 构建字段选择器 (默认选择所有标量字段)
+        fields = field_selector or self._select_default_fields(operation.return_type)
+        
+        query = f"""
+        {operation_type} {op_name}Operation({var_declarations}) {{
+          {op_name}({self._build_arguments(operation.arguments)}) {{
+            {self._format_fields(fields)}
+          }}
+        }}
+        """
+        
+        return query.strip()
+    
+    def _build_variable_declarations(self, arguments: list[GraphQLArgument]) -> str:
+        """构建变量声明：如 $userId: ID!, $input: CreateOrderInput!"""
+        declarations = []
+        for arg in arguments:
+            type_str = f"{arg.type_name}!" if arg.required else arg.type_name
+            declarations.append(f"${arg.name}: {type_str}")
+        return ", ".join(declarations)
+
+=== 嵌套字段智能选择 ===
+
+class FieldSelector:
+    def select_fields(
+        self, 
+        return_type: GraphQLType,
+        depth: int = 3,
+        intent: str = None
+    ) -> list[str]:
+        """根据返回类型和意图智能选择字段"""
+        
+        if intent:
+            # 使用 LLM 根据意图选择相关字段
+            prompt = f"""
+            GraphQL 返回类型: {return_type.to_schema_string()}
+            用户意图: {intent}
+            
+            请选择与意图相关的字段，返回字段路径列表。
+            示例输出: ["id", "name", "orders { id, status }"]
+            """
+            return self.llm.generate(prompt)
+        
+        # 默认选择策略
+        return self._recursive_select(return_type, depth)
+    
+    def _recursive_select(self, type_def: GraphQLType, depth: int) -> list[str]:
+        """递归选择字段，限制深度防止过深嵌套"""
+        fields = []
+        
+        for field in type_def.fields:
+            if field.is_scalar:
+                fields.append(field.name)
+            elif depth > 1 and field.is_object:
+                nested = self._recursive_select(field.type, depth - 1)
+                fields.append(f"{field.name} {{ {', '.join(nested)} }}")
+        
+        return fields
+
+12.4 GraphQL 变量注入
+
+class GraphQLVariableInjector:
+    def __init__(self, context_memory: ContextMemory):
+        self.memory = context_memory
+    
+    def inject_variables(
+        self, 
+        arguments: list[GraphQLArgument],
+        explicit_values: dict = None
+    ) -> dict:
+        """
+        构建变量字典，优先使用显式值，其次从上下文内存获取
+        """
+        variables = {}
+        explicit_values = explicit_values or {}
+        
+        for arg in arguments:
+            if arg.name in explicit_values:
+                variables[arg.name] = explicit_values[arg.name]
+            elif f"${{{arg.name}}}" in str(explicit_values.values()):
+                # 模板变量，从内存替换
+                variables[arg.name] = self.memory.get(arg.name)
+            elif arg.default_value is not None:
+                variables[arg.name] = arg.default_value
+            elif arg.required:
+                raise ValueError(f"Required argument '{arg.name}' not provided")
+        
+        return variables
+
+12.5 GraphQL 执行与断言
+
+class GraphQLRunner:
+    async def execute(
+        self, 
+        endpoint: str,
+        query: str,
+        variables: dict,
+        headers: dict = None
+    ) -> GraphQLResult:
+        """执行 GraphQL 请求"""
+        
+        payload = {
+            "query": query,
+            "variables": variables
+        }
+        
+        start_time = time.time()
+        response = await self.client.post(endpoint, json=payload, headers=headers)
+        duration = (time.time() - start_time) * 1000
+        
+        result = response.json()
+        
+        # 检查 GraphQL 错误
+        if "errors" in result:
+            return GraphQLResult(
+                success=False,
+                errors=result["errors"],
+                data=result.get("data"),
+                duration_ms=duration
+            )
+        
+        return GraphQLResult(
+            success=True,
+            data=result["data"],
+            duration_ms=duration
+        )
+
+=== GraphQL 特有断言 ===
+
+class GraphQLAsserter:
+    def assert_field_exists(self, data: dict, path: str) -> AssertionResult:
+        """断言指定路径字段存在"""
+        try:
+            value = self._get_path(data, path)
+            return AssertionResult(passed=True, message=f"Field '{path}' exists")
+        except KeyError:
+            return AssertionResult(passed=False, message=f"Field '{path}' not found")
+    
+    def assert_field_type(self, data: dict, path: str, expected_type: str) -> AssertionResult:
+        """断言字段类型符合预期"""
+        value = self._get_path(data, path)
+        actual_type = type(value).__name__
+        
+        type_mappings = {"String": "str", "Int": "int", "Float": "float", "Boolean": "bool"}
+        expected_python_type = type_mappings.get(expected_type, expected_type)
+        
+        if actual_type == expected_python_type:
+            return AssertionResult(passed=True)
+        return AssertionResult(
+            passed=False,
+            message=f"Field '{path}' expected {expected_type}, got {actual_type}"
+        )
+    
+    def assert_no_errors(self, result: GraphQLResult) -> AssertionResult:
+        """断言响应不包含 GraphQL 错误"""
+        if result.errors:
+            error_messages = [e.get("message", str(e)) for e in result.errors]
+            return AssertionResult(passed=False, message=f"GraphQL errors: {error_messages}")
+        return AssertionResult(passed=True)
+
+12.6 GraphQL API-IR 格式
+
+扩展 API-IR 格式支持 GraphQL：
+
+{
+  "id": "GQL_STEP_01",
+  "type": "graphql",
+  "operation": "mutation",
+  "endpoint": "${graphql_endpoint}",
+  "name": "createOrder",
+  "query": "mutation CreateOrder($input: OrderInput!) { createOrder(input: $input) { id status totalAmount } }",
+  "variables": {
+    "input": {
+      "productId": "${product_id}",
+      "quantity": 2,
+      "addressId": "${address_id}"
+    }
+  },
+  "extract": {
+    "order_id": "$.data.createOrder.id",
+    "order_status": "$.data.createOrder.status"
+  },
+  "assertions": [
+    {"type": "no_errors"},
+    {"type": "field_exists", "path": "createOrder.id"},
+    {"type": "field_equals", "path": "createOrder.status", "value": "CREATED"}
+  ]
+}
+
+13. 部署说明
+
+12.1 依赖服务
+
+- ChromaDB: 向量数据库，存储 API 文档
+- Redis (可选): 缓存检索结果，提升性能
+
+12.2 配置
+
+left_pupil:
+  chroma:
+    host: localhost
+    port: 8001
+    collection: api_specs
+  
+  embedding:
+    model: text-embedding-3-small
+    # 或本地模型:
+    # model: sentence-transformers/all-MiniLM-L6-v2
+  
+  runner:
+    timeout_ms: 30000
+    max_redirects: 5
+    verify_ssl: true
+
+12.3 Swagger 摄入命令
+
+# 摄入单个文件
+python -m chongming.left_pupil ingest swagger.json
+
+# 批量摄入
+python -m chongming.left_pupil ingest ./api_docs/*.yaml
+
+End of Design Document

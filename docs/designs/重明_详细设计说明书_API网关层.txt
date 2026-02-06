@@ -1,0 +1,876 @@
+重明 (ChongMing) 详细设计说明书：API 网关层 (API Gateway Layer)
+所属层级：服务层 (Service Layer) - 统一入口
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+API 网关层 (API Gateway Layer) 是重明架构中负责 "连" (Connect) 和 "控" (Control) 的核心组件。它是所有外部请求进入系统的唯一入口，承载着路由分发、认证鉴权、限流熔断等关键网关职能。
+
+其核心设计哲学是 "Single Entry, Unified Control" (单一入口，统一管控)：
+- 统一入口：所有 API 请求通过网关路由
+- 认证鉴权：JWT Token 验证与权限控制
+- 流量控制：限流、熔断、降级
+- 可观测性：请求日志、指标采集、链路追踪
+
+1.2 技术选型
+
+| 类别 | 技术栈 | 用途 |
+|------|--------|------|
+| 框架 | FastAPI | 异步 Web 框架 |
+| ASGI | Uvicorn | 高性能 ASGI 服务器 |
+| 认证 | PyJWT | JWT Token 处理 |
+| ORM | SQLAlchemy 2.0 (异步) | 数据库操作 |
+| 缓存 | Redis | 会话/限流/缓存 |
+| 队列 | Celery | 异步任务队列 |
+| SSE | sse-starlette | Server-Sent Events |
+| WebSocket | FastAPI WebSocket | 双向通信 |
+
+2. 架构设计 (Architecture Design)
+
+2.1 系统架构图
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                        API 网关层架构                                │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                     入口层 (Entry Layer)                     │   │
+│  │  Uvicorn ASGI Server (多 Worker)                            │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                              │                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                   中间件层 (Middleware Layer)                │   │
+│  │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐     │   │
+│  │  │ CORS   │ │ Auth   │ │ Rate   │ │ Log    │ │ Trace  │     │   │
+│  │  │ 跨域   │ │ 认证   │ │ 限流   │ │ 日志   │ │ 链路   │     │   │
+│  │  └────────┘ └────────┘ └────────┘ └────────┘ └────────┘     │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                              │                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                    路由层 (Router Layer)                     │   │
+│  │  /api/v1/test-cases → TestCase Router                       │   │
+│  │  /api/v1/executions → Execution Router                      │   │
+│  │  /api/v1/design     → Design Router (神经设计层)             │   │
+│  │  /api/v1/turbo      → Turbo Router (涡轮引擎)                │   │
+│  │  /api/v1/reports    → Report Router                         │   │
+│  │  /api/v1/stream     → SSE Stream Router                     │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                              │                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                   服务层 (Service Layer)                     │   │
+│  │  TestCaseService | ExecutionService | DesignService | ...   │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                              │                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                   引擎调用层 (Engine Caller)                  │   │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐        │   │
+│  │  │ 神经设计  │ │ 左瞳引擎  │ │ 右瞳引擎  │ │ 涡轮引擎  │        │   │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘        │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+2.2 目录结构
+
+app/
+├── main.py                  # 应用入口
+├── config.py                # 配置管理
+├── dependencies.py          # 依赖注入
+├── middleware/              # 中间件
+│   ├── auth.py              # 认证中间件
+│   ├── cors.py              # CORS 中间件
+│   ├── rate_limit.py        # 限流中间件
+│   ├── logging.py           # 日志中间件
+│   └── tracing.py           # 链路追踪
+├── routers/                 # 路由层
+│   ├── auth.py              # 认证路由
+│   ├── test_cases.py        # 用例管理
+│   ├── executions.py        # 执行管理
+│   ├── design.py            # 神经设计层
+│   ├── turbo.py             # 涡轮引擎
+│   ├── reports.py           # 报告管理
+│   └── stream.py            # SSE 流
+├── services/                # 服务层
+│   ├── test_case_service.py
+│   ├── execution_service.py
+│   ├── design_service.py
+│   └── report_service.py
+├── models/                  # 数据模型
+│   ├── test_case.py
+│   ├── execution.py
+│   └── user.py
+├── schemas/                 # Pydantic Schema
+│   ├── test_case.py
+│   ├── execution.py
+│   └── common.py
+├── engines/                 # 引擎适配器
+│   ├── neural_design.py     # 神经设计层客户端
+│   ├── left_pupil.py        # 左瞳引擎客户端
+│   ├── right_pupil.py       # 右瞳引擎客户端
+│   └── turbo.py             # 涡轮引擎客户端
+└── utils/                   # 工具函数
+    ├── jwt.py
+    ├── redis.py
+    └── celery.py
+
+3. 核心中间件设计
+
+3.1 认证中间件
+
+# middleware/auth.py
+
+from fastapi import Request, HTTPException
+from fastapi.security import HTTPBearer
+import jwt
+
+class AuthMiddleware:
+    def __init__(self, secret_key: str, algorithm: str = "HS256"):
+        self.secret_key = secret_key
+        self.algorithm = algorithm
+        self.public_paths = ["/api/v1/auth/login", "/api/v1/auth/register", "/health"]
+    
+    async def __call__(self, request: Request, call_next):
+        # 公开路径跳过认证
+        if request.url.path in self.public_paths:
+            return await call_next(request)
+        
+        # 提取 Token
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing authentication token")
+        
+        token = auth_header.split(" ")[1]
+        
+        try:
+            # 验证 Token
+            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            request.state.user_id = payload.get("sub")
+            request.state.user_role = payload.get("role")
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(status_code=401, detail="Token has expired")
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        return await call_next(request)
+
+3.2 限流中间件
+
+# middleware/rate_limit.py
+
+from fastapi import Request, HTTPException
+import redis.asyncio as redis
+import time
+
+class RateLimitMiddleware:
+    def __init__(self, redis_client: redis.Redis, rate: int = 100, window: int = 60):
+        """
+        :param rate: 时间窗口内允许的最大请求数
+        :param window: 时间窗口 (秒)
+        """
+        self.redis = redis_client
+        self.rate = rate
+        self.window = window
+    
+    async def __call__(self, request: Request, call_next):
+        # 以用户 ID 或 IP 作为限流 Key
+        user_id = getattr(request.state, 'user_id', None)
+        key = f"rate_limit:{user_id or request.client.host}"
+        
+        # 滑动窗口计数
+        current_time = int(time.time())
+        window_start = current_time - self.window
+        
+        async with self.redis.pipeline() as pipe:
+            # 移除过期请求
+            await pipe.zremrangebyscore(key, 0, window_start)
+            # 添加当前请求
+            await pipe.zadd(key, {str(current_time): current_time})
+            # 统计窗口内请求数
+            await pipe.zcard(key)
+            # 设置过期时间
+            await pipe.expire(key, self.window)
+            results = await pipe.execute()
+        
+        request_count = results[2]
+        
+        if request_count > self.rate:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Max {self.rate} requests per {self.window}s"
+            )
+        
+        response = await call_next(request)
+        
+        # 添加限流头
+        response.headers["X-RateLimit-Limit"] = str(self.rate)
+        response.headers["X-RateLimit-Remaining"] = str(max(0, self.rate - request_count))
+        
+        return response
+
+3.3 日志中间件
+
+# middleware/logging.py
+
+from fastapi import Request
+import logging
+import time
+import uuid
+
+logger = logging.getLogger("api_gateway")
+
+class LoggingMiddleware:
+    async def __call__(self, request: Request, call_next):
+        # 生成请求 ID
+        request_id = str(uuid.uuid4())[:8]
+        request.state.request_id = request_id
+        
+        # 记录请求开始
+        start_time = time.time()
+        logger.info(f"[{request_id}] --> {request.method} {request.url.path}")
+        
+        # 执行请求
+        response = await call_next(request)
+        
+        # 计算耗时
+        duration = (time.time() - start_time) * 1000
+        
+        # 记录请求结束
+        logger.info(
+            f"[{request_id}] <-- {response.status_code} "
+            f"({duration:.2f}ms)"
+        )
+        
+        # 添加请求 ID 到响应头
+        response.headers["X-Request-ID"] = request_id
+        
+        return response
+
+4. 路由设计
+
+4.1 用例管理路由
+
+# routers/test_cases.py
+
+from fastapi import APIRouter, Depends, Query
+from app.schemas.test_case import TCIRCreate, TCIRUpdate, TCIRResponse
+from app.services.test_case_service import TestCaseService
+from app.dependencies import get_test_case_service
+
+router = APIRouter(prefix="/test-cases", tags=["TestCases"])
+
+@router.get("/", response_model=list[TCIRResponse])
+async def list_test_cases(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: str = Query(None),
+    service: TestCaseService = Depends(get_test_case_service)
+):
+    """获取用例列表"""
+    return await service.list_test_cases(page, page_size, status)
+
+@router.get("/{tc_id}", response_model=TCIRResponse)
+async def get_test_case(
+    tc_id: str,
+    service: TestCaseService = Depends(get_test_case_service)
+):
+    """获取单个用例详情"""
+    return await service.get_test_case(tc_id)
+
+@router.post("/", response_model=TCIRResponse, status_code=201)
+async def create_test_case(
+    tc: TCIRCreate,
+    service: TestCaseService = Depends(get_test_case_service)
+):
+    """创建新用例"""
+    return await service.create_test_case(tc)
+
+@router.put("/{tc_id}", response_model=TCIRResponse)
+async def update_test_case(
+    tc_id: str,
+    tc: TCIRUpdate,
+    service: TestCaseService = Depends(get_test_case_service)
+):
+    """更新用例"""
+    return await service.update_test_case(tc_id, tc)
+
+@router.delete("/{tc_id}", status_code=204)
+async def delete_test_case(
+    tc_id: str,
+    service: TestCaseService = Depends(get_test_case_service)
+):
+    """删除用例"""
+    await service.delete_test_case(tc_id)
+
+4.2 执行管理路由
+
+# routers/executions.py
+
+from fastapi import APIRouter, Depends, BackgroundTasks
+from app.schemas.execution import ExecutionCreate, ExecutionResponse
+from app.services.execution_service import ExecutionService
+
+router = APIRouter(prefix="/executions", tags=["Executions"])
+
+@router.post("/", response_model=ExecutionResponse, status_code=202)
+async def start_execution(
+    request: ExecutionCreate,
+    background_tasks: BackgroundTasks,
+    service: ExecutionService = Depends()
+):
+    """启动测试执行 (异步)"""
+    execution = await service.create_execution(request.tc_id)
+    
+    # 在后台执行测试
+    background_tasks.add_task(service.run_execution, execution.id)
+    
+    return execution
+
+@router.get("/{execution_id}", response_model=ExecutionResponse)
+async def get_execution(
+    execution_id: str,
+    service: ExecutionService = Depends()
+):
+    """获取执行详情"""
+    return await service.get_execution(execution_id)
+
+@router.post("/{execution_id}/retry", response_model=ExecutionResponse)
+async def retry_execution(
+    execution_id: str,
+    background_tasks: BackgroundTasks,
+    service: ExecutionService = Depends()
+):
+    """重试失败的执行"""
+    execution = await service.retry_execution(execution_id)
+    background_tasks.add_task(service.run_execution, execution.id)
+    return execution
+
+@router.post("/{execution_id}/stop")
+async def stop_execution(
+    execution_id: str,
+    service: ExecutionService = Depends()
+):
+    """停止执行"""
+    await service.stop_execution(execution_id)
+    return {"message": "Execution stopped"}
+
+5. SSE (Server-Sent Events) 设计
+
+5.1 SSE 路由
+
+# routers/stream.py
+
+from fastapi import APIRouter, Request
+from sse_starlette.sse import EventSourceResponse
+import asyncio
+
+router = APIRouter(prefix="/stream", tags=["Stream"])
+
+@router.get("/executions/{execution_id}")
+async def execution_stream(execution_id: str, request: Request):
+    """订阅执行状态更新流"""
+    
+    async def event_generator():
+        # 连接 Redis Pub/Sub
+        pubsub = redis_client.pubsub()
+        await pubsub.subscribe(f"execution:{execution_id}")
+        
+        try:
+            while True:
+                # 检查客户端是否断开
+                if await request.is_disconnected():
+                    break
+                
+                message = await pubsub.get_message(ignore_subscribe_messages=True)
+                if message:
+                    yield {
+                        "event": message["data"]["type"],
+                        "data": message["data"]["payload"]
+                    }
+                
+                await asyncio.sleep(0.1)
+        finally:
+            await pubsub.unsubscribe(f"execution:{execution_id}")
+    
+    return EventSourceResponse(event_generator())
+
+5.2 事件发布
+
+# services/event_publisher.py
+
+import redis.asyncio as redis
+import json
+
+class EventPublisher:
+    def __init__(self, redis_client: redis.Redis):
+        self.redis = redis_client
+    
+    async def publish_execution_event(
+        self, 
+        execution_id: str, 
+        event_type: str, 
+        payload: dict
+    ):
+        """发布执行事件"""
+        channel = f"execution:{execution_id}"
+        message = json.dumps({
+            "type": event_type,
+            "payload": payload
+        })
+        await self.redis.publish(channel, message)
+    
+    async def publish_step_completed(self, execution_id: str, step: dict):
+        await self.publish_execution_event(
+            execution_id,
+            "execution.step",
+            step
+        )
+    
+    async def publish_execution_completed(self, execution_id: str, result: dict):
+        await self.publish_execution_event(
+            execution_id,
+            "execution.completed",
+            result
+        )
+
+6. 引擎调用层
+
+6.1 引擎适配器基类
+
+# engines/base.py
+
+from abc import ABC, abstractmethod
+import httpx
+
+class EngineAdapter(ABC):
+    def __init__(self, base_url: str, timeout: int = 30):
+        self.base_url = base_url
+        self.timeout = timeout
+        self.client = httpx.AsyncClient(
+            base_url=base_url,
+            timeout=timeout
+        )
+    
+    @abstractmethod
+    async def execute(self, request: dict) -> dict:
+        pass
+    
+    async def health_check(self) -> bool:
+        try:
+            response = await self.client.get("/health")
+            return response.status_code == 200
+        except Exception:
+            return False
+
+6.2 神经设计层适配器
+
+# engines/neural_design.py
+
+from app.engines.base import EngineAdapter
+
+class NeuralDesignAdapter(EngineAdapter):
+    async def generate_tc_ir(self, prd_content: str, options: dict = None) -> dict:
+        """调用神经设计层生成 TC-IR"""
+        response = await self.client.post(
+            "/api/v1/design/generate",
+            json={
+                "prd_content": prd_content,
+                "options": options or {}
+            }
+        )
+        response.raise_for_status()
+        return response.json()
+    
+    async def get_generation_status(self, task_id: str) -> dict:
+        """查询生成任务状态"""
+        response = await self.client.get(f"/api/v1/design/tasks/{task_id}")
+        response.raise_for_status()
+        return response.json()
+
+6.3 执行引擎适配器
+
+# engines/executor.py
+
+from app.engines.base import EngineAdapter
+from app.schemas.execution import ExecutionMode
+
+class ExecutorAdapter(EngineAdapter):
+    async def execute(self, tc_ir: dict, mode: ExecutionMode) -> dict:
+        """执行测试用例"""
+        # 根据模式选择引擎
+        if mode == ExecutionMode.UI:
+            endpoint = "/api/v1/right-pupil/execute"
+        elif mode == ExecutionMode.API:
+            endpoint = "/api/v1/left-pupil/execute"
+        elif mode == ExecutionMode.HYBRID:
+            endpoint = "/api/v1/dispatcher/execute"
+        else:
+            raise ValueError(f"Unknown execution mode: {mode}")
+        
+        response = await self.client.post(endpoint, json=tc_ir)
+        response.raise_for_status()
+        return response.json()
+
+7. 数据库模型
+
+7.1 SQLAlchemy 异步模型
+
+# models/test_case.py
+
+from sqlalchemy import Column, String, Text, JSON, DateTime, Enum
+from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime
+import enum
+
+from app.database import Base
+
+class TCStatus(str, enum.Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+class TestCase(Base):
+    __tablename__ = "test_cases"
+    
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=True)
+    tc_ir: Mapped[dict] = mapped_column(JSON, nullable=False)
+    mode: Mapped[str] = mapped_column(String(20), default="hybrid")
+    status: Mapped[TCStatus] = mapped_column(Enum(TCStatus), default=TCStatus.DRAFT)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by: Mapped[str] = mapped_column(String(50), nullable=True)
+
+# models/execution.py
+
+class ExecutionStatus(str, enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    STOPPED = "stopped"
+
+class Execution(Base):
+    __tablename__ = "executions"
+    
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    tc_id: Mapped[str] = mapped_column(String(50), ForeignKey("test_cases.id"))
+    status: Mapped[ExecutionStatus] = mapped_column(Enum(ExecutionStatus), default=ExecutionStatus.PENDING)
+    result: Mapped[dict] = mapped_column(JSON, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=True)
+    triggered_by: Mapped[str] = mapped_column(String(50), nullable=True)
+
+8. Pydantic Schema 设计
+
+8.1 请求/响应 Schema
+
+# schemas/test_case.py
+
+from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import Optional, Any
+
+class TCIRCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    tc_ir: dict = Field(..., description="TC-IR JSON 结构")
+    mode: str = Field(default="hybrid", pattern="^(ui|api|hybrid)$")
+
+class TCIRUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    tc_ir: Optional[dict] = None
+    status: Optional[str] = None
+
+class TCIRResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str]
+    tc_ir: dict
+    mode: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+8.2 通用响应
+
+# schemas/common.py
+
+from pydantic import BaseModel
+from typing import Generic, TypeVar, Optional
+
+T = TypeVar("T")
+
+class PagedResponse(BaseModel, Generic[T]):
+    items: list[T]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+class ErrorResponse(BaseModel):
+    code: str
+    message: str
+    detail: Optional[str] = None
+
+class SuccessResponse(BaseModel):
+    message: str
+    data: Optional[dict] = None
+
+9. 异常处理
+
+# main.py (异常处理器)
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+app = FastAPI(title="重明 API 网关", version="2.0")
+
+class APIException(Exception):
+    def __init__(self, code: str, message: str, status_code: int = 400):
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+
+@app.exception_handler(APIException)
+async def api_exception_handler(request: Request, exc: APIException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": exc.code,
+            "message": exc.message,
+            "request_id": getattr(request.state, "request_id", None)
+        }
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "code": "INTERNAL_ERROR",
+            "message": "An internal error occurred",
+            "request_id": getattr(request.state, "request_id", None)
+        }
+    )
+
+10. 健康检查与监控
+
+10.1 健康检查端点
+
+# routers/health.py
+
+from fastapi import APIRouter, Depends
+from app.engines import neural_design, left_pupil, right_pupil, turbo
+
+router = APIRouter(tags=["Health"])
+
+@router.get("/health")
+async def health_check():
+    """基础健康检查"""
+    return {"status": "healthy"}
+
+@router.get("/health/detailed")
+async def detailed_health_check():
+    """详细健康检查 (包含依赖服务)"""
+    checks = {
+        "api_gateway": "healthy",
+        "database": await check_database(),
+        "redis": await check_redis(),
+        "neural_design": await neural_design.health_check(),
+        "left_pupil": await left_pupil.health_check(),
+        "right_pupil": await right_pupil.health_check(),
+        "turbo": await turbo.health_check()
+    }
+    
+    overall = "healthy" if all(v == True or v == "healthy" for v in checks.values()) else "degraded"
+    
+    return {
+        "status": overall,
+        "checks": checks
+    }
+
+10.2 Prometheus 指标
+
+# middleware/metrics.py
+
+from prometheus_client import Counter, Histogram, generate_latest
+from fastapi import Request, Response
+
+REQUEST_COUNT = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status"]
+)
+
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request latency",
+    ["method", "endpoint"]
+)
+
+class MetricsMiddleware:
+    async def __call__(self, request: Request, call_next):
+        start_time = time.time()
+        
+        response = await call_next(request)
+        
+        duration = time.time() - start_time
+        
+        # 记录指标
+        REQUEST_COUNT.labels(
+            method=request.method,
+            endpoint=request.url.path,
+            status=response.status_code
+        ).inc()
+        
+        REQUEST_LATENCY.labels(
+            method=request.method,
+            endpoint=request.url.path
+        ).observe(duration)
+        
+        return response
+
+# 指标导出端点
+@app.get("/metrics")
+async def metrics():
+    return Response(content=generate_latest(), media_type="text/plain")
+
+11. 与其他模块集成
+
+11.1 集成架构
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                          API 网关集成架构                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│     前端层 (React)                                                  │
+│         │                                                           │
+│         ▼                                                           │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                      API 网关 (FastAPI)                      │   │
+│  │  • 认证鉴权  • 限流熔断  • 请求路由  • 日志追踪              │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│         │                                                           │
+│         ├──────────────┬──────────────┬──────────────┐             │
+│         ▼              ▼              ▼              ▼             │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐       │
+│  │  神经设计层 │ │  左瞳引擎  │ │  右瞳引擎  │ │  涡轮引擎  │       │
+│  │  (gRPC)    │ │  (HTTP)    │ │  (HTTP)    │ │  (HTTP)    │       │
+│  └────────────┘ └────────────┘ └────────────┘ └────────────┘       │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+11.2 依赖注入配置
+
+# dependencies.py
+
+from functools import lru_cache
+from app.config import Settings
+from app.engines.neural_design import NeuralDesignAdapter
+from app.engines.executor import ExecutorAdapter
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
+
+def get_neural_design_adapter() -> NeuralDesignAdapter:
+    settings = get_settings()
+    return NeuralDesignAdapter(settings.neural_design_url)
+
+def get_executor_adapter() -> ExecutorAdapter:
+    settings = get_settings()
+    return ExecutorAdapter(settings.executor_url)
+
+12. 部署说明
+
+12.1 配置文件
+
+# config.py
+
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    # 应用配置
+    app_name: str = "重明 API 网关"
+    debug: bool = False
+    
+    # 数据库
+    database_url: str = "postgresql+asyncpg://user:pass@localhost/chongming"
+    
+    # Redis
+    redis_url: str = "redis://localhost:6379/0"
+    
+    # JWT
+    jwt_secret_key: str
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24
+    
+    # 限流
+    rate_limit_requests: int = 100
+    rate_limit_window: int = 60
+    
+    # 引擎 URL
+    neural_design_url: str = "http://neural-design:8001"
+    left_pupil_url: str = "http://left-pupil:8002"
+    right_pupil_url: str = "http://right-pupil:8003"
+    turbo_url: str = "http://turbo:8004"
+    
+    class Config:
+        env_file = ".env"
+
+12.2 Docker Compose
+
+version: "3.8"
+
+services:
+  api-gateway:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+    depends_on:
+      - postgres
+      - redis
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: chongming
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+
+12.3 Uvicorn 启动
+
+# 开发环境
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 生产环境 (多 Worker)
+gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
+
+End of Design Document

@@ -1,0 +1,790 @@
+重明 (ChongMing) 详细设计说明书：Celery 任务调度模块 (Task Scheduler)
+所属层级：基础设施层 (Infrastructure Layer) - 异步执行侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+Celery 任务调度模块 (Task Scheduler Module) 是重明架构的异步执行基础设施，负责管理长时间运行的测试任务、分布式 Worker 调度、任务优先级队列和执行状态追踪。它像一个智能调度中心，协调各执行引擎的并行工作。
+
+其核心设计哲学是 "Async-First, Scale-Out" (异步优先，横向扩展)：
+- 异步解耦：前端请求与后端执行解耦
+- 分布式调度：多 Worker 并行执行
+- 优先级队列：P0/P1/P2 任务分级处理
+- 弹性伸缩：按负载动态调整 Worker 数量
+
+1.2 核心价值
+
+1. **长任务支持** - 支持数小时的压测/回归执行
+2. **资源隔离** - 不同引擎的任务独立队列
+3. **失败重试** - 自动重试 + 指数退避
+4. **实时状态** - WebSocket/SSE 推送执行进度
+
+---
+
+2. 系统架构
+
+2.1 整体架构图
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Celery 任务调度模块 (Task Scheduler)                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐ │
+│  │                        FastAPI 应用层                                  │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │ │
+│  │  │  任务提交   │  │  状态查询   │  │  结果获取   │  │  任务取消   │  │ │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │ │
+│  └───────────────────────────────────────┬───────────────────────────────┘ │
+│                                          │                                  │
+│  ┌───────────────────────────────────────┴───────────────────────────────┐ │
+│  │                        Redis 消息代理层                                │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │ │
+│  │  │ queue:high  │  │ queue:normal│  │ queue:low   │  │ queue:turbo │  │ │
+│  │  │   (P0)      │  │   (P1)      │  │   (P2)      │  │  (压测专用) │  │ │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │ │
+│  └───────────────────────────────────────┬───────────────────────────────┘ │
+│                                          │                                  │
+│  ┌───────────────────────────────────────┴───────────────────────────────┐ │
+│  │                        Celery Worker 集群                              │ │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │ │
+│  │  │  UI Worker  │  │  API Worker │  │ Turbo Worker│  │Design Worker│  │ │
+│  │  │ (右瞳引擎)  │  │ (左瞳引擎)  │  │ (涡轮引擎) │  │(神经设计层)│  │ │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+2.2 核心组件
+
+| 组件 | 职责 | 技术选型 |
+|------|------|----------|
+| Redis Broker | 消息队列代理 | Redis 7.0 |
+| Redis Backend | 结果存储 | Redis 7.0 |
+| Celery Beat | 定时任务调度 | Celery Beat |
+| Worker Pool | 任务执行器 | Prefork/Gevent |
+| Flower | 监控面板 | Flower 2.0 |
+
+---
+
+3. 数据模型设计
+
+3.1 核心数据结构
+
+```python
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional, Dict, Any, List
+from datetime import datetime
+
+class TaskStatus(Enum):
+    PENDING = "pending"       # 等待执行
+    STARTED = "started"       # 开始执行
+    PROGRESS = "progress"     # 执行中 (有进度更新)
+    SUCCESS = "success"       # 执行成功
+    FAILURE = "failure"       # 执行失败
+    RETRY = "retry"           # 重试中
+    REVOKED = "revoked"       # 已取消
+
+class TaskPriority(Enum):
+    HIGH = 0      # P0 - 紧急
+    NORMAL = 5    # P1 - 正常
+    LOW = 9       # P2 - 低优先级
+
+class TaskType(Enum):
+    UI_TEST = "ui_test"           # 右瞳引擎 UI 测试
+    API_TEST = "api_test"         # 左瞳引擎 API 测试
+    PERF_TEST = "perf_test"       # 涡轮引擎性能测试
+    DESIGN_GEN = "design_gen"     # 神经设计层用例生成
+    VRT_TEST = "vrt_test"         # VRT 视觉回归测试
+    COMPILE = "compile"           # 凤凰涅槃层脚本编译
+    ANALYSIS = "analysis"         # 缺陷分析
+
+@dataclass
+class TaskInfo:
+    """任务信息"""
+    task_id: str
+    task_type: TaskType
+    priority: TaskPriority
+    status: TaskStatus
+    args: Dict[str, Any]
+    result: Optional[Any]
+    created_at: datetime
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    progress: float         # 0.0 - 1.0
+    progress_message: str
+    retries: int
+    worker_id: Optional[str]
+    parent_task_id: Optional[str]  # 父任务 (用于任务链)
+
+@dataclass
+class WorkerInfo:
+    """Worker 信息"""
+    worker_id: str
+    hostname: str
+    status: str             # online, offline, busy
+    task_types: List[str]   # 支持的任务类型
+    concurrency: int
+    current_tasks: List[str]
+    stats: Dict[str, Any]
+```
+
+---
+
+4. Celery 配置
+
+4.1 主配置文件
+
+```python
+# celery_config.py
+from celery import Celery
+from kombu import Queue, Exchange
+
+app = Celery("chongming")
+
+# Redis 连接
+app.conf.broker_url = "redis://localhost:6379/0"
+app.conf.result_backend = "redis://localhost:6379/1"
+
+# 序列化
+app.conf.task_serializer = "json"
+app.conf.result_serializer = "json"
+app.conf.accept_content = ["json"]
+
+# 时区
+app.conf.timezone = "Asia/Shanghai"
+app.conf.enable_utc = True
+
+# 任务队列定义
+app.conf.task_queues = [
+    Queue("high", Exchange("high"), routing_key="high", 
+          queue_arguments={"x-max-priority": 10}),
+    Queue("normal", Exchange("normal"), routing_key="normal",
+          queue_arguments={"x-max-priority": 10}),
+    Queue("low", Exchange("low"), routing_key="low",
+          queue_arguments={"x-max-priority": 10}),
+    Queue("turbo", Exchange("turbo"), routing_key="turbo"),  # 压测专用
+    Queue("ui", Exchange("ui"), routing_key="ui"),           # UI 测试专用
+    Queue("api", Exchange("api"), routing_key="api"),        # API 测试专用
+]
+
+# 任务路由
+app.conf.task_routes = {
+    "tasks.run_ui_test": {"queue": "ui"},
+    "tasks.run_api_test": {"queue": "api"},
+    "tasks.run_perf_test": {"queue": "turbo"},
+    "tasks.generate_testcase": {"queue": "normal"},
+    "tasks.compile_script": {"queue": "low"},
+    "tasks.analyze_defect": {"queue": "normal"},
+    "tasks.run_vrt": {"queue": "ui"},
+}
+
+# 任务执行设置
+app.conf.task_acks_late = True          # 任务完成后再确认
+app.conf.task_reject_on_worker_lost = True
+app.conf.task_time_limit = 3600 * 4     # 4 小时硬限制
+app.conf.task_soft_time_limit = 3600 * 3  # 3 小时软限制
+
+# 重试配置
+app.conf.task_default_retry_delay = 60  # 60 秒后重试
+app.conf.task_max_retries = 3
+
+# Worker 配置
+app.conf.worker_prefetch_multiplier = 1  # 每次只取一个任务
+app.conf.worker_concurrency = 4          # 并发数
+
+# 结果配置
+app.conf.result_expires = 86400 * 7      # 结果保留 7 天
+```
+
+4.2 定时任务 (Celery Beat)
+
+```python
+# celery_beat.py
+from celery.schedules import crontab
+
+app.conf.beat_schedule = {
+    # 每日凌晨 2 点执行全量回归
+    "daily-regression": {
+        "task": "tasks.run_daily_regression",
+        "schedule": crontab(hour=2, minute=0),
+        "args": (["smoke", "regression"],),
+    },
+    
+    # 每小时清理过期任务结果
+    "cleanup-expired-results": {
+        "task": "tasks.cleanup_old_results",
+        "schedule": crontab(minute=0),
+    },
+    
+    # 每 5 分钟检查 Worker 健康
+    "worker-health-check": {
+        "task": "tasks.check_worker_health",
+        "schedule": 300.0,  # 5 分钟
+    },
+    
+    # 每周日生成周报
+    "weekly-report": {
+        "task": "tasks.generate_weekly_report",
+        "schedule": crontab(day_of_week=0, hour=8, minute=0),
+    },
+}
+```
+
+---
+
+5. 核心任务定义
+
+5.1 测试执行任务
+
+```python
+# tasks/execution.py
+from celery import shared_task, current_task
+from celery.exceptions import SoftTimeLimitExceeded
+import asyncio
+
+@shared_task(
+    bind=True,
+    name="tasks.run_ui_test",
+    queue="ui",
+    max_retries=3,
+    soft_time_limit=3600,
+    time_limit=3700,
+    acks_late=True
+)
+def run_ui_test(self, tc_ir: dict, config: dict) -> dict:
+    """执行 UI 测试任务 (右瞳引擎)"""
+    
+    try:
+        # 更新进度
+        self.update_state(
+            state="PROGRESS",
+            meta={"progress": 0.0, "message": "初始化右瞳引擎..."}
+        )
+        
+        # 初始化引擎
+        from engines.right_pupil import RightPupilEngine
+        engine = RightPupilEngine(config)
+        
+        # 执行测试
+        total_steps = len(tc_ir.get("steps", []))
+        for i, step in enumerate(tc_ir["steps"]):
+            # 进度更新
+            progress = (i + 1) / total_steps
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "progress": progress,
+                    "message": f"执行步骤 {i+1}/{total_steps}: {step.get('action')}"
+                }
+            )
+            
+            # 执行步骤
+            result = asyncio.run(engine.execute_step(step))
+            
+            if not result.success:
+                # 触发自愈
+                healed = asyncio.run(engine.try_heal(step, result.error))
+                if not healed:
+                    return {
+                        "status": "failed",
+                        "step": i,
+                        "error": result.error
+                    }
+        
+        return {
+            "status": "passed",
+            "trace_log": engine.get_trace_log()
+        }
+        
+    except SoftTimeLimitExceeded:
+        # 软超时，保存进度后退出
+        return {
+            "status": "timeout",
+            "progress": self.request.meta.get("progress", 0)
+        }
+    except Exception as e:
+        # 自动重试
+        self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
+
+
+@shared_task(
+    bind=True,
+    name="tasks.run_api_test",
+    queue="api",
+    max_retries=3
+)
+def run_api_test(self, api_ir_chain: list, config: dict) -> dict:
+    """执行 API 测试任务 (左瞳引擎)"""
+    
+    self.update_state(state="PROGRESS", meta={"progress": 0.0, "message": "初始化左瞳引擎..."})
+    
+    from engines.left_pupil import LeftPupilEngine
+    engine = LeftPupilEngine(config)
+    
+    results = []
+    for i, api_ir in enumerate(api_ir_chain):
+        progress = (i + 1) / len(api_ir_chain)
+        self.update_state(
+            state="PROGRESS",
+            meta={"progress": progress, "message": f"调用 API: {api_ir['name']}"}
+        )
+        
+        result = asyncio.run(engine.execute(api_ir))
+        results.append(result)
+    
+    return {"status": "completed", "results": results}
+
+
+@shared_task(
+    bind=True,
+    name="tasks.run_perf_test",
+    queue="turbo",
+    time_limit=3600 * 8  # 8 小时
+)
+def run_perf_test(self, config: dict) -> dict:
+    """执行性能测试任务 (涡轮引擎)"""
+    
+    self.update_state(state="PROGRESS", meta={"message": "启动 Locust 集群..."})
+    
+    from engines.turbo import TurboEngine
+    engine = TurboEngine(config)
+    
+    # 启动压测
+    result = asyncio.run(engine.run_load_test(config))
+    
+    return {
+        "status": "completed",
+        "report_url": result.report_url,
+        "metrics": result.metrics
+    }
+```
+
+5.2 任务链与编排
+
+```python
+# tasks/chains.py
+from celery import chain, group, chord
+
+def create_full_regression_chain(tc_list: list, config: dict):
+    """创建完整回归测试任务链"""
+    
+    # 1. 首先生成用例 (如果需要)
+    generate_task = generate_testcase.s(config.get("prd_content"))
+    
+    # 2. 并行执行 UI 和 API 测试
+    ui_tests = group([
+        run_ui_test.s(tc, config) 
+        for tc in tc_list if tc["mode"] == "UI"
+    ])
+    
+    api_tests = group([
+        run_api_test.s([tc], config) 
+        for tc in tc_list if tc["mode"] == "API"
+    ])
+    
+    # 3. 测试完成后生成报告
+    report_task = generate_report.s()
+    
+    # 4. 编排任务链
+    workflow = chain(
+        group(ui_tests, api_tests),  # 并行执行
+        compile_scripts.s(),          # 编译脚本
+        report_task                   # 生成报告
+    )
+    
+    return workflow
+
+
+def create_priority_execution(tc_list: list, config: dict):
+    """按优先级执行任务"""
+    
+    # 按优先级分组
+    p0_tasks = [tc for tc in tc_list if tc.get("priority") == "P0"]
+    p1_tasks = [tc for tc in tc_list if tc.get("priority") == "P1"]
+    p2_tasks = [tc for tc in tc_list if tc.get("priority") == "P2"]
+    
+    # P0 立即执行，P1/P2 排队
+    return chain(
+        group([run_ui_test.s(tc, config).set(priority=0) for tc in p0_tasks]),
+        group([run_ui_test.s(tc, config).set(priority=5) for tc in p1_tasks]),
+        group([run_ui_test.s(tc, config).set(priority=9) for tc in p2_tasks])
+    )
+```
+
+---
+
+6. 进度追踪与 SSE 推送
+
+6.1 实时状态推送
+
+```python
+# services/task_tracker.py
+from fastapi import APIRouter
+from sse_starlette.sse import EventSourceResponse
+import asyncio
+import json
+
+router = APIRouter()
+
+class TaskTracker:
+    """任务状态追踪器"""
+    
+    def __init__(self, redis_client):
+        self.redis = redis_client
+        self.pubsub = redis_client.pubsub()
+    
+    async def track_task(self, task_id: str):
+        """追踪任务进度"""
+        from celery.result import AsyncResult
+        
+        while True:
+            result = AsyncResult(task_id)
+            
+            status = {
+                "task_id": task_id,
+                "status": result.status,
+                "progress": 0.0,
+                "message": ""
+            }
+            
+            if result.info:
+                if isinstance(result.info, dict):
+                    status["progress"] = result.info.get("progress", 0)
+                    status["message"] = result.info.get("message", "")
+                elif isinstance(result.info, Exception):
+                    status["error"] = str(result.info)
+            
+            yield status
+            
+            if result.ready():
+                break
+            
+            await asyncio.sleep(1)
+
+
+@router.get("/api/v1/tasks/{task_id}/stream")
+async def stream_task_progress(task_id: str):
+    """SSE 推送任务进度"""
+    
+    async def event_generator():
+        tracker = TaskTracker(redis_client)
+        async for status in tracker.track_task(task_id):
+            yield {
+                "event": "progress",
+                "data": json.dumps(status)
+            }
+    
+    return EventSourceResponse(event_generator())
+```
+
+6.2 WebSocket 推送
+
+```python
+# services/websocket.py
+from fastapi import WebSocket
+from typing import Dict, Set
+
+class TaskWebSocketManager:
+    """任务 WebSocket 管理器"""
+    
+    def __init__(self):
+        self.connections: Dict[str, Set[WebSocket]] = {}
+    
+    async def connect(self, task_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if task_id not in self.connections:
+            self.connections[task_id] = set()
+        self.connections[task_id].add(websocket)
+    
+    def disconnect(self, task_id: str, websocket: WebSocket):
+        if task_id in self.connections:
+            self.connections[task_id].discard(websocket)
+    
+    async def broadcast_progress(self, task_id: str, data: dict):
+        """广播任务进度"""
+        if task_id in self.connections:
+            for ws in self.connections[task_id]:
+                try:
+                    await ws.send_json(data)
+                except:
+                    self.disconnect(task_id, ws)
+
+ws_manager = TaskWebSocketManager()
+```
+
+---
+
+7. API 设计
+
+7.1 HTTP 端点
+
+| 方法 | 端点 | 描述 |
+|------|------|------|
+| POST | /api/v1/tasks | 提交新任务 |
+| GET | /api/v1/tasks/{id} | 获取任务状态 |
+| GET | /api/v1/tasks/{id}/result | 获取任务结果 |
+| DELETE | /api/v1/tasks/{id} | 取消任务 |
+| GET | /api/v1/tasks/{id}/stream | SSE 进度流 |
+| GET | /api/v1/workers | 获取 Worker 列表 |
+| GET | /api/v1/queues | 获取队列状态 |
+
+7.2 任务提交示例
+
+POST /api/v1/tasks
+Content-Type: application/json
+
+{
+  "type": "ui_test",
+  "priority": "high",
+  "payload": {
+    "tc_ir": {...},
+    "config": {
+      "browser": "chromium",
+      "headless": true
+    }
+  }
+}
+
+响应：
+
+{
+  "task_id": "a1b2c3d4-e5f6-7890",
+  "status": "pending",
+  "queue": "ui",
+  "position": 3
+}
+
+---
+
+8. Worker 管理
+
+8.1 Worker 启动命令
+
+```bash
+# 启动 UI 测试 Worker
+celery -A celery_config worker -Q ui -c 2 -n ui_worker@%h
+
+# 启动 API 测试 Worker
+celery -A celery_config worker -Q api -c 4 -n api_worker@%h
+
+# 启动涡轮引擎 Worker (单并发)
+celery -A celery_config worker -Q turbo -c 1 -n turbo_worker@%h
+
+# 启动 Beat 定时调度
+celery -A celery_config beat -l info
+
+# 启动 Flower 监控
+celery -A celery_config flower --port=5555
+```
+
+8.2 Docker Compose
+
+```yaml
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    
+  celery-ui-worker:
+    image: chongming/worker:latest
+    command: celery -A celery_config worker -Q ui -c 2
+    depends_on:
+      - redis
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    deploy:
+      replicas: 2
+    
+  celery-api-worker:
+    image: chongming/worker:latest
+    command: celery -A celery_config worker -Q api -c 4
+    depends_on:
+      - redis
+    deploy:
+      replicas: 3
+    
+  celery-turbo-worker:
+    image: chongming/worker:latest
+    command: celery -A celery_config worker -Q turbo -c 1
+    depends_on:
+      - redis
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+    
+  celery-beat:
+    image: chongming/worker:latest
+    command: celery -A celery_config beat -l info
+    depends_on:
+      - redis
+    
+  flower:
+    image: mher/flower:2.0
+    command: celery -A celery_config flower
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+
+volumes:
+  redis_data:
+```
+
+---
+
+9. 与其他模块集成
+
+9.1 模块依赖关系
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Celery 任务调度集成图                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────────┐      任务提交         ┌───────────────────────────────┐ │
+│  │   前端层      │ ───────────────────► │   Celery 任务调度模块         │ │
+│  │  (React)      │ ◄─────────────────── │   (Redis + Workers)          │ │
+│  └───────────────┘      SSE 进度推送    └─────────────┬─────────────────┘ │
+│                                                       │                     │
+│         ┌─────────────────────────────────────────────┼─────────────────┐   │
+│         │                                             │                 │   │
+│         ▼                                             ▼                 ▼   │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐  ┌───────────┐   │
+│  │  右瞳引擎     │  │  左瞳引擎     │  │  涡轮引擎     │  │神经设计层 │   │
+│  │  (UI Worker)  │  │  (API Worker) │  │(Turbo Worker) │  │(Design)   │   │
+│  └───────────────┘  └───────────────┘  └───────────────┘  └───────────┘   │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+---
+
+10. 监控与告警
+
+10.1 Prometheus 指标
+
+```python
+# metrics.py
+from prometheus_client import Counter, Histogram, Gauge
+
+# 任务计数
+task_submitted = Counter(
+    "celery_task_submitted_total",
+    "Total submitted tasks",
+    ["task_type", "queue"]
+)
+
+task_completed = Counter(
+    "celery_task_completed_total", 
+    "Total completed tasks",
+    ["task_type", "status"]
+)
+
+# 执行时间
+task_duration = Histogram(
+    "celery_task_duration_seconds",
+    "Task execution duration",
+    ["task_type"],
+    buckets=[10, 60, 300, 600, 1800, 3600]
+)
+
+# 队列深度
+queue_length = Gauge(
+    "celery_queue_length",
+    "Number of tasks in queue",
+    ["queue"]
+)
+
+# Worker 状态
+worker_count = Gauge(
+    "celery_worker_count",
+    "Number of online workers",
+    ["queue"]
+)
+```
+
+10.2 告警规则
+
+```yaml
+# alerting_rules.yaml
+groups:
+  - name: celery_alerts
+    rules:
+      - alert: CeleryQueueBacklog
+        expr: celery_queue_length > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery queue backlog detected"
+          
+      - alert: CeleryWorkerDown
+        expr: celery_worker_count == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "All Celery workers are down"
+          
+      - alert: TaskFailureRate
+        expr: rate(celery_task_completed_total{status="failure"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+```
+
+---
+
+11. 配置示例
+
+```yaml
+# celery_config.yaml
+celery:
+  broker_url: "redis://localhost:6379/0"
+  result_backend: "redis://localhost:6379/1"
+  
+  queues:
+    high:
+      priority: 0
+      concurrency: 4
+    normal:
+      priority: 5
+      concurrency: 8
+    low:
+      priority: 9
+      concurrency: 2
+    ui:
+      concurrency: 2
+    api:
+      concurrency: 4
+    turbo:
+      concurrency: 1
+      
+  task_settings:
+    default_retry_delay: 60
+    max_retries: 3
+    soft_time_limit: 3600
+    time_limit: 3700
+    
+  beat:
+    enabled: true
+    schedule_file: "/data/celerybeat-schedule"
+    
+  flower:
+    enabled: true
+    port: 5555
+    basic_auth: ["admin:password"]
+```
+
+---
+
+EOF

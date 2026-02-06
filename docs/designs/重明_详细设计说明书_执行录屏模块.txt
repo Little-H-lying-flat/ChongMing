@@ -1,0 +1,1936 @@
+重明 (ChongMing) 详细设计说明书：执行录屏模块 (Execution Recorder)
+所属层级：执行层 (Execution Layer) - 可视化侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 模块概述 (System Overview)
+
+1.1 定义与愿景
+
+
+执行录屏模块 (Execution Recorder) 是重明架构中负责 "录" (Record) 和 "播" (Playback) 测试执行过程的核心可视化组件。它像一个智能摄影师，自动捕捉测试执行的每一个关键帧，生成可回溯、可分析的执行轨迹。
+
+其核心设计哲学是 "Capture Everything, Replay Anything" (全程捕获，随时回放)：
+- 智能捕获：自动识别关键操作时机并截屏
+- 元素标注：在截图上高亮显示操作目标
+- 时间线回放：按步骤顺序重现执行过程
+- 可视化分析：直观展示测试流程和结果
+
+### 1.2 核心价值
+
+1. **缺陷定位可视化** - 通过录屏快速定位失败步骤
+2. **执行过程可追溯** - 完整记录测试执行轨迹
+3. **团队协作增强** - 可分享的可视化测试报告
+4. **AI 分析支撑** - 为缺陷分析智能体提供视觉上下文
+
+---
+
+## 2. 系统架构
+
+### 2.1 整体架构图
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    执行录屏模块 (Execution Recorder)               │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────┐   │
+│  │  截图捕获引擎  │  │  元素标注器   │  │   时间线管理器    │   │
+│  │  Screenshot   │  │   Element     │  │    Timeline       │   │
+│  │   Capturer    │  │   Annotator   │  │    Manager        │   │
+│  └───────┬───────┘  └───────┬───────┘  └─────────┬─────────┘   │
+│          │                  │                    │              │
+│          ▼                  ▼                    ▼              │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              录制数据存储层 (Recording Storage)           │   │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐    │   │
+│  │  │ FrameStore  │ │ MetaStore   │ │  TimelineStore  │    │   │
+│  │  └─────────────┘ └─────────────┘ └─────────────────┘    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                              │                                  │
+│                              ▼                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │              回放与展示层 (Playback & Display)            │   │
+│  │  ┌──────────┐ ┌──────────────┐ ┌───────────────────┐    │   │
+│  │  │ Player   │ │ StepNavigator│ │  ExportGenerator  │    │   │
+│  │  └──────────┘ └──────────────┘ └───────────────────┘    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 2.2 核心组件说明
+
+| 组件 | 职责 | 关键能力 |
+|------|------|----------|
+| Screenshot Capturer | 截图捕获 | 自动/手动截屏、Base64 编码 |
+| Element Annotator | 元素标注 | 边框绘制、索引编号、颜色区分 |
+| Timeline Manager | 时间线管理 | 时间戳记录、步骤排序、播放控制 |
+| Frame Store | 帧存储 | 截图压缩、增量存储、缓存管理 |
+| Player | 回放播放器 | 步骤切换、速度控制、全屏展示 |
+
+---
+
+## 3. 数据模型设计
+
+### 3.1 核心数据结构
+
+```typescript
+/**
+ * 执行录制会话
+ */
+interface ExecutionRecording {
+  /** 录制唯一标识 */
+  recordingId: string;
+  /** SDK 版本号 */
+  sdkVersion: string;
+  /** 分组名称 */
+  groupName: string;
+  /** 分组描述 */
+  groupDescription: string;
+  /** 模型配置摘要 */
+  modelBriefs: ModelBrief[];
+  /** 执行记录列表 */
+  executions: ExecutionLog[];
+  /** 录制开始时间 */
+  startTime: number;
+  /** 录制结束时间 */
+  endTime?: number;
+}
+
+/**
+ * 单次执行日志
+ */
+interface ExecutionLog {
+  /** 日志时间戳 */
+  logTime: number;
+  /** 任务名称 */
+  name: string;
+  /** 任务描述 */
+  description: string;
+  /** 任务列表 */
+  tasks: TaskRecord[];
+  /** AI 操作上下文 */
+  aiActContext?: string;
+}
+
+/**
+ * 任务记录
+ */
+interface TaskRecord {
+  /** 任务类型: Planning | Insight | Action Space */
+  type: 'Planning' | 'Insight' | 'Action Space';
+  /** 子类型: Locate | Plan | Tap | Input | Scroll 等 */
+  subType: string;
+  /** 执行状态 */
+  status: 'pending' | 'running' | 'finished' | 'failed' | 'cancelled';
+  /** 任务参数 */
+  param: TaskParam;
+  /** AI 思考过程 */
+  thought?: string;
+  /** 执行时间 */
+  timing: TaskTiming;
+  /** 录制帧序列 */
+  recorder?: RecorderFrame[];
+  /** 执行输出 */
+  output?: any;
+  /** 错误信息 */
+  error?: string;
+  /** 错误堆栈 */
+  errorStack?: string;
+  /** Token 使用量 */
+  usage?: TokenUsage;
+}
+
+/**
+ * 录制帧
+ */
+interface RecorderFrame {
+  /** 帧类型 */
+  type: 'screenshot';
+  /** 时间戳 */
+  ts: number;
+  /** 截图数据 (Base64) */
+  screenshot: ScreenshotData;
+  /** 捕获时机 */
+  timing: 'before-action' | 'after-action' | 'after-calling';
+}
+
+/**
+ * 截图数据
+ */
+interface ScreenshotData {
+  /** Base64 编码的图片数据 */
+  base64: string;
+  /** 图片格式 */
+  format?: 'png' | 'jpeg' | 'webp';
+  /** 压缩质量 (0-100) */
+  quality?: number;
+}
+
+/**
+ * 任务时间记录
+ */
+interface TaskTiming {
+  /** 开始时间戳 */
+  start: number;
+  /** 结束时间戳 */
+  end?: number;
+  /** 耗时 (毫秒) */
+  cost?: number;
+}
+
+/**
+ * 元素定位结果
+ */
+interface LocateResult {
+  /** 元素中心点 */
+  center: [number, number];
+  /** 元素边界矩形 */
+  rect: ElementRect;
+  /** 元素描述 */
+  description: string;
+}
+
+/**
+ * 元素边界矩形
+ */
+interface ElementRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * 边界框 (用于标注)
+ */
+type BoundingBox = [number, number, number, number]; // [x1, y1, x2, y2]
+```
+
+### 3.2 元素标注配置
+
+```typescript
+/**
+ * 标注样式配置
+ */
+interface AnnotationStyle {
+  /** 边框颜色列表 (轮换使用) */
+  colors: AnnotationColor[];
+  /** 边框内边距 */
+  padding: number;
+  /** 边框粗细 */
+  borderThickness: number;
+  /** 索引标签字体 */
+  labelFont: string;
+}
+
+/**
+ * 标注颜色
+ */
+interface AnnotationColor {
+  /** 边框颜色 (RGBA) */
+  rect: number;
+  /** 文本颜色 (RGBA) */
+  text: number;
+}
+
+/** 默认颜色配置 */
+const DEFAULT_COLORS: AnnotationColor[] = [
+  { rect: 0xc62300ff, text: 0xffffffff },  // 红色
+  { rect: 0x0000ffff, text: 0xffffffff },  // 蓝色
+  { rect: 0x8b4513ff, text: 0xffffffff },  // 棕色
+  { rect: 0x3e7b27ff, text: 0xffffffff },  // 绿色
+  { rect: 0x500073ff, text: 0xffffffff },  // 紫色
+];
+```
+
+---
+
+## 4. 核心功能实现
+
+### 4.1 截图捕获引擎
+
+#### 4.1.1 自动捕获策略
+
+```typescript
+/**
+ * 截图捕获时机枚举
+ */
+enum CaptureTiming {
+  /** 操作执行前 */
+  BEFORE_ACTION = 'before-action',
+  /** 操作执行后 */
+  AFTER_ACTION = 'after-action',
+  /** 任务完成后 */
+  AFTER_CALLING = 'after-calling'
+}
+
+/**
+ * 截图捕获器
+ */
+class ScreenshotCapturer {
+  private screenshotScale: number = 1;
+  
+  /**
+   * 捕获当前屏幕
+   */
+  async capture(timing: CaptureTiming): Promise<RecorderFrame> {
+    const base64 = await this.interface.screenshotBase64();
+    const ts = Date.now();
+    
+    return {
+      type: 'screenshot',
+      ts,
+      screenshot: { base64 },
+      timing
+    };
+  }
+  
+  /**
+   * 获取截图缩放比例
+   */
+  async getScreenshotScale(context: UIContext): Promise<number> {
+    const pageWidth = context.size.width;
+    const { width: imgWidth } = await getImageInfo(context.screenshot.base64);
+    return imgWidth / pageWidth;
+  }
+  
+  /**
+   * 调整截图尺寸至逻辑尺寸
+   */
+  async normalizeScreenshot(
+    base64: string, 
+    targetWidth: number, 
+    targetHeight: number
+  ): Promise<string> {
+    return await resizeImage(base64, { width: targetWidth, height: targetHeight });
+  }
+}
+```
+
+#### 4.1.2 智能捕获触发
+
+```typescript
+/**
+ * 捕获策略配置
+ */
+interface CaptureStrategy {
+  /** 是否在每个任务开始时捕获 */
+  captureOnTaskStart: boolean;
+  /** 是否在每个任务结束时捕获 */
+  captureOnTaskEnd: boolean;
+  /** 是否在错误发生时捕获 */
+  captureOnError: boolean;
+  /** 最小捕获间隔 (毫秒) */
+  minCaptureInterval: number;
+  /** 截图质量 (0-100) */
+  imageQuality: number;
+}
+
+const DEFAULT_STRATEGY: CaptureStrategy = {
+  captureOnTaskStart: false,
+  captureOnTaskEnd: true,
+  captureOnError: true,
+  minCaptureInterval: 200,
+  imageQuality: 90
+};
+```
+
+### 4.2 元素标注器
+
+#### 4.2.1 边框绘制算法
+
+```typescript
+/**
+ * 元素标注器
+ */
+class ElementAnnotator {
+  private colors = DEFAULT_COLORS;
+  
+  /**
+   * 在截图上绘制元素标注
+   */
+  async annotate(
+    screenshot: string,
+    elements: ElementPosition[],
+    options?: AnnotationOptions
+  ): Promise<string> {
+    const { width, height, jimpImage } = await loadImage(screenshot);
+    const overlay = await this.createOverlay(elements, width, height, options);
+    
+    // 合成原图与标注层
+    const result = await jimpImage.composite(overlay, 0, 0, {
+      mode: BLEND_SOURCE_OVER,
+      opacitySource: 1,
+      opacityDest: 1
+    });
+    
+    return await result.getBase64Async(MIME_JPEG);
+  }
+  
+  /**
+   * 创建标注覆盖层
+   */
+  private async createOverlay(
+    elements: ElementPosition[],
+    width: number,
+    height: number,
+    options?: AnnotationOptions
+  ): Promise<JimpImage> {
+    const padding = options?.padding ?? 5;
+    const thickness = options?.borderThickness ?? 2;
+    const overlay = new Jimp(width, height, 0x00000000);
+    
+    for (let i = 0; i < elements.length; i++) {
+      const elem = elements[i];
+      const color = this.colors[i % this.colors.length];
+      
+      // 计算带边距的矩形
+      const rect = {
+        left: Math.max(0, elem.rect.left - padding),
+        top: Math.max(0, elem.rect.top - padding),
+        width: Math.min(width - elem.rect.left, elem.rect.width + 2 * padding),
+        height: Math.min(height - elem.rect.top, elem.rect.height + 2 * padding)
+      };
+      
+      // 绘制边框
+      this.drawBorder(overlay, rect, color.rect, thickness);
+      
+      // 绘制索引标签
+      if (typeof elem.indexId === 'number') {
+        this.drawIndexLabel(overlay, elem.indexId, rect, color);
+      }
+    }
+    
+    return overlay;
+  }
+  
+  /**
+   * 绘制矩形边框
+   */
+  private drawBorder(
+    image: JimpImage, 
+    rect: ElementRect, 
+    color: number, 
+    thickness: number
+  ): void {
+    const { left, top, width, height } = rect;
+    
+    image.scan(left, top, width, height, (x, y, idx) => {
+      const isOnBorder = 
+        (x >= left && x < left + thickness) ||
+        (x <= left + width - 1 && x > left + width - thickness) ||
+        (y >= top && y < top + thickness) ||
+        (y <= top + height - 1 && y > top + height - thickness);
+      
+      if (isOnBorder) {
+        image.bitmap.data[idx + 0] = (color >> 24) & 0xff; // R
+        image.bitmap.data[idx + 1] = (color >> 16) & 0xff; // G
+        image.bitmap.data[idx + 2] = (color >> 8) & 0xff;  // B
+        image.bitmap.data[idx + 3] = color & 0xff;         // A
+      }
+    });
+  }
+}
+```
+
+#### 4.2.2 智能标签定位
+
+```typescript
+/**
+ * 计算标签位置，避免与其他元素重叠
+ */
+private calculateLabelPosition(
+  elementIndex: number,
+  currentRect: ElementRect,
+  previousElements: ElementPosition[],
+  canvasWidth: number,
+  canvasHeight: number
+): { x: number; y: number } {
+  const labelWidth = 8 * String(elementIndex).length + 5;
+  const labelHeight = 16;
+  
+  // 候选位置 (按优先级)
+  const candidates = [
+    { x: currentRect.left - labelWidth, y: currentRect.top + currentRect.height / 2 - 8 },  // 左侧
+    { x: currentRect.left, y: currentRect.top - labelHeight - 2 },                           // 上方
+    { x: currentRect.left, y: currentRect.top + currentRect.height + 2 },                    // 下方
+    { x: currentRect.left + currentRect.width + 2, y: currentRect.top },                     // 右侧
+    { x: currentRect.left, y: currentRect.top + 2 }                                          // 内部左上
+  ];
+  
+  // 检查函数：是否与其他元素重叠
+  const overlapsWithPrevious = (x: number, y: number): boolean => {
+    return previousElements.some(elem => 
+      x < elem.rect.left + elem.rect.width &&
+      x + labelWidth > elem.rect.left &&
+      y < elem.rect.top + elem.rect.height &&
+      y + labelHeight > elem.rect.top
+    );
+  };
+  
+  // 检查函数：是否在画布内
+  const isWithinCanvas = (x: number, y: number): boolean => {
+    return x >= 0 && x + labelWidth <= canvasWidth &&
+           y >= 0 && y + labelHeight <= canvasHeight;
+  };
+  
+  // 找到第一个不重叠且在画布内的位置
+  for (const pos of candidates) {
+    if (!overlapsWithPrevious(pos.x, pos.y) && isWithinCanvas(pos.x, pos.y)) {
+      return pos;
+    }
+  }
+  
+  // 默认返回第一个候选位置
+  return candidates[0];
+}
+```
+
+### 4.3 时间线管理器
+
+```typescript
+/**
+ * 时间线管理器
+ */
+class TimelineManager {
+  private frames: TimelineFrame[] = [];
+  
+  /**
+   * 添加帧到时间线
+   */
+  addFrame(frame: RecorderFrame, taskInfo: TaskInfo): void {
+    this.frames.push({
+      ...frame,
+      taskId: taskInfo.id,
+      taskType: taskInfo.type,
+      taskSubType: taskInfo.subType,
+      taskStatus: taskInfo.status
+    });
+  }
+  
+  /**
+   * 获取按时间排序的帧列表
+   */
+  getTimeline(): TimelineFrame[] {
+    return [...this.frames].sort((a, b) => a.ts - b.ts);
+  }
+  
+  /**
+   * 获取指定任务的所有帧
+   */
+  getFramesByTask(taskId: string): TimelineFrame[] {
+    return this.frames.filter(f => f.taskId === taskId);
+  }
+  
+  /**
+   * 计算总执行时长
+   */
+  getTotalDuration(): number {
+    if (this.frames.length === 0) return 0;
+    const sorted = this.getTimeline();
+    return sorted[sorted.length - 1].ts - sorted[0].ts;
+  }
+  
+  /**
+   * 导出时间线数据
+   */
+  export(): TimelineExport {
+    return {
+      frames: this.getTimeline(),
+      totalDuration: this.getTotalDuration(),
+      frameCount: this.frames.length
+    };
+  }
+}
+```
+
+### 4.4 回放播放器
+
+```typescript
+/**
+ * 录制回放播放器
+ */
+class RecordingPlayer {
+  private currentIndex: number = 0;
+  private isPlaying: boolean = false;
+  private playbackSpeed: number = 1.0;
+  private frames: TimelineFrame[] = [];
+  
+  /**
+   * 加载录制数据
+   */
+  load(recording: ExecutionRecording): void {
+    this.frames = this.extractFrames(recording);
+    this.currentIndex = 0;
+  }
+  
+  /**
+   * 从录制数据中提取所有帧
+   */
+  private extractFrames(recording: ExecutionRecording): TimelineFrame[] {
+    const frames: TimelineFrame[] = [];
+    
+    for (const execution of recording.executions) {
+      for (const task of execution.tasks) {
+        if (task.recorder) {
+          for (const frame of task.recorder) {
+            frames.push({
+              ...frame,
+              taskName: execution.name,
+              taskType: task.type,
+              taskSubType: task.subType,
+              taskStatus: task.status
+            });
+          }
+        }
+      }
+    }
+    
+    return frames.sort((a, b) => a.ts - b.ts);
+  }
+  
+  /**
+   * 播放/暂停切换
+   */
+  togglePlay(): void {
+    this.isPlaying = !this.isPlaying;
+    if (this.isPlaying) {
+      this.playLoop();
+    }
+  }
+  
+  /**
+   * 跳转到指定帧
+   */
+  seekTo(index: number): void {
+    this.currentIndex = Math.max(0, Math.min(index, this.frames.length - 1));
+  }
+  
+  /**
+   * 上一帧
+   */
+  previousFrame(): void {
+    if (this.currentIndex > 0) {
+      this.currentIndex--;
+    }
+  }
+  
+  /**
+   * 下一帧
+   */
+  nextFrame(): void {
+    if (this.currentIndex < this.frames.length - 1) {
+      this.currentIndex++;
+    }
+  }
+  
+  /**
+   * 获取当前帧
+   */
+  getCurrentFrame(): TimelineFrame | null {
+    return this.frames[this.currentIndex] || null;
+  }
+  
+  /**
+   * 设置播放速度
+   */
+  setSpeed(speed: number): void {
+    this.playbackSpeed = Math.max(0.25, Math.min(4.0, speed));
+  }
+  
+  /**
+   * 播放循环
+   */
+  private async playLoop(): Promise<void> {
+    while (this.isPlaying && this.currentIndex < this.frames.length - 1) {
+      const currentFrame = this.frames[this.currentIndex];
+      const nextFrame = this.frames[this.currentIndex + 1];
+      const delay = (nextFrame.ts - currentFrame.ts) / this.playbackSpeed;
+      
+      await sleep(Math.max(50, delay));
+      
+      if (this.isPlaying) {
+        this.currentIndex++;
+      }
+    }
+    
+    this.isPlaying = false;
+  }
+}
+```
+
+### 4.5 交互操作可视化特效
+
+为了让用户清晰看到 AI 在哪里执行了操作，录屏模块提供丰富的交互可视化特效。
+
+#### 4.5.1 特效类型枚举
+
+```typescript
+/**
+ * 交互特效类型
+ */
+enum InteractionEffectType {
+  /** 点击涟漪 - 圆形扩散动画 */
+  CLICK_RIPPLE = 'click_ripple',
+  /** 双击涟漪 - 双层扩散动画 */
+  DOUBLE_CLICK_RIPPLE = 'double_click_ripple',
+  /** 长按脉冲 - 持续脉动动画 */
+  LONG_PRESS_PULSE = 'long_press_pulse',
+  /** 右键菜单指示 */
+  RIGHT_CLICK_INDICATOR = 'right_click_indicator',
+  /** 拖拽轨迹 - 起点到终点的曲线 */
+  DRAG_TRAIL = 'drag_trail',
+  /** 滚动指示 - 方向箭头动画 */
+  SCROLL_INDICATOR = 'scroll_indicator',
+  /** 输入高亮 - 文本框闪烁 */
+  INPUT_HIGHLIGHT = 'input_highlight',
+  /** 悬停光晕 */
+  HOVER_GLOW = 'hover_glow',
+  /** 光标移动轨迹 */
+  CURSOR_TRAIL = 'cursor_trail'
+}
+```
+
+#### 4.5.2 点击涟漪特效
+
+```typescript
+/**
+ * 点击涟漪特效配置
+ */
+interface ClickRippleConfig {
+  /** 涟漪中心点 */
+  center: [number, number];
+  /** 涟漪颜色 (RGBA) */
+  color: string;
+  /** 最大半径 (像素) */
+  maxRadius: number;
+  /** 动画持续时间 (毫秒) */
+  duration: number;
+  /** 涟漪圈数 */
+  rings: number;
+}
+
+/**
+ * 点击涟漪渲染器
+ */
+class ClickRippleRenderer {
+  private defaultConfig: ClickRippleConfig = {
+    center: [0, 0],
+    color: 'rgba(255, 87, 34, 0.8)',  // 橙红色
+    maxRadius: 40,
+    duration: 600,
+    rings: 3
+  };
+
+  /**
+   * 在截图上绘制点击涟漪效果 (静态帧)
+   */
+  async renderRipple(
+    screenshot: string,
+    clickPoint: [number, number],
+    config?: Partial<ClickRippleConfig>
+  ): Promise<string> {
+    const cfg = { ...this.defaultConfig, ...config, center: clickPoint };
+    const { width, height, jimpImage } = await loadImage(screenshot);
+    
+    // 绘制多层涟漪圈
+    for (let ring = 0; ring < cfg.rings; ring++) {
+      const radius = cfg.maxRadius * (ring + 1) / cfg.rings;
+      const opacity = 1 - (ring / cfg.rings) * 0.7;
+      await this.drawRippleRing(jimpImage, cfg.center, radius, cfg.color, opacity);
+    }
+    
+    // 绘制中心点标记
+    await this.drawCenterDot(jimpImage, cfg.center, 6, cfg.color);
+    
+    return await jimpImage.getBase64Async(MIME_JPEG);
+  }
+
+  /**
+   * 绘制单个涟漪圈
+   */
+  private async drawRippleRing(
+    image: JimpImage,
+    center: [number, number],
+    radius: number,
+    color: string,
+    opacity: number
+  ): Promise<void> {
+    const [cx, cy] = center;
+    const thickness = 3;
+    
+    // 扫描绘制圆环
+    for (let angle = 0; angle < 360; angle += 1) {
+      const radian = (angle * Math.PI) / 180;
+      for (let r = radius - thickness; r <= radius; r++) {
+        const x = Math.round(cx + r * Math.cos(radian));
+        const y = Math.round(cy + r * Math.sin(radian));
+        this.setPixelWithOpacity(image, x, y, color, opacity);
+      }
+    }
+  }
+
+  /**
+   * 绘制中心实心圆点
+   */
+  private async drawCenterDot(
+    image: JimpImage,
+    center: [number, number],
+    radius: number,
+    color: string
+  ): Promise<void> {
+    const [cx, cy] = center;
+    
+    for (let x = cx - radius; x <= cx + radius; x++) {
+      for (let y = cy - radius; y <= cy + radius; y++) {
+        const distance = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+        if (distance <= radius) {
+          this.setPixelWithOpacity(image, Math.round(x), Math.round(y), color, 1);
+        }
+      }
+    }
+  }
+}
+```
+
+#### 4.5.3 拖拽轨迹特效
+
+```typescript
+/**
+ * 拖拽轨迹配置
+ */
+interface DragTrailConfig {
+  /** 起点 */
+  from: [number, number];
+  /** 终点 */
+  to: [number, number];
+  /** 轨迹颜色 */
+  color: string;
+  /** 轨迹粗细 */
+  thickness: number;
+  /** 是否显示箭头 */
+  showArrow: boolean;
+  /** 是否显示起止点标记 */
+  showEndpoints: boolean;
+  /** 轨迹样式 */
+  style: 'solid' | 'dashed' | 'dotted';
+}
+
+/**
+ * 拖拽轨迹渲染器
+ */
+class DragTrailRenderer {
+  /**
+   * 绘制拖拽轨迹
+   */
+  async renderTrail(
+    screenshot: string,
+    from: [number, number],
+    to: [number, number],
+    config?: Partial<DragTrailConfig>
+  ): Promise<string> {
+    const cfg: DragTrailConfig = {
+      from,
+      to,
+      color: 'rgba(33, 150, 243, 0.9)',  // 蓝色
+      thickness: 4,
+      showArrow: true,
+      showEndpoints: true,
+      style: 'solid',
+      ...config
+    };
+    
+    const { jimpImage } = await loadImage(screenshot);
+    
+    // 绘制起点标记 (绿色圆圈)
+    if (cfg.showEndpoints) {
+      await this.drawEndpoint(jimpImage, cfg.from, 'rgba(76, 175, 80, 1)', 'start');
+    }
+    
+    // 绘制轨迹线
+    await this.drawLine(jimpImage, cfg.from, cfg.to, cfg.color, cfg.thickness, cfg.style);
+    
+    // 绘制箭头
+    if (cfg.showArrow) {
+      await this.drawArrowHead(jimpImage, cfg.from, cfg.to, cfg.color);
+    }
+    
+    // 绘制终点标记 (红色圆圈)
+    if (cfg.showEndpoints) {
+      await this.drawEndpoint(jimpImage, cfg.to, 'rgba(244, 67, 54, 1)', 'end');
+    }
+    
+    return await jimpImage.getBase64Async(MIME_JPEG);
+  }
+
+  /**
+   * 绘制端点标记
+   */
+  private async drawEndpoint(
+    image: JimpImage,
+    point: [number, number],
+    color: string,
+    type: 'start' | 'end'
+  ): Promise<void> {
+    const radius = type === 'start' ? 8 : 10;
+    // 绘制实心圆
+    await this.drawFilledCircle(image, point, radius, color);
+    // 绘制白色内圈
+    await this.drawFilledCircle(image, point, radius - 3, 'rgba(255, 255, 255, 1)');
+  }
+
+  /**
+   * 使用 Bresenham 算法绘制线条
+   */
+  private async drawLine(
+    image: JimpImage,
+    from: [number, number],
+    to: [number, number],
+    color: string,
+    thickness: number,
+    style: 'solid' | 'dashed' | 'dotted'
+  ): Promise<void> {
+    const [x1, y1] = from;
+    const [x2, y2] = to;
+    
+    const dx = Math.abs(x2 - x1);
+    const dy = Math.abs(y2 - y1);
+    const sx = x1 < x2 ? 1 : -1;
+    const sy = y1 < y2 ? 1 : -1;
+    
+    let err = dx - dy;
+    let x = x1, y = y1;
+    let dashCounter = 0;
+    
+    while (true) {
+      // 根据样式决定是否绘制
+      const shouldDraw = 
+        style === 'solid' ||
+        (style === 'dashed' && (dashCounter % 12) < 8) ||
+        (style === 'dotted' && (dashCounter % 6) < 3);
+      
+      if (shouldDraw) {
+        // 绘制粗线 (以当前点为中心的小圆)
+        for (let tx = -thickness/2; tx <= thickness/2; tx++) {
+          for (let ty = -thickness/2; ty <= thickness/2; ty++) {
+            if (Math.sqrt(tx*tx + ty*ty) <= thickness/2) {
+              this.setPixel(image, x + tx, y + ty, color);
+            }
+          }
+        }
+      }
+      
+      if (x === x2 && y === y2) break;
+      
+      const e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; x += sx; }
+      if (e2 < dx) { err += dx; y += sy; }
+      dashCounter++;
+    }
+  }
+
+  /**
+   * 绘制箭头
+   */
+  private async drawArrowHead(
+    image: JimpImage,
+    from: [number, number],
+    to: [number, number],
+    color: string
+  ): Promise<void> {
+    const arrowLength = 20;
+    const arrowAngle = Math.PI / 6; // 30度
+    
+    const angle = Math.atan2(to[1] - from[1], to[0] - from[0]);
+    
+    const arrow1 = [
+      to[0] - arrowLength * Math.cos(angle - arrowAngle),
+      to[1] - arrowLength * Math.sin(angle - arrowAngle)
+    ] as [number, number];
+    
+    const arrow2 = [
+      to[0] - arrowLength * Math.cos(angle + arrowAngle),
+      to[1] - arrowLength * Math.sin(angle + arrowAngle)
+    ] as [number, number];
+    
+    await this.drawLine(image, arrow1, to, color, 3, 'solid');
+    await this.drawLine(image, arrow2, to, color, 3, 'solid');
+  }
+}
+```
+
+#### 4.5.4 滚动指示特效
+
+```typescript
+/**
+ * 滚动指示配置
+ */
+interface ScrollIndicatorConfig {
+  /** 滚动区域中心点 */
+  center: [number, number];
+  /** 滚动方向 */
+  direction: 'up' | 'down' | 'left' | 'right';
+  /** 滚动距离 (像素) */
+  distance: number;
+  /** 指示器颜色 */
+  color: string;
+}
+
+/**
+ * 滚动指示渲染器
+ */
+class ScrollIndicatorRenderer {
+  /**
+   * 绘制滚动指示
+   */
+  async renderIndicator(
+    screenshot: string,
+    config: ScrollIndicatorConfig
+  ): Promise<string> {
+    const { jimpImage } = await loadImage(screenshot);
+    const { center, direction, color = 'rgba(156, 39, 176, 0.8)' } = config;
+    
+    // 根据方向计算箭头位置
+    const arrowPositions = this.calculateArrowPositions(center, direction);
+    
+    // 绘制多个渐变箭头表示滚动
+    for (let i = 0; i < arrowPositions.length; i++) {
+      const opacity = 1 - (i * 0.25);
+      await this.drawScrollArrow(jimpImage, arrowPositions[i], direction, color, opacity);
+    }
+    
+    // 绘制滚动区域边框
+    await this.drawScrollRegion(jimpImage, center, direction);
+    
+    return await jimpImage.getBase64Async(MIME_JPEG);
+  }
+
+  /**
+   * 计算箭头位置序列
+   */
+  private calculateArrowPositions(
+    center: [number, number],
+    direction: 'up' | 'down' | 'left' | 'right'
+  ): [number, number][] {
+    const positions: [number, number][] = [];
+    const spacing = 25;
+    
+    for (let i = 0; i < 3; i++) {
+      let offset = i * spacing;
+      switch (direction) {
+        case 'up':
+          positions.push([center[0], center[1] - offset]);
+          break;
+        case 'down':
+          positions.push([center[0], center[1] + offset]);
+          break;
+        case 'left':
+          positions.push([center[0] - offset, center[1]]);
+          break;
+        case 'right':
+          positions.push([center[0] + offset, center[1]]);
+          break;
+      }
+    }
+    
+    return positions;
+  }
+
+  /**
+   * 绘制方向箭头符号
+   */
+  private async drawScrollArrow(
+    image: JimpImage,
+    position: [number, number],
+    direction: 'up' | 'down' | 'left' | 'right',
+    color: string,
+    opacity: number
+  ): Promise<void> {
+    const size = 15;
+    const thickness = 3;
+    
+    // 根据方向绘制 V 形或 ^ 形箭头
+    // ... 具体绘制逻辑
+  }
+}
+```
+
+#### 4.5.5 输入操作高亮
+
+```typescript
+/**
+ * 输入高亮配置
+ */
+interface InputHighlightConfig {
+  /** 输入框边界 */
+  rect: ElementRect;
+  /** 输入的文本内容 */
+  inputText: string;
+  /** 高亮颜色 */
+  color: string;
+  /** 是否显示光标 */
+  showCursor: boolean;
+  /** 是否显示输入文本气泡 */
+  showTextBubble: boolean;
+}
+
+/**
+ * 输入高亮渲染器
+ */
+class InputHighlightRenderer {
+  /**
+   * 绘制输入高亮效果
+   */
+  async renderHighlight(
+    screenshot: string,
+    config: InputHighlightConfig
+  ): Promise<string> {
+    const { jimpImage } = await loadImage(screenshot);
+    const { rect, inputText, color = 'rgba(255, 193, 7, 0.8)' } = config;
+    
+    // 绘制输入框发光边框
+    await this.drawGlowBorder(jimpImage, rect, color);
+    
+    // 绘制闪烁光标指示
+    if (config.showCursor) {
+      const cursorX = rect.left + rect.width - 5;
+      const cursorY = rect.top + 5;
+      await this.drawCursor(jimpImage, cursorX, cursorY, rect.height - 10);
+    }
+    
+    // 绘制输入文本气泡
+    if (config.showTextBubble && inputText) {
+      await this.drawTextBubble(jimpImage, rect, inputText);
+    }
+    
+    return await jimpImage.getBase64Async(MIME_JPEG);
+  }
+
+  /**
+   * 绘制发光边框
+   */
+  private async drawGlowBorder(
+    image: JimpImage,
+    rect: ElementRect,
+    color: string
+  ): Promise<void> {
+    const glowLayers = 4;
+    
+    for (let layer = glowLayers; layer >= 0; layer--) {
+      const opacity = (glowLayers - layer + 1) / (glowLayers + 1) * 0.5;
+      const expandedRect = {
+        left: rect.left - layer * 2,
+        top: rect.top - layer * 2,
+        width: rect.width + layer * 4,
+        height: rect.height + layer * 4
+      };
+      
+      await this.drawRectBorder(image, expandedRect, color, opacity, 2);
+    }
+  }
+
+  /**
+   * 绘制文本气泡
+   */
+  private async drawTextBubble(
+    image: JimpImage,
+    rect: ElementRect,
+    text: string
+  ): Promise<void> {
+    // 在输入框上方绘制气泡显示输入内容
+    const bubbleX = rect.left;
+    const bubbleY = rect.top - 30;
+    const bubbleWidth = Math.min(text.length * 10 + 20, 300);
+    const bubbleHeight = 25;
+    
+    // 绘制气泡背景
+    await this.drawRoundedRect(image, {
+      left: bubbleX,
+      top: bubbleY,
+      width: bubbleWidth,
+      height: bubbleHeight
+    }, 'rgba(50, 50, 50, 0.9)', 5);
+    
+    // 绘制气泡箭头
+    // ... 指向输入框的小三角
+    
+    // 绘制文本 (需要字体支持)
+    // await this.drawText(image, text, bubbleX + 10, bubbleY + 5, 'white');
+  }
+}
+```
+
+#### 4.5.6 统一特效管理器
+
+```typescript
+/**
+ * 交互特效管理器
+ * 统一管理所有交互操作的可视化特效
+ */
+class InteractionEffectManager {
+  private clickRenderer = new ClickRippleRenderer();
+  private dragRenderer = new DragTrailRenderer();
+  private scrollRenderer = new ScrollIndicatorRenderer();
+  private inputRenderer = new InputHighlightRenderer();
+
+  /**
+   * 根据操作类型自动添加对应特效
+   */
+  async addEffectForAction(
+    screenshot: string,
+    action: TaskRecord
+  ): Promise<string> {
+    const { subType, param, output } = action;
+    
+    switch (subType) {
+      case 'Tap':
+      case 'Click':
+        const clickPoint = output?.element?.center || this.extractCenterFromParam(param);
+        if (clickPoint) {
+          return await this.clickRenderer.renderRipple(screenshot, clickPoint);
+        }
+        break;
+        
+      case 'DoubleClick':
+        const dblClickPoint = output?.element?.center || this.extractCenterFromParam(param);
+        if (dblClickPoint) {
+          return await this.clickRenderer.renderRipple(screenshot, dblClickPoint, {
+            rings: 5,
+            color: 'rgba(233, 30, 99, 0.8)'
+          });
+        }
+        break;
+        
+      case 'DragAndDrop':
+        const fromPoint = this.extractCenterFromParam(param?.from);
+        const toPoint = this.extractCenterFromParam(param?.to);
+        if (fromPoint && toPoint) {
+          return await this.dragRenderer.renderTrail(screenshot, fromPoint, toPoint);
+        }
+        break;
+        
+      case 'Scroll':
+        const scrollCenter = output?.element?.center || [screenshot.width / 2, screenshot.height / 2];
+        return await this.scrollRenderer.renderIndicator(screenshot, {
+          center: scrollCenter as [number, number],
+          direction: param?.direction || 'down',
+          distance: param?.distance || 200,
+          color: 'rgba(156, 39, 176, 0.8)'
+        });
+        
+      case 'Input':
+        const inputRect = output?.element?.rect;
+        if (inputRect) {
+          return await this.inputRenderer.renderHighlight(screenshot, {
+            rect: inputRect,
+            inputText: param?.value || '',
+            color: 'rgba(255, 193, 7, 0.8)',
+            showCursor: true,
+            showTextBubble: true
+          });
+        }
+        break;
+        
+      case 'Hover':
+        const hoverPoint = output?.element?.center;
+        if (hoverPoint) {
+          return await this.clickRenderer.renderRipple(screenshot, hoverPoint, {
+            color: 'rgba(100, 181, 246, 0.5)',
+            maxRadius: 30,
+            rings: 2
+          });
+        }
+        break;
+    }
+    
+    return screenshot; // 无特效则返回原图
+  }
+
+  /**
+   * 从参数中提取中心点
+   */
+  private extractCenterFromParam(param: any): [number, number] | null {
+    if (!param) return null;
+    
+    if (param.center) return param.center;
+    
+    if (param.rect) {
+      return [
+        param.rect.left + param.rect.width / 2,
+        param.rect.top + param.rect.height / 2
+      ];
+    }
+    
+    if (param.bbox && param.bbox.length === 4) {
+      return [
+        (param.bbox[0] + param.bbox[2]) / 2,
+        (param.bbox[1] + param.bbox[3]) / 2
+      ];
+    }
+    
+    return null;
+  }
+}
+```
+
+#### 4.5.7 特效配置选项
+
+```typescript
+/**
+ * 全局特效配置
+ */
+interface EffectGlobalConfig {
+  /** 是否启用交互特效 */
+  enabled: boolean;
+  /** 特效主题 */
+  theme: 'default' | 'dark' | 'light' | 'colorful';
+  /** 特效强度 (0-1) */
+  intensity: number;
+  /** 各类特效的单独配置 */
+  effects: {
+    clickRipple: Partial<ClickRippleConfig>;
+    dragTrail: Partial<DragTrailConfig>;
+    scrollIndicator: Partial<ScrollIndicatorConfig>;
+    inputHighlight: Partial<InputHighlightConfig>;
+  };
+}
+
+/** 预设主题 */
+const EFFECT_THEMES = {
+  default: {
+    clickColor: 'rgba(255, 87, 34, 0.8)',   // 橙色涟漪
+    dragColor: 'rgba(33, 150, 243, 0.9)',    // 蓝色轨迹
+    scrollColor: 'rgba(156, 39, 176, 0.8)',  // 紫色滚动
+    inputColor: 'rgba(255, 193, 7, 0.8)'     // 黄色输入
+  },
+  dark: {
+    clickColor: 'rgba(255, 255, 255, 0.8)',
+    dragColor: 'rgba(200, 200, 200, 0.9)',
+    scrollColor: 'rgba(180, 180, 180, 0.8)',
+    inputColor: 'rgba(255, 255, 255, 0.8)'
+  },
+  colorful: {
+    clickColor: 'rgba(76, 175, 80, 0.8)',    // 绿色
+    dragColor: 'rgba(233, 30, 99, 0.9)',     // 粉色
+    scrollColor: 'rgba(0, 188, 212, 0.8)',   // 青色
+    inputColor: 'rgba(255, 152, 0, 0.8)'     // 橙色
+  }
+};
+```
+
+---
+
+## 5. 存储与导出
+
+### 5.1 录制数据序列化
+
+```typescript
+/**
+ * 录制数据序列化器
+ */
+class RecordingSerializer {
+  /**
+   * 序列化为 JSON 字符串
+   */
+  serialize(recording: ExecutionRecording, indent?: number): string {
+    return JSON.stringify(recording, this.replacer, indent);
+  }
+  
+  /**
+   * 自定义序列化处理
+   */
+  private replacer(key: string, value: any): any {
+    // 处理特殊对象类型
+    if (value?.constructor?.name === 'Page') {
+      return '[Page object]';
+    }
+    if (value?.constructor?.name === 'Browser') {
+      return '[Browser object]';
+    }
+    if (typeof value?.toSerializable === 'function') {
+      return value.toSerializable();
+    }
+    return value;
+  }
+  
+  /**
+   * 从 JSON 字符串反序列化
+   */
+  deserialize(json: string): ExecutionRecording {
+    return JSON.parse(json, this.reviver);
+  }
+  
+  /**
+   * 自定义反序列化处理
+   */
+  private reviver(key: string, value: any): any {
+    // 恢复截图数据对象
+    if (key === 'screenshot' && ScreenshotData.isSerializedData(value)) {
+      return ScreenshotData.fromSerializedData(value);
+    }
+    return value;
+  }
+}
+```
+
+### 5.2 HTML 报告生成
+
+```typescript
+/**
+ * HTML 报告生成器
+ */
+class HTMLReportGenerator {
+  private template: string;
+  
+  /**
+   * 生成可独立运行的 HTML 报告
+   */
+  generateReport(recording: ExecutionRecording): string {
+    const dataScript = this.embedData(recording);
+    const viewerApp = this.getViewerApp();
+    
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>重明测试执行报告 - ${recording.groupName}</title>
+  <style>${this.getStyles()}</style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="midscene_web_dump" type="application/json">
+    ${this.escapeForScript(JSON.stringify(recording))}
+  </script>
+  <script>${viewerApp}</script>
+</body>
+</html>`;
+  }
+  
+  /**
+   * 追加数据到已有报告
+   */
+  appendToReport(filePath: string, recording: ExecutionRecording): void {
+    const newData = this.embedData(recording);
+    const content = fs.readFileSync(filePath, 'utf-8');
+    
+    // 在 </html> 前插入新数据
+    const insertPosition = content.lastIndexOf('</html>');
+    const updatedContent = 
+      content.slice(0, insertPosition) + 
+      newData + '\n' + 
+      content.slice(insertPosition);
+    
+    fs.writeFileSync(filePath, updatedContent);
+  }
+  
+  /**
+   * 转义脚本内容
+   */
+  private escapeForScript(content: string): string {
+    return content
+      .replace(/<\/script>/gi, '<\\/script>')
+      .replace(/<!--/g, '<\\!--');
+  }
+}
+```
+
+### 5.3 视频导出 (可选)
+
+```typescript
+/**
+ * 视频导出器 (将帧序列转换为视频)
+ */
+class VideoExporter {
+  /**
+   * 导出为 WebP 动画
+   */
+  async exportToWebP(
+    frames: TimelineFrame[],
+    options: WebPExportOptions
+  ): Promise<Buffer> {
+    const { frameRate = 2, quality = 80 } = options;
+    
+    // 使用 sharp 或其他库生成动画 WebP
+    const images = await Promise.all(
+      frames.map(f => this.frameToBuffer(f.screenshot.base64))
+    );
+    
+    return await sharp(images[0])
+      .webp({ quality })
+      .toBuffer();
+  }
+  
+  /**
+   * 导出为 GIF
+   */
+  async exportToGIF(
+    frames: TimelineFrame[],
+    options: GIFExportOptions
+  ): Promise<Buffer> {
+    const { frameDelay = 500, width = 800 } = options;
+    
+    // 计算帧间延迟
+    const delays = this.calculateFrameDelays(frames, frameDelay);
+    
+    // 生成 GIF
+    // 实际实现需要使用 gifencoder 或类似库
+    return Buffer.from([]);
+  }
+  
+  /**
+   * 计算帧间延迟
+   */
+  private calculateFrameDelays(
+    frames: TimelineFrame[], 
+    minDelay: number
+  ): number[] {
+    const delays: number[] = [];
+    
+    for (let i = 0; i < frames.length - 1; i++) {
+      const delay = frames[i + 1].ts - frames[i].ts;
+      delays.push(Math.max(minDelay, delay));
+    }
+    
+    // 最后一帧延迟
+    delays.push(1000);
+    
+    return delays;
+  }
+}
+```
+
+---
+
+## 6. 与其他模块集成
+
+### 6.1 与 Turbo 执行引擎集成
+
+```typescript
+/**
+ * 在 TaskRunner 中集成录制
+ */
+class TaskRunner {
+  private recorder: ExecutionRecorder;
+  
+  async executeTask(task: Task): Promise<TaskResult> {
+    // 任务开始前捕获
+    const beforeFrame = await this.recorder.capture('before-action');
+    this.attachRecorderItem(task, beforeFrame.screenshot, 'before-action');
+    
+    try {
+      // 执行任务
+      const result = await task.executor(task.param, context);
+      
+      // 任务成功后捕获
+      const afterFrame = await this.recorder.capture('after-action');
+      this.attachRecorderItem(task, afterFrame.screenshot, 'after-action');
+      
+      return result;
+    } catch (error) {
+      // 错误时捕获
+      const errorFrame = await this.recorder.capture('on-error');
+      this.attachRecorderItem(task, errorFrame.screenshot, 'on-error');
+      
+      throw error;
+    }
+  }
+  
+  /**
+   * 附加录制帧到任务
+   */
+  private attachRecorderItem(
+    task: Task, 
+    screenshot: ScreenshotData, 
+    timing: string
+  ): void {
+    if (!task.recorder) {
+      task.recorder = [];
+    }
+    
+    task.recorder.push({
+      type: 'screenshot',
+      ts: Date.now(),
+      screenshot,
+      timing
+    });
+  }
+}
+```
+
+### 6.2 与缺陷分析智能体集成
+
+```typescript
+/**
+ * 为缺陷分析提供视觉上下文
+ */
+class DefectAnalysisIntegration {
+  /**
+   * 提取失败步骤的截图上下文
+   */
+  extractFailureContext(recording: ExecutionRecording): FailureContext[] {
+    const contexts: FailureContext[] = [];
+    
+    for (const execution of recording.executions) {
+      for (const task of execution.tasks) {
+        if (task.status === 'failed' && task.recorder) {
+          contexts.push({
+            taskName: execution.name,
+            taskType: task.type,
+            subType: task.subType,
+            error: task.error,
+            errorStack: task.errorStack,
+            screenshots: task.recorder.map(r => r.screenshot.base64),
+            timing: task.timing,
+            thought: task.thought
+          });
+        }
+      }
+    }
+    
+    return contexts;
+  }
+  
+  /**
+   * 生成用于 AI 分析的图文描述
+   */
+  async generateAnalysisPrompt(context: FailureContext): Promise<string> {
+    const lastScreenshot = context.screenshots[context.screenshots.length - 1];
+    
+    return `
+## 失败任务分析
+
+### 任务信息
+- 名称: ${context.taskName}
+- 类型: ${context.taskType} / ${context.subType}
+- 耗时: ${context.timing.cost}ms
+
+### 错误信息
+\`\`\`
+${context.error}
+\`\`\`
+
+### AI 思考过程
+${context.thought || '无'}
+
+### 屏幕截图
+[截图已附加]
+
+请分析此失败的可能原因并提供修复建议。
+`;
+  }
+}
+```
+
+---
+
+## 7. 配置与扩展
+
+### 7.1 录制配置选项
+
+```typescript
+/**
+ * 录制模块配置
+ */
+interface RecorderConfig {
+  /** 是否启用录制 */
+  enabled: boolean;
+  /** 截图格式 */
+  imageFormat: 'png' | 'jpeg' | 'webp';
+  /** 截图质量 (仅 jpeg/webp) */
+  imageQuality: number;
+  /** 是否压缩存储 */
+  compressStorage: boolean;
+  /** 最大帧数限制 */
+  maxFrames: number;
+  /** 捕获策略 */
+  captureStrategy: CaptureStrategy;
+  /** 是否自动生成报告 */
+  autoGenerateReport: boolean;
+  /** 报告输出目录 */
+  reportOutputDir: string;
+  /** 报告文件名格式 */
+  reportFileNamePattern: string;
+}
+
+/** 默认配置 */
+const DEFAULT_RECORDER_CONFIG: RecorderConfig = {
+  enabled: true,
+  imageFormat: 'jpeg',
+  imageQuality: 90,
+  compressStorage: true,
+  maxFrames: 1000,
+  captureStrategy: DEFAULT_STRATEGY,
+  autoGenerateReport: true,
+  reportOutputDir: './midscene-report',
+  reportFileNamePattern: '{testId}-{timestamp}'
+};
+```
+
+### 7.2 自定义标注样式
+
+```typescript
+/**
+ * 标注样式提供者接口
+ */
+interface AnnotationStyleProvider {
+  /** 获取元素边框颜色 */
+  getBorderColor(element: ElementPosition, index: number): number;
+  /** 获取标签背景色 */
+  getLabelBackground(element: ElementPosition, index: number): number;
+  /** 获取标签文字 */
+  getLabelText(element: ElementPosition, index: number): string;
+  /** 是否显示提示文本 */
+  showPromptText(): boolean;
+}
+
+/**
+ * 默认样式提供者
+ */
+class DefaultStyleProvider implements AnnotationStyleProvider {
+  private colors = DEFAULT_COLORS;
+  
+  getBorderColor(element: ElementPosition, index: number): number {
+    return this.colors[index % this.colors.length].rect;
+  }
+  
+  getLabelBackground(element: ElementPosition, index: number): number {
+    return this.colors[index % this.colors.length].rect;
+  }
+  
+  getLabelText(element: ElementPosition, index: number): string {
+    return String(index);
+  }
+  
+  showPromptText(): boolean {
+    return true;
+  }
+}
+```
+
+---
+
+## 8. 性能优化
+
+### 8.1 增量存储
+
+```typescript
+/**
+ * 增量帧存储
+ * 仅存储与上一帧的差异部分
+ */
+class IncrementalFrameStore {
+  private baseFrame: string | null = null;
+  private diffFrames: DiffFrame[] = [];
+  
+  /**
+   * 添加帧 (自动计算差异)
+   */
+  async addFrame(screenshot: string): Promise<void> {
+    if (!this.baseFrame) {
+      this.baseFrame = screenshot;
+      return;
+    }
+    
+    // 计算与上一帧的差异
+    const diff = await this.computeDiff(this.getLastFrame(), screenshot);
+    
+    // 如果差异过大，存储为新的基准帧
+    if (diff.changeRatio > 0.5) {
+      this.diffFrames.push({ type: 'keyframe', data: screenshot });
+    } else {
+      this.diffFrames.push({ type: 'diff', data: diff.patch });
+    }
+  }
+  
+  /**
+   * 重建指定索引的帧
+   */
+  async reconstructFrame(index: number): Promise<string> {
+    let frame = this.baseFrame!;
+    
+    for (let i = 0; i <= index && i < this.diffFrames.length; i++) {
+      const diff = this.diffFrames[i];
+      if (diff.type === 'keyframe') {
+        frame = diff.data;
+      } else {
+        frame = await this.applyDiff(frame, diff.data);
+      }
+    }
+    
+    return frame;
+  }
+}
+```
+
+### 8.2 懒加载与缓存
+
+```typescript
+/**
+ * 帧懒加载管理器
+ */
+class LazyFrameLoader {
+  private cache = new LRUCache<string, string>({ max: 50 });
+  private loadingPromises = new Map<string, Promise<string>>();
+  
+  /**
+   * 获取帧 (带缓存)
+   */
+  async getFrame(frameId: string): Promise<string> {
+    // 检查缓存
+    const cached = this.cache.get(frameId);
+    if (cached) return cached;
+    
+    // 检查是否正在加载
+    const loading = this.loadingPromises.get(frameId);
+    if (loading) return loading;
+    
+    // 开始加载
+    const promise = this.loadFrame(frameId);
+    this.loadingPromises.set(frameId, promise);
+    
+    try {
+      const frame = await promise;
+      this.cache.set(frameId, frame);
+      return frame;
+    } finally {
+      this.loadingPromises.delete(frameId);
+    }
+  }
+  
+  /**
+   * 预加载附近帧
+   */
+  async preloadNearby(currentIndex: number, frames: TimelineFrame[]): Promise<void> {
+    const preloadRange = 3;
+    const start = Math.max(0, currentIndex - preloadRange);
+    const end = Math.min(frames.length - 1, currentIndex + preloadRange);
+    
+    for (let i = start; i <= end; i++) {
+      if (i !== currentIndex) {
+        this.getFrame(frames[i].id); // 异步预加载，不等待
+      }
+    }
+  }
+}
+```
+
+---
+
+## 9. 使用示例
+
+### 9.1 基本录制与回放
+
+```typescript
+// 创建录制会话
+const recorder = new ExecutionRecorder({
+  enabled: true,
+  imageQuality: 90
+});
+
+// 在测试执行中自动录制
+const agent = new PageAgent(page, {
+  generateReport: true,
+  reportFileName: 'my-test'
+});
+
+// 执行测试 (自动录制)
+await agent.aiAct('点击登录按钮');
+await agent.aiAct('输入用户名 "admin"');
+await agent.aiAct('输入密码 "123456"');
+await agent.aiAct('点击提交');
+
+// 获取录制数据
+const recording = agent.dump;
+
+// 生成 HTML 报告
+const generator = new HTMLReportGenerator();
+const html = generator.generateReport(recording);
+fs.writeFileSync('report.html', html);
+```
+
+### 9.2 自定义标注样式
+
+```typescript
+// 创建自定义样式提供者
+class MyStyleProvider implements AnnotationStyleProvider {
+  getBorderColor(element, index) {
+    // 根据元素类型返回不同颜色
+    if (element.type === 'button') return 0x00ff00ff; // 绿色
+    if (element.type === 'input') return 0x0000ffff;  // 蓝色
+    return 0xff0000ff; // 红色
+  }
+  
+  getLabelText(element, index) {
+    return element.name || String(index);
+  }
+}
+
+// 使用自定义样式
+const annotator = new ElementAnnotator({
+  styleProvider: new MyStyleProvider()
+});
+```
+
+### 9.3 导出为 GIF
+
+```typescript
+// 获取录制数据
+const recording = agent.dump;
+
+// 创建视频导出器
+const exporter = new VideoExporter();
+
+// 导出为 GIF
+const gif = await exporter.exportToGIF(recording.executions[0].tasks, {
+  frameDelay: 500,
+  width: 800
+});
+
+fs.writeFileSync('execution.gif', gif);
+```
+
+---
+
+## 10. 附录
+
+### 10.1 术语表
+
+| 术语 | 英文 | 定义 |
+|------|------|------|
+| 录制帧 | Frame | 单次截图及其元数据 |
+| 时间线 | Timeline | 按时间排序的帧序列 |
+| 基准帧 | Keyframe | 完整存储的帧，用于增量存储 |
+| 差异帧 | Diff Frame | 仅存储与前帧差异的帧 |
+| 标注层 | Annotation Overlay | 覆盖在截图上的元素标记层 |
+
+### 10.2 文件格式说明
+
+**报告文件结构：**
+```
+report.html
+├── <head> - 样式和元数据
+├── <body>
+│   ├── <div id="root"> - React 应用挂载点
+│   ├── <script type="midscene_web_dump"> - 录制数据 (JSON)
+│   └── <script> - 查看器应用代码
+└── </html>
+```
+
+**录制数据 JSON 结构：**
+```json
+{
+  "sdkVersion": "1.3.3",
+  "groupName": "测试报告名称",
+  "groupDescription": "描述信息",
+  "modelBriefs": [...],
+  "executions": [
+    {
+      "logTime": 1234567890,
+      "name": "任务名称",
+      "tasks": [...]
+    }
+  ]
+}
+```

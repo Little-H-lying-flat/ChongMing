@@ -1,0 +1,99 @@
+[project]
+name = "chongming"
+version = "2.0.0"
+description = "重明 - AI Agent 驱动的自动化质量工程平台"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Neural-Phoenix Team", email = "chongming@example.com" }
+]
+keywords = ["ai-testing", "automation", "llm", "web-agent"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    # === Web Framework ===
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27.0",
+    
+    # === Database ===
+    "sqlalchemy>=2.0.25",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.1",
+    "redis>=5.0.1",
+    
+    # === Celery Task Queue ===
+    "celery[redis]>=5.3.6",
+    "flower>=2.0.1",
+    
+    # === LLM & AI ===
+    "openai>=1.10.0",
+    "langchain>=0.1.0",
+    "langchain-openai>=0.0.5",
+    "langgraph>=0.0.25",
+    
+    # === Browser Automation ===
+    "playwright>=1.41.0",
+    
+    # === Image Processing ===
+    "pillow>=10.2.0",
+    "imagehash>=4.3.1",
+    
+    # === Utilities ===
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.1.0",
+    "python-dotenv>=1.0.0",
+    "loguru>=0.7.2",
+    "tenacity>=8.2.3",
+    "aiofiles>=23.2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "black>=24.1.0",
+    "ruff>=0.2.0",
+    "mypy>=1.8.0",
+    "pre-commit>=3.6.0",
+]
+omniparser = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "ultralytics>=8.0.0",
+]
+
+[project.scripts]
+chongming = "app.main:main"
+chongming-worker = "app.worker:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --tb=short"

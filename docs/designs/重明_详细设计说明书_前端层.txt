@@ -1,0 +1,651 @@
+重明 (ChongMing) 详细设计说明书：前端层 (Frontend Layer)
+所属层级：展示层 (Presentation Layer) - 用户交互侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+前端层 (Frontend Layer) 是重明架构中负责 "展" (Present) 和 "交" (Interact) 的核心组件。它是用户与重明平台交互的唯一入口，承载着测试用例管理、执行监控、报告可视化等全部用户界面功能。
+
+其核心设计哲学是 "Real-time Feedback, Intuitive Control" (实时反馈，直观控制)：
+- 实时通信：SSE/WebSocket 推送执行状态
+- 可视化：ECharts 图表展示测试数据
+- 代码编辑：Monaco Editor 在线编写测试脚本
+- 响应式：适配桌面和平板设备
+
+1.2 技术选型
+
+| 类别 | 技术栈 | 用途 |
+|------|--------|------|
+| 框架 | React 18 | 组件化开发 |
+| 状态管理 | Zustand | 轻量级状态管理 |
+| 路由 | React Router v6 | SPA 路由 |
+| 样式 | TailwindCSS | 原子化 CSS |
+| 图表 | ECharts | 数据可视化 |
+| 编辑器 | Monaco Editor | 代码编辑 |
+| 通信 | Axios + EventSource (SSE) | HTTP + 实时推送 |
+| 构建 | Vite | 快速构建 |
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                        前端层架构                                    │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                     应用入口 (App Shell)                     │   │
+│  │  Layout / Router / Theme / Auth Guard                       │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                              │                                      │
+│  ┌───────────┬───────────┬───────────┬───────────┬───────────┐    │
+│  │  Dashboard │ TestCase  │ Execution │  Report   │  Settings │    │
+│  │  仪表盘    │ 用例管理   │ 执行监控   │ 报告中心  │ 系统设置  │    │
+│  └───────────┴───────────┴───────────┴───────────┴───────────┘    │
+│                              │                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                     通用组件层                               │   │
+│  │  Button / Table / Form / Modal / Toast / Chart              │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                              │                                      │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                     服务层 (Services)                        │   │
+│  │  API Client / SSE Client / WebSocket / Storage              │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+2.2 目录结构
+
+src/
+├── assets/                 # 静态资源
+│   ├── icons/
+│   └── images/
+├── components/             # 通用组件
+│   ├── Button/
+│   ├── Table/
+│   ├── Form/
+│   ├── Modal/
+│   ├── Toast/
+│   └── Chart/
+├── pages/                  # 页面组件
+│   ├── Dashboard/          # 仪表盘
+│   ├── TestCase/           # 用例管理
+│   ├── Execution/          # 执行监控
+│   ├── Report/             # 报告中心
+│   └── Settings/           # 系统设置
+├── services/               # API 服务
+│   ├── api.ts              # HTTP 客户端
+│   ├── sse.ts              # SSE 客户端
+│   └── websocket.ts        # WebSocket 客户端
+├── stores/                 # 状态管理
+│   ├── useAuthStore.ts
+│   ├── useExecutionStore.ts
+│   └── useSettingsStore.ts
+├── hooks/                  # 自定义 Hooks
+│   ├── useSSE.ts
+│   └── usePolling.ts
+├── utils/                  # 工具函数
+├── types/                  # TypeScript 类型
+├── App.tsx                 # 应用入口
+└── main.tsx                # Vite 入口
+
+3. 核心页面设计
+
+3.1 仪表盘 (Dashboard)
+
++------------------------------------------------------------------+
+| 🦅 重明 | 仪表盘  用例管理  执行监控  报告中心  设置     [用户头像] |
++------------------------------------------------------------------+
+|                                                                    |
+| ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐      |
+| │ 📊 用例总数 │ │ ✅ 通过率   │ │ 🔄 执行中   │ │ ⚠️ 待修复   │      |
+| │   1,234    │ │   87.5%    │ │    12     │ │    23     │      |
+| └────────────┘ └────────────┘ └────────────┘ └────────────┘      |
+|                                                                    |
+| ┌─────────────────────────────┐ ┌─────────────────────────────┐  |
+| │  执行趋势 (近 7 天)          │ │  失败分布 (按模块)          │  |
+| │  📈 [折线图]                 │ │  🍩 [饼图]                  │  |
+| │                             │ │                             │  |
+| │                             │ │                             │  |
+| └─────────────────────────────┘ └─────────────────────────────┘  |
+|                                                                    |
+| ┌─────────────────────────────────────────────────────────────┐  |
+| │  最近执行                                                    │  |
+| │ ┌──────────┬──────────┬──────────┬──────────┬──────────┐   │  |
+| │ │ 执行 ID   │ 用例名称   │ 状态     │ 耗时      │ 时间     │   │  |
+| │ ├──────────┼──────────┼──────────┼──────────┼──────────┤   │  |
+| │ │ EXE_001  │ 登录测试   │ ✅ 通过   │ 3.2s     │ 10:30   │   │  |
+| │ │ EXE_002  │ 订单创建   │ ❌ 失败   │ 5.1s     │ 10:25   │   │  |
+| │ │ EXE_003  │ 支付流程   │ 🔄 执行中 │ -        │ 10:20   │   │  |
+| │ └──────────┴──────────┴──────────┴──────────┴──────────┘   │  |
+| └─────────────────────────────────────────────────────────────┘  |
++------------------------------------------------------------------+
+
+3.2 用例管理 (Test Case Management)
+
+功能清单：
+- TC-IR 可视化编辑器
+- PRD 导入生成用例
+- 用例树形结构管理
+- 批量操作 (启用/禁用/删除)
+- 用例参数化配置
+- 版本历史查看
+
+3.3 执行监控 (Execution Monitor)
+
+实时展示测试执行状态，支持：
+- 执行进度实时更新 (SSE)
+- 截图回放
+- 日志流
+- 失败步骤高亮
+- 一键重试
+
+4. 实时通信设计
+
+4.1 SSE (Server-Sent Events) 客户端
+
+// services/sse.ts
+
+class SSEClient {
+  private eventSource: EventSource | null = null;
+  private listeners: Map<string, Set<Function>> = new Map();
+  
+  connect(url: string): void {
+    this.eventSource = new EventSource(url);
+    
+    this.eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      this.emit(data.type, data.payload);
+    };
+    
+    this.eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      this.reconnect(url);
+    };
+  }
+  
+  on(eventType: string, callback: Function): void {
+    if (!this.listeners.has(eventType)) {
+      this.listeners.set(eventType, new Set());
+    }
+    this.listeners.get(eventType)!.add(callback);
+  }
+  
+  off(eventType: string, callback: Function): void {
+    this.listeners.get(eventType)?.delete(callback);
+  }
+  
+  private emit(eventType: string, payload: any): void {
+    this.listeners.get(eventType)?.forEach(cb => cb(payload));
+  }
+  
+  disconnect(): void {
+    this.eventSource?.close();
+    this.eventSource = null;
+  }
+  
+  private reconnect(url: string): void {
+    setTimeout(() => this.connect(url), 3000);
+  }
+}
+
+export const sseClient = new SSEClient();
+
+4.2 SSE 事件类型
+
+| 事件类型 | 说明 | Payload |
+|---------|------|---------|
+| execution.started | 执行开始 | { execution_id, tc_id, started_at } |
+| execution.step | 步骤执行 | { step_index, status, screenshot_url } |
+| execution.completed | 执行完成 | { execution_id, result, duration } |
+| execution.failed | 执行失败 | { execution_id, error, failed_step } |
+| healing.started | 自愈开始 | { execution_id, failed_step } |
+| healing.completed | 自愈完成 | { execution_id, healed } |
+
+4.3 使用示例
+
+// hooks/useSSE.ts
+
+import { useEffect } from 'react';
+import { sseClient } from '@/services/sse';
+import { useExecutionStore } from '@/stores/useExecutionStore';
+
+export function useExecutionSSE(executionId: string) {
+  const { updateExecution, addStep } = useExecutionStore();
+  
+  useEffect(() => {
+    sseClient.connect(`/api/v1/executions/${executionId}/stream`);
+    
+    const handleStep = (payload: StepPayload) => {
+      addStep(executionId, payload);
+    };
+    
+    const handleCompleted = (payload: CompletedPayload) => {
+      updateExecution(executionId, { status: 'completed', ...payload });
+    };
+    
+    sseClient.on('execution.step', handleStep);
+    sseClient.on('execution.completed', handleCompleted);
+    
+    return () => {
+      sseClient.off('execution.step', handleStep);
+      sseClient.off('execution.completed', handleCompleted);
+      sseClient.disconnect();
+    };
+  }, [executionId]);
+}
+
+5. 状态管理设计
+
+5.1 Zustand Store 示例
+
+// stores/useExecutionStore.ts
+
+import { create } from 'zustand';
+
+interface Execution {
+  id: string;
+  tcId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  steps: Step[];
+  startedAt: Date;
+  completedAt?: Date;
+}
+
+interface ExecutionStore {
+  executions: Map<string, Execution>;
+  currentExecutionId: string | null;
+  
+  // Actions
+  startExecution: (tcId: string) => Promise<string>;
+  updateExecution: (id: string, updates: Partial<Execution>) => void;
+  addStep: (executionId: string, step: Step) => void;
+  setCurrentExecution: (id: string) => void;
+}
+
+export const useExecutionStore = create<ExecutionStore>((set, get) => ({
+  executions: new Map(),
+  currentExecutionId: null,
+  
+  startExecution: async (tcId: string) => {
+    const response = await api.post('/executions', { tc_id: tcId });
+    const execution: Execution = {
+      id: response.data.execution_id,
+      tcId,
+      status: 'pending',
+      steps: [],
+      startedAt: new Date()
+    };
+    
+    set(state => ({
+      executions: new Map(state.executions).set(execution.id, execution),
+      currentExecutionId: execution.id
+    }));
+    
+    return execution.id;
+  },
+  
+  updateExecution: (id, updates) => {
+    set(state => {
+      const executions = new Map(state.executions);
+      const existing = executions.get(id);
+      if (existing) {
+        executions.set(id, { ...existing, ...updates });
+      }
+      return { executions };
+    });
+  },
+  
+  addStep: (executionId, step) => {
+    set(state => {
+      const executions = new Map(state.executions);
+      const existing = executions.get(executionId);
+      if (existing) {
+        executions.set(executionId, {
+          ...existing,
+          steps: [...existing.steps, step]
+        });
+      }
+      return { executions };
+    });
+  },
+  
+  setCurrentExecution: (id) => set({ currentExecutionId: id })
+}));
+
+6. 组件设计规范
+
+6.1 设计系统
+
+颜色规范：
+
+| 用途 | 颜色 | Tailwind |
+|------|------|----------|
+| 主色 | #3B82F6 | blue-500 |
+| 成功 | #10B981 | emerald-500 |
+| 警告 | #F59E0B | amber-500 |
+| 错误 | #EF4444 | red-500 |
+| 背景 | #F9FAFB | gray-50 |
+| 文字 | #111827 | gray-900 |
+
+6.2 通用组件
+
+Button 组件：
+
+interface ButtonProps {
+  variant: 'primary' | 'secondary' | 'danger' | 'ghost';
+  size: 'sm' | 'md' | 'lg';
+  loading?: boolean;
+  disabled?: boolean;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  onClick?: () => void;
+}
+
+export function Button({ variant, size, loading, ...props }: ButtonProps) {
+  const variants = {
+    primary: 'bg-blue-500 hover:bg-blue-600 text-white',
+    secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-900',
+    danger: 'bg-red-500 hover:bg-red-600 text-white',
+    ghost: 'hover:bg-gray-100 text-gray-700'
+  };
+  
+  const sizes = {
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2 text-base',
+    lg: 'px-6 py-3 text-lg'
+  };
+  
+  return (
+    <button
+      className={`
+        ${variants[variant]}
+        ${sizes[size]}
+        rounded-lg font-medium
+        flex items-center gap-2
+        transition-colors
+        disabled:opacity-50 disabled:cursor-not-allowed
+      `}
+      disabled={loading || props.disabled}
+      {...props}
+    >
+      {loading && <Spinner size="sm" />}
+      {props.icon}
+      {props.children}
+    </button>
+  );
+}
+
+7. Monaco Editor 集成
+
+7.1 TC-IR 编辑器
+
+// components/TCIREditor/index.tsx
+
+import Editor from '@monaco-editor/react';
+
+interface TCIREditorProps {
+  value: string;
+  onChange: (value: string) => void;
+  readOnly?: boolean;
+}
+
+export function TCIREditor({ value, onChange, readOnly }: TCIREditorProps) {
+  const handleEditorMount = (editor: any, monaco: any) => {
+    // 注册 TC-IR JSON Schema
+    monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+      validate: true,
+      schemas: [{
+        uri: 'tc-ir-schema',
+        fileMatch: ['*'],
+        schema: TC_IR_SCHEMA
+      }]
+    });
+  };
+  
+  return (
+    <Editor
+      height="400px"
+      language="json"
+      theme="vs-dark"
+      value={value}
+      onChange={(val) => onChange(val || '')}
+      onMount={handleEditorMount}
+      options={{
+        readOnly,
+        minimap: { enabled: false },
+        fontSize: 14,
+        lineNumbers: 'on',
+        wordWrap: 'on'
+      }}
+    />
+  );
+}
+
+8. ECharts 图表集成
+
+8.1 执行趋势图
+
+// components/Charts/ExecutionTrendChart.tsx
+
+import ReactECharts from 'echarts-for-react';
+
+interface TrendData {
+  date: string;
+  passed: number;
+  failed: number;
+  total: number;
+}
+
+export function ExecutionTrendChart({ data }: { data: TrendData[] }) {
+  const option = {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['通过', '失败', '总数'] },
+    xAxis: {
+      type: 'category',
+      data: data.map(d => d.date)
+    },
+    yAxis: { type: 'value' },
+    series: [
+      {
+        name: '通过',
+        type: 'bar',
+        stack: 'total',
+        data: data.map(d => d.passed),
+        itemStyle: { color: '#10B981' }
+      },
+      {
+        name: '失败',
+        type: 'bar',
+        stack: 'total',
+        data: data.map(d => d.failed),
+        itemStyle: { color: '#EF4444' }
+      },
+      {
+        name: '总数',
+        type: 'line',
+        data: data.map(d => d.total),
+        itemStyle: { color: '#3B82F6' }
+      }
+    ]
+  };
+  
+  return <ReactECharts option={option} style={{ height: 300 }} />;
+}
+
+9. API 客户端封装
+
+// services/api.ts
+
+import axios from 'axios';
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// 请求拦截器
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// 响应拦截器
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      // 跳转登录
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+// API 方法封装
+export const testCaseApi = {
+  list: (params: ListParams) => api.get('/test-cases', { params }),
+  get: (id: string) => api.get(`/test-cases/${id}`),
+  create: (data: CreateTCData) => api.post('/test-cases', data),
+  update: (id: string, data: UpdateTCData) => api.put(`/test-cases/${id}`, data),
+  delete: (id: string) => api.delete(`/test-cases/${id}`)
+};
+
+export const executionApi = {
+  start: (tcId: string) => api.post('/executions', { tc_id: tcId }),
+  get: (id: string) => api.get(`/executions/${id}`),
+  list: (params: ListParams) => api.get('/executions', { params }),
+  retry: (id: string) => api.post(`/executions/${id}/retry`),
+  stop: (id: string) => api.post(`/executions/${id}/stop`)
+};
+
+export default api;
+
+10. 响应式设计
+
+10.1 断点定义
+
+| 断点 | 尺寸 | 用途 |
+|------|------|------|
+| sm | 640px | 手机 (不主要支持) |
+| md | 768px | 平板竖屏 |
+| lg | 1024px | 平板横屏 |
+| xl | 1280px | 桌面 |
+| 2xl | 1536px | 大屏幕 |
+
+10.2 响应式布局
+
+// 侧边栏响应式
+<aside className="
+  hidden md:block
+  w-64 lg:w-72
+  h-screen
+  bg-gray-900
+">
+  <Nav />
+</aside>
+
+// 内容区响应式
+<main className="
+  flex-1
+  p-4 md:p-6 lg:p-8
+  overflow-auto
+">
+  <Outlet />
+</main>
+
+11. 与其他模块集成
+
+11.1 与 API 网关集成
+
+前端层通过 API 网关访问所有后端服务：
+
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   前端层        │     │   API 网关      │     │   后端服务       │
+│   (React)       │────▷│   (FastAPI)     │────▷│   (各引擎)       │
+│                 │◁────│                 │◁────│                 │
+│   HTTP/SSE      │     │   路由/鉴权     │     │   业务逻辑       │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+
+11.2 关键 API 端点
+
+| 模块 | 端点 | 方法 | 说明 |
+|------|------|------|------|
+| 用例 | /api/v1/test-cases | CRUD | 用例管理 |
+| 执行 | /api/v1/executions | POST/GET | 执行测试 |
+| 报告 | /api/v1/reports | GET | 获取报告 |
+| 设计 | /api/v1/design/generate | POST | PRD 生成用例 |
+| 自愈 | /api/v1/healing/{id} | GET | 查询自愈状态 |
+
+12. 部署说明
+
+12.1 构建配置
+
+# vite.config.ts
+export default defineConfig({
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          charts: ['echarts', 'echarts-for-react'],
+          editor: ['@monaco-editor/react']
+        }
+      }
+    }
+  }
+});
+
+12.2 环境变量
+
+# .env.production
+VITE_API_BASE_URL=/api/v1
+VITE_SSE_URL=/api/v1/stream
+VITE_APP_TITLE=重明测试平台
+
+12.3 Nginx 配置
+
+server {
+    listen 80;
+    server_name localhost;
+    
+    root /usr/share/nginx/html;
+    index index.html;
+    
+    # SPA 路由支持
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    
+    # API 代理
+    location /api {
+        proxy_pass http://backend:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+    
+    # SSE 代理
+    location /api/v1/stream {
+        proxy_pass http://backend:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+    }
+}
+
+End of Design Document

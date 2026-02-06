@@ -1,0 +1,820 @@
+================================================================================
+                    重明 - 详细设计说明书 - 神经缓存层
+                    (Neural Cache Layer Design Document)
+================================================================================
+版本: v1.0
+层级: 缓存层 (Cache Layer)
+架构师: Chief Architect of Neural-Phoenix
+日期: 2026-02-06
+================================================================================
+
+【目录】
+1. 模块概述
+2. 设计理念
+3. 系统架构
+4. 视觉缓存 (Visual Cache)
+5. 规划缓存 (Plan Cache)
+6. 缓存策略
+7. 数据模型
+8. 核心实现
+9. API 设计
+10. 配置说明
+11. 监控指标
+12. 集成说明
+
+================================================================================
+                            1. 模块概述
+================================================================================
+
+1.1 定位
+--------
+神经缓存层 (Neural Cache Layer) 是重明架构中位于智能层 (Intelligence Layer) 
+和执行层 (Execution Layer) 之间的性能优化层。通过缓存 AI 推理结果，避免重复
+的 OmniParser 调用和 LLM 计算，显著提升执行效率并降低成本。
+
+1.2 核心原则
+------------
+"Seen Before, Done Before" (见过即做过)
+
+- 页面没变 + 指令没变 = 直接复用上次的坐标
+- 意图没变 + API文档没变 = 直接复用上次的 DAG 图
+
+1.3 预期收益
+------------
+┌─────────────────────────────────────────────────────┐
+│                 Neural Cache 收益                   │
+├─────────────────────────────────────────────────────┤
+│ 执行速度提升:     10x ~ 50x (回归测试场景)          │
+│ LLM Token 节省:   50% ~ 80%                         │
+│ OmniParser 调用减少: 60% ~ 90%                      │
+│ 单步延迟降低:     5-10s → 0.1-0.5s (Cache Hit)      │
+└─────────────────────────────────────────────────────┘
+
+================================================================================
+                            2. 设计理念
+================================================================================
+
+2.1 分层缓存策略
+----------------
+                    ┌─────────────────────┐
+                    │   L1: Memory Cache  │  ← 毫秒级，进程内
+                    │   (LRU, 1000 items) │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │   L2: Redis Cache   │  ← 微秒级，热数据
+                    │   (TTL: 1h ~ 24h)   │
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │   L3: S3/Minio      │  ← 冷数据，长期存储
+                    │   (Archive)         │
+                    └─────────────────────┘
+
+2.2 缓存类型矩阵
+----------------
+┌──────────────────┬──────────────┬──────────────┬──────────────┐
+│     缓存类型     │   命中条件   │   存储内容   │   TTL        │
+├──────────────────┼──────────────┼──────────────┼──────────────┤
+│ Visual Cache     │ pHash + 指令 │ 元素坐标     │ 1h ~ 6h      │
+│ Plan Cache       │ 意图相似度   │ DAG 执行图   │ 24h ~ 7d     │
+│ Locator Cache    │ DOM Hash     │ 定位器       │ 1h           │
+│ API Response     │ Request Hash │ 响应体       │ 5min ~ 1h    │
+└──────────────────┴──────────────┴──────────────┴──────────────┘
+
+================================================================================
+                            3. 系统架构
+================================================================================
+
+3.1 架构位置
+------------
+┌─────────────────────────────────────────────────────────────────┐
+│                      Intelligence Layer                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
+│  │ PRD Parser   │  │ TC Generator │  │ Critic Agent │           │
+│  └──────────────┘  └──────────────┘  └──────────────┘           │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              ★ Neural Cache Layer (神经缓存层) ★                 │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │                    Cache Router                             │ │
+│  │         (路由决策: 走缓存 or 走推理)                        │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│           │                                   │                  │
+│           ▼                                   ▼                  │
+│  ┌─────────────────────┐          ┌─────────────────────┐       │
+│  │    Visual Cache     │          │     Plan Cache      │       │
+│  │                     │          │                     │       │
+│  │  ┌───────────────┐  │          │  ┌───────────────┐  │       │
+│  │  │ Page pHash    │  │          │  │ Intent Embed  │  │       │
+│  │  │ Instruction   │  │          │  │ API Doc Hash  │  │       │
+│  │  │ → Coordinates │  │          │  │ → DAG Graph   │  │       │
+│  │  └───────────────┘  │          │  └───────────────┘  │       │
+│  └─────────────────────┘          └─────────────────────┘       │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │              Storage Backend                                │ │
+│  │   ┌─────────┐   ┌─────────┐   ┌─────────┐                  │ │
+│  │   │ Memory  │ → │  Redis  │ → │   S3    │                  │ │
+│  │   │  (L1)   │   │  (L2)   │   │  (L3)   │                  │ │
+│  │   └─────────┘   └─────────┘   └─────────┘                  │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Execution Layer                             │
+└─────────────────────────────────────────────────────────────────┘
+
+3.2 请求流程
+------------
+┌─────┐    ┌──────────────┐    ┌─────────────┐    ┌─────────────┐
+│ 请求 │───▶│ Cache Router │───▶│ Cache Check │───▶│ Cache Hit?  │
+└─────┘    └──────────────┘    └─────────────┘    └──────┬──────┘
+                                                         │
+                    ┌────────────────────────────────────┼────────┐
+                    │                                    │        │
+                    ▼                                    ▼        │
+           ┌───────────────┐                    ┌────────────┐   │
+           │  Cache Miss   │                    │ Cache Hit  │   │
+           │ → 调用推理    │                    │ → 返回缓存 │   │
+           │ → 结果入缓存  │                    └────────────┘   │
+           └───────────────┘                                      │
+                    │                                             │
+                    └─────────────────────────────────────────────┘
+
+================================================================================
+                        4. 视觉缓存 (Visual Cache)
+================================================================================
+
+4.1 缓存键设计
+--------------
+Visual Cache Key = hash(pHash + instruction_normalized + viewport)
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    Visual Cache Key Components                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ 1. Page Perceptual Hash (pHash)                           │  │
+│  │    - 算法: ImageHash + BlockMean                          │  │
+│  │    - 忽略: 动态区域 (时间戳、随机ID、广告)                │  │
+│  │    - ROI: 仅计算交互区域的哈希                            │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ 2. Instruction Normalized                                 │  │
+│  │    - 移除多余空格                                         │  │
+│  │    - 统一大小写                                           │  │
+│  │    - 同义词归一化 ("click" = "点击" = "tap")              │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ 3. Viewport                                               │  │
+│  │    - 分辨率分组: 1920x1080, 1366x768, 375x667            │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+4.2 缓存值结构
+--------------
+@dataclass
+class VisualCacheValue:
+    # 定位结果
+    element_coords: Tuple[int, int]     # (x, y) 坐标
+    element_size: Tuple[int, int]       # (width, height)
+    locator_fallback: str               # DOM 定位器备份
+    
+    # 元信息
+    confidence: float                   # 置信度 (0.0 ~ 1.0)
+    source: str                         # "omniparser" | "dom"
+    
+    # 统计信息
+    created_at: datetime
+    last_hit_at: datetime
+    hit_count: int
+    
+    # 验证信息
+    page_url: str
+    screenshot_hash: str
+
+4.3 动态内容处理
+----------------
+问题: 页面包含动态内容 (时间戳、随机ID、倒计时、广告)
+
+解决方案: ROI 裁剪 + 动态区域屏蔽
+
+class DynamicContentHandler:
+    """动态内容处理器"""
+    
+    # 预定义动态区域类型
+    DYNAMIC_PATTERNS = [
+        r'\d{4}-\d{2}-\d{2}',           # 日期
+        r'\d{2}:\d{2}:\d{2}',           # 时间
+        r'[a-f0-9]{8}-[a-f0-9]{4}',     # UUID 片段
+        r'验证码|captcha',               # 验证码区域
+    ]
+    
+    def mask_dynamic_regions(self, screenshot: bytes) -> bytes:
+        """屏蔽动态区域"""
+        # 1. OCR 识别文字
+        # 2. 匹配动态模式
+        # 3. 用纯色块覆盖
+        pass
+    
+    def extract_roi(self, screenshot: bytes, instruction: str) -> bytes:
+        """提取感兴趣区域"""
+        # 根据指令推断操作区域
+        # 只对 ROI 计算哈希
+        pass
+
+================================================================================
+                        5. 规划缓存 (Plan Cache)
+================================================================================
+
+5.1 缓存键设计
+--------------
+Plan Cache Key = hash(intent_embedding_cluster + api_doc_hash + env_context)
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    Plan Cache Key Components                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ 1. Intent Embedding Cluster                               │  │
+│  │    - 使用 text-embedding-3-small 生成意图向量            │  │
+│  │    - 聚类相似意图 (余弦相似度 > 0.95)                    │  │
+│  │    - 返回 cluster_id 作为 Key 的一部分                   │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ 2. API Document Hash                                      │  │
+│  │    - OpenAPI 规范的结构化哈希                            │  │
+│  │    - 仅考虑端点路径、方法、参数结构                      │  │
+│  │    - 忽略描述文字变化                                    │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ 3. Environment Context                                    │  │
+│  │    - 环境标识 (dev/test/prod)                            │  │
+│  │    - 数据约束条件                                        │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+5.2 缓存值结构
+--------------
+@dataclass
+class PlanCacheValue:
+    # 规划结果
+    dag_graph: Dict[str, Any]           # 执行 DAG 图
+    tc_ir_list: List[TCIR]              # 生成的测试用例
+    api_ir_chain: List[APIIR]           # API 调用链
+    
+    # 元信息
+    generation_model: str               # 使用的 LLM 模型
+    generation_tokens: int              # 消耗的 Token 数
+    
+    # 统计信息
+    created_at: datetime
+    last_hit_at: datetime
+    hit_count: int
+    
+    # 验证信息
+    prd_summary: str                    # PRD 摘要
+    swagger_version: str                # API 文档版本
+
+5.3 语义相似度判断
+------------------
+class IntentMatcher:
+    """意图匹配器"""
+    
+    def __init__(self, embedding_model: str = "text-embedding-3-small"):
+        self.embedding_model = embedding_model
+        self.similarity_threshold = 0.95
+    
+    async def is_similar_intent(
+        self, 
+        new_intent: str, 
+        cached_intent: str
+    ) -> bool:
+        """判断两个意图是否语义等价"""
+        new_emb = await self.embed(new_intent)
+        cached_emb = await self.embed(cached_intent)
+        
+        similarity = cosine_similarity(new_emb, cached_emb)
+        return similarity >= self.similarity_threshold
+    
+    async def find_matching_cache(
+        self,
+        intent: str,
+        candidates: List[PlanCacheValue]
+    ) -> Optional[PlanCacheValue]:
+        """从候选缓存中找到匹配项"""
+        intent_emb = await self.embed(intent)
+        
+        for candidate in candidates:
+            if cosine_similarity(intent_emb, candidate.intent_emb) >= 0.95:
+                return candidate
+        
+        return None
+
+================================================================================
+                            6. 缓存策略
+================================================================================
+
+6.1 失效策略
+------------
+┌─────────────────────────────────────────────────────────────────┐
+│                        缓存失效触发条件                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. TTL 过期                                                    │
+│     - Visual Cache: 1h ~ 6h (根据页面变化频率)                  │
+│     - Plan Cache: 24h ~ 7d                                      │
+│                                                                  │
+│  2. 页面版本变化                                                │
+│     - 检测到页面结构变化 (DOM 骨架不同)                        │
+│     - 检测到 SPA 路由变化                                       │
+│                                                                  │
+│  3. API 文档更新                                                │
+│     - Swagger 文件内容变化                                      │
+│     - 端点签名变化                                              │
+│                                                                  │
+│  4. 手动清除                                                    │
+│     - API 调用 /api/v1/cache/invalidate                        │
+│     - 管理后台操作                                              │
+│                                                                  │
+│  5. 置信度衰减                                                  │
+│     - confidence < 0.6 时自动失效                               │
+│     - 每次 Miss 后 confidence -= 0.1                            │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+
+6.2 缓存写入条件
+----------------
+class CacheWritePolicy:
+    """缓存写入策略"""
+    
+    MIN_CONFIDENCE = 0.8          # 最低置信度
+    MIN_EXECUTION_SUCCESS = True  # 必须执行成功
+    EXCLUDE_PATTERNS = [          # 不缓存的场景
+        "captcha",                # 验证码
+        "otp",                    # 一次性密码
+        "random",                 # 随机数据
+    ]
+    
+    def should_cache(self, result: CacheableResult) -> bool:
+        """判断是否应该缓存"""
+        if result.confidence < self.MIN_CONFIDENCE:
+            return False
+        
+        if not result.execution_success:
+            return False
+        
+        for pattern in self.EXCLUDE_PATTERNS:
+            if pattern in result.instruction.lower():
+                return False
+        
+        return True
+
+6.3 LRU + 分层存储
+------------------
+class TieredCacheStorage:
+    """分层缓存存储"""
+    
+    def __init__(self):
+        self.l1_memory = LRUCache(maxsize=1000)    # 进程内存
+        self.l2_redis = RedisClient()              # Redis
+        self.l3_s3 = S3Client()                    # 冷存储
+    
+    async def get(self, key: str) -> Optional[CacheValue]:
+        # L1: Memory (最快)
+        if value := self.l1_memory.get(key):
+            return value
+        
+        # L2: Redis
+        if value := await self.l2_redis.get(key):
+            self.l1_memory.set(key, value)  # 回填 L1
+            return value
+        
+        # L3: S3 (最慢，仅冷数据)
+        if value := await self.l3_s3.get(key):
+            await self.l2_redis.set(key, value)  # 回填 L2
+            self.l1_memory.set(key, value)       # 回填 L1
+            return value
+        
+        return None
+    
+    async def set(self, key: str, value: CacheValue, ttl: int):
+        # 同时写入 L1 和 L2
+        self.l1_memory.set(key, value)
+        await self.l2_redis.set(key, value, ttl=ttl)
+        
+        # L3 定期由后台任务归档
+
+================================================================================
+                            7. 数据模型
+================================================================================
+
+7.1 Redis 数据结构
+------------------
+# Visual Cache
+Key:   visual:{page_hash}:{instruction_hash}:{viewport}
+Value: JSON(VisualCacheValue)
+TTL:   3600 ~ 21600 秒
+
+# Plan Cache  
+Key:   plan:{intent_cluster}:{api_doc_hash}:{env}
+Value: JSON(PlanCacheValue)
+TTL:   86400 ~ 604800 秒
+
+# Cache Stats
+Key:   cache:stats:visual
+Value: HASH {
+    hits: int,
+    misses: int,
+    hit_rate: float,
+    avg_latency_saved_ms: float
+}
+
+7.2 PostgreSQL 归档表
+---------------------
+CREATE TABLE cache_archive (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cache_type VARCHAR(16) NOT NULL,  -- 'visual' | 'plan'
+    cache_key VARCHAR(256) NOT NULL,
+    cache_value JSONB NOT NULL,
+    hit_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW(),
+    last_hit_at TIMESTAMP,
+    archived_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_cache_archive_key ON cache_archive(cache_key);
+CREATE INDEX idx_cache_archive_type ON cache_archive(cache_type);
+
+================================================================================
+                            8. 核心实现
+================================================================================
+
+8.1 Cache Router
+----------------
+class CacheRouter:
+    """缓存路由器 - 决策走缓存还是走推理"""
+    
+    def __init__(
+        self,
+        visual_cache: VisualCache,
+        plan_cache: PlanCache,
+        feature_flags: FeatureFlags
+    ):
+        self.visual_cache = visual_cache
+        self.plan_cache = plan_cache
+        self.flags = feature_flags
+    
+    async def route_visual_request(
+        self,
+        screenshot: bytes,
+        instruction: str,
+        viewport: str
+    ) -> VisualRouteResult:
+        """路由视觉定位请求"""
+        if not self.flags.enable_visual_cache:
+            return VisualRouteResult(use_cache=False)
+        
+        # 计算缓存键
+        page_hash = await self.compute_page_hash(screenshot)
+        instruction_norm = self.normalize_instruction(instruction)
+        cache_key = f"visual:{page_hash}:{hash(instruction_norm)}:{viewport}"
+        
+        # 查询缓存
+        cached = await self.visual_cache.get(cache_key)
+        
+        if cached and cached.confidence >= 0.7:
+            return VisualRouteResult(
+                use_cache=True,
+                cached_value=cached,
+                cache_key=cache_key
+            )
+        
+        return VisualRouteResult(use_cache=False, cache_key=cache_key)
+    
+    async def route_plan_request(
+        self,
+        prd_content: str,
+        api_doc: str,
+        env: str
+    ) -> PlanRouteResult:
+        """路由规划请求"""
+        if not self.flags.enable_plan_cache:
+            return PlanRouteResult(use_cache=False)
+        
+        # 计算缓存键
+        intent_cluster = await self.get_intent_cluster(prd_content)
+        api_hash = self.compute_api_hash(api_doc)
+        cache_key = f"plan:{intent_cluster}:{api_hash}:{env}"
+        
+        # 查询缓存
+        cached = await self.plan_cache.get(cache_key)
+        
+        if cached:
+            return PlanRouteResult(
+                use_cache=True,
+                cached_value=cached,
+                cache_key=cache_key
+            )
+        
+        return PlanRouteResult(use_cache=False, cache_key=cache_key)
+
+8.2 Visual Cache 实现
+---------------------
+class VisualCache:
+    """视觉缓存"""
+    
+    def __init__(self, storage: TieredCacheStorage):
+        self.storage = storage
+        self.hasher = ImageHasher()
+    
+    async def get(self, key: str) -> Optional[VisualCacheValue]:
+        """获取缓存"""
+        data = await self.storage.get(key)
+        if data:
+            # 更新命中统计
+            await self.update_hit_stats(key)
+            return VisualCacheValue.from_json(data)
+        return None
+    
+    async def set(
+        self,
+        key: str,
+        coords: Tuple[int, int],
+        locator: str,
+        confidence: float,
+        screenshot_hash: str,
+        page_url: str
+    ):
+        """写入缓存"""
+        value = VisualCacheValue(
+            element_coords=coords,
+            locator_fallback=locator,
+            confidence=confidence,
+            screenshot_hash=screenshot_hash,
+            page_url=page_url,
+            created_at=datetime.now(),
+            last_hit_at=datetime.now(),
+            hit_count=0
+        )
+        
+        # 根据置信度设置 TTL
+        ttl = self.compute_ttl(confidence)
+        await self.storage.set(key, value.to_json(), ttl)
+    
+    def compute_ttl(self, confidence: float) -> int:
+        """根据置信度计算 TTL"""
+        base_ttl = 3600  # 1 hour
+        confidence_factor = confidence ** 2  # 置信度越高，TTL越长
+        return int(base_ttl * (1 + confidence_factor * 5))  # 1h ~ 6h
+
+8.3 Perceptual Hash 实现
+------------------------
+import imagehash
+from PIL import Image
+import io
+
+class ImageHasher:
+    """图像感知哈希"""
+    
+    def __init__(self, hash_size: int = 16):
+        self.hash_size = hash_size
+    
+    def compute_phash(self, image_bytes: bytes) -> str:
+        """计算感知哈希"""
+        image = Image.open(io.BytesIO(image_bytes))
+        
+        # 转换为灰度图
+        gray = image.convert('L')
+        
+        # 计算 pHash
+        phash = imagehash.phash(gray, hash_size=self.hash_size)
+        
+        return str(phash)
+    
+    def compute_similarity(self, hash1: str, hash2: str) -> float:
+        """计算哈希相似度"""
+        h1 = imagehash.hex_to_hash(hash1)
+        h2 = imagehash.hex_to_hash(hash2)
+        
+        # 汉明距离
+        distance = h1 - h2
+        max_distance = self.hash_size ** 2
+        
+        similarity = 1 - (distance / max_distance)
+        return similarity
+
+================================================================================
+                            9. API 设计
+================================================================================
+
+9.1 缓存管理 API
+----------------
+# 获取缓存统计
+GET /api/v1/cache/stats
+Response:
+{
+    "visual_cache": {
+        "size": 1234,
+        "hit_rate": 0.75,
+        "avg_latency_saved_ms": 2500
+    },
+    "plan_cache": {
+        "size": 89,
+        "hit_rate": 0.82,
+        "avg_latency_saved_ms": 5000
+    }
+}
+
+# 手动失效缓存
+POST /api/v1/cache/invalidate
+Body:
+{
+    "cache_type": "visual",          // "visual" | "plan" | "all"
+    "pattern": "visual:abc123:*",    // 支持通配符
+    "reason": "页面改版"
+}
+
+# 预热缓存
+POST /api/v1/cache/warm
+Body:
+{
+    "pages": [
+        {"url": "https://example.com/login", "viewport": "1920x1080"}
+    ]
+}
+
+# 获取缓存详情
+GET /api/v1/cache/entries?type=visual&page=1&size=20
+Response:
+{
+    "total": 1234,
+    "items": [
+        {
+            "key": "visual:abc123:...",
+            "hit_count": 56,
+            "confidence": 0.95,
+            "created_at": "2026-02-06T12:00:00Z"
+        }
+    ]
+}
+
+================================================================================
+                            10. 配置说明
+================================================================================
+
+10.1 配置项
+-----------
+neural_cache:
+  # 功能开关
+  enabled: true
+  visual_cache_enabled: true
+  plan_cache_enabled: true
+  
+  # Visual Cache 配置
+  visual:
+    min_confidence: 0.8           # 最低置信度
+    default_ttl: 3600             # 默认 TTL (秒)
+    max_ttl: 21600                # 最大 TTL
+    similarity_threshold: 0.95   # 页面相似度阈值
+    
+    # 动态内容处理
+    dynamic_content:
+      mask_timestamps: true
+      mask_uuids: true
+      mask_captcha: true
+      custom_patterns:
+        - '验证码'
+        - 'captcha'
+  
+  # Plan Cache 配置
+  plan:
+    min_confidence: 0.9
+    default_ttl: 86400            # 1 天
+    max_ttl: 604800               # 7 天
+    intent_similarity_threshold: 0.95
+  
+  # 存储配置
+  storage:
+    l1_memory_size: 1000
+    l2_redis_url: redis://redis:6379/3
+    l3_s3_bucket: chongming-cache-archive
+    archive_after_days: 7
+
+================================================================================
+                            11. 监控指标
+================================================================================
+
+11.1 Prometheus 指标
+--------------------
+# 缓存命中
+neural_cache_hits_total{cache_type="visual|plan"}
+neural_cache_misses_total{cache_type="visual|plan"}
+
+# 命中率
+neural_cache_hit_rate{cache_type="visual|plan"}
+
+# 延迟节省
+neural_cache_latency_saved_seconds{cache_type="visual|plan"}
+
+# 缓存大小
+neural_cache_entries_count{cache_type="visual|plan", storage="l1|l2|l3"}
+
+# Token 节省
+neural_cache_tokens_saved_total
+
+11.2 Grafana 仪表盘
+-------------------
+- 缓存命中率趋势
+- 延迟节省趋势
+- 缓存大小变化
+- Token 成本节省
+- 失效事件统计
+
+================================================================================
+                            12. 集成说明
+================================================================================
+
+12.1 与右瞳引擎集成
+-------------------
+class RightPupilEngine:
+    def __init__(self, cache_router: CacheRouter):
+        self.cache_router = cache_router
+    
+    async def locate_element(self, screenshot, instruction, viewport):
+        # 1. 尝试从缓存获取
+        route_result = await self.cache_router.route_visual_request(
+            screenshot, instruction, viewport
+        )
+        
+        if route_result.use_cache:
+            logger.info(f"Visual cache hit: {route_result.cache_key}")
+            return route_result.cached_value.element_coords
+        
+        # 2. 缓存未命中，调用 OmniParser
+        coords, confidence = await self.omniparser.detect(screenshot, instruction)
+        
+        # 3. 结果入缓存
+        if confidence >= 0.8:
+            await self.cache_router.visual_cache.set(
+                key=route_result.cache_key,
+                coords=coords,
+                confidence=confidence,
+                ...
+            )
+        
+        return coords
+
+12.2 与神经设计层集成
+---------------------
+class NeuralDesignLayer:
+    def __init__(self, cache_router: CacheRouter):
+        self.cache_router = cache_router
+    
+    async def generate_test_plan(self, prd_content, api_doc, env):
+        # 1. 尝试从缓存获取
+        route_result = await self.cache_router.route_plan_request(
+            prd_content, api_doc, env
+        )
+        
+        if route_result.use_cache:
+            logger.info(f"Plan cache hit: {route_result.cache_key}")
+            return route_result.cached_value.dag_graph
+        
+        # 2. 缓存未命中，调用 LLM 生成
+        dag_graph = await self.llm_planner.generate(prd_content, api_doc)
+        
+        # 3. 结果入缓存
+        await self.cache_router.plan_cache.set(
+            key=route_result.cache_key,
+            dag_graph=dag_graph,
+            ...
+        )
+        
+        return dag_graph
+
+================================================================================
+                              附录 A: 术语表
+================================================================================
+
+pHash          Perceptual Hash，感知哈希，用于图像相似度比较
+ROI            Region of Interest，感兴趣区域
+TTL            Time To Live，缓存存活时间
+LRU            Least Recently Used，最近最少使用淘汰策略
+DAG            Directed Acyclic Graph，有向无环图
+Embedding      向量嵌入，将文本转换为数值向量
+
+================================================================================
+                              文档结束
+================================================================================

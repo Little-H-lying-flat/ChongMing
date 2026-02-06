@@ -1,0 +1,944 @@
+重明 (ChongMing) 详细设计说明书：凤凰涅槃层 (Phoenix Nirvana Layer)
+所属层级：编译层 (Compilation Layer) - 资产转化侧
+版本：v1.0
+架构师：Chief Architect of Neural-Phoenix
+日期：2026-02-06
+
+1. 系统概述 (System Overview)
+
+1.1 定义与愿景
+
+凤凰涅槃层 (Phoenix Nirvana Layer) 是重明架构中负责 "固" (Solidify) 和 "生" (Generate) 的核心组件。它是"三态生命周期"中液态→固态转化的关键引擎，将 AI 探索产生的执行轨迹（Trace Log）编译为可维护、可版本控制的测试脚本资产。
+
+其核心设计哲学是 "Trace-to-Code, Intent-Preserved" (轨迹代码化，意图保真)：
+- 轨迹提取：从液态执行中提取关键操作序列
+- 意图保真：保留原始测试意图和业务语义
+- 代码生成：编译为符合规范的 Python/Pytest 脚本
+- 资产管理：支持版本控制、参数化、数据驱动
+
+1.2 核心职责
+- 轨迹解析 (Trace Parsing)：解析 AUI-IR/API-IR 执行轨迹
+- 代码编译 (Code Compilation)：生成 Python 测试脚本
+- 意图注释 (Intent Annotation)：保留业务语义注释
+- 参数提取 (Parameter Extraction)：识别可参数化的数据
+- 资产版本 (Asset Versioning)：管理脚本版本历史
+
+1.3 三态生命周期回顾
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    重明三态生命周期                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐                  │
+│  │  液态    │    │  固态    │    │  气态    │                  │
+│  │ (Liquid) │    │ (Solid)  │    │ (Gaseous)│                  │
+│  │          │    │          │    │          │                  │
+│  │ AI 探索  │───→│ 脚本固化 │───→│ 自愈修复 │                  │
+│  │ 执行     │    │ 执行     │    │          │                  │
+│  └──────────┘    └──────────┘    └──────────┘                  │
+│       ↑               │               │                        │
+│       │               │               │                        │
+│       │      凤凰涅槃层              │                        │
+│       └───────────────┴───────────────┘                        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+2. 架构设计 (Architecture Design)
+
+2.1 模块结构图
+
+graph TD
+    subgraph 输入层 (Input Layer)
+        TRACE[Trace Log]
+        TCIR[TC-IR 用例定义]
+        AUIIR[AUI-IR 执行轨迹]
+        APIIR[API-IR 执行轨迹]
+    end
+    
+    subgraph Phoenix Nirvana Layer
+        subgraph Parser [轨迹解析层]
+            TRACE --> ANALYZER[轨迹分析器]
+            TCIR --> ANALYZER
+            AUIIR --> ANALYZER
+            APIIR --> ANALYZER
+            ANALYZER --> AST[抽象语法树]
+        end
+        
+        subgraph Optimizer [优化层]
+            AST --> DEDUP[去重优化器]
+            DEDUP --> PARAM[参数提取器]
+            PARAM --> ASSERT[断言增强器]
+            ASSERT --> OPTIMIZED[优化后 AST]
+        end
+        
+        subgraph Compiler [编译层]
+            OPTIMIZED --> CODEGEN[代码生成器]
+            CODEGEN --> TEMPLATE[Jinja2 模板]
+            TEMPLATE --> PYTHON[Python 脚本]
+        end
+        
+        subgraph Annotator [注释层]
+            PYTHON --> DOCGEN[文档生成器]
+            DOCGEN --> INTENT[意图注释器]
+            INTENT --> FINAL[最终脚本]
+        end
+        
+        subgraph Versioner [版本层]
+            FINAL --> GIT[Git 管理器]
+            GIT --> REPO[(脚本仓库)]
+        end
+    end
+    
+    subgraph 输出层 (Output Layer)
+        FINAL --> FILE[test_xxx.py]
+        FINAL --> ASSET[(资产库)]
+    end
+
+2.2 核心类图
+
+- PhoenixNirvana: 凤凰涅槃层入口，编排全流程
+- TraceParser: 轨迹解析器
+- ASTBuilder: 抽象语法树构建器
+- CodeOptimizer: 代码优化器
+- ParameterExtractor: 参数提取器
+- PythonCompiler: Python 代码编译器
+- IntentAnnotator: 意图注释器
+- AssetVersioner: 资产版本管理器
+
+3. 轨迹解析层 (Trace Parser Layer)
+
+3.1 输入格式
+
+凤凰涅槃层接收多种输入格式：
+
+| 输入类型 | 来源 | 内容 |
+|---------|------|------|
+| Trace Log | 执行引擎 | 完整执行记录 (时间戳、状态、截图) |
+| TC-IR | 神经设计层 | 用例意图和步骤定义 |
+| AUI-IR | 右瞳引擎 | UI 操作轨迹 |
+| API-IR | 左瞳引擎 | API 调用轨迹 |
+
+3.2 轨迹分析器
+
+class TraceParser:
+    def parse(self, trace_log: TraceLog) -> ParsedTrace:
+        steps = []
+        
+        for entry in trace_log.entries:
+            if entry.type == "UI_ACTION":
+                step = self._parse_ui_action(entry)
+            elif entry.type == "API_CALL":
+                step = self._parse_api_call(entry)
+            elif entry.type == "ASSERTION":
+                step = self._parse_assertion(entry)
+            elif entry.type == "WAIT":
+                step = self._parse_wait(entry)
+            else:
+                continue
+            
+            steps.append(step)
+        
+        return ParsedTrace(
+            tc_id=trace_log.tc_id,
+            tc_name=trace_log.tc_name,
+            steps=steps,
+            metadata=trace_log.metadata
+        )
+    
+    def _parse_ui_action(self, entry: TraceEntry) -> UIStep:
+        return UIStep(
+            action=entry.action,  # click, input, hover, etc.
+            strategy=entry.strategy,  # visual or dom
+            target=entry.target,
+            coordinates=entry.coordinates,
+            selector=entry.selector,
+            value=entry.value,
+            screenshot_before=entry.screenshot_before,
+            screenshot_after=entry.screenshot_after
+        )
+
+3.3 抽象语法树构建
+
+class ASTBuilder:
+    def build(self, parsed_trace: ParsedTrace) -> TestAST:
+        ast = TestAST(
+            name=self._generate_test_name(parsed_trace.tc_name),
+            docstring=parsed_trace.tc_name,
+            fixtures=["page"],  # Playwright fixture
+            body=[]
+        )
+        
+        for step in parsed_trace.steps:
+            node = self._step_to_node(step)
+            ast.body.append(node)
+        
+        return ast
+    
+    def _step_to_node(self, step: Step) -> ASTNode:
+        if isinstance(step, UIStep):
+            return UIActionNode(
+                action=step.action,
+                locator=self._build_locator(step),
+                value=step.value,
+                comment=step.description
+            )
+        elif isinstance(step, APIStep):
+            return APICallNode(
+                method=step.method,
+                url=step.url,
+                headers=step.headers,
+                body=step.body,
+                assertions=step.assertions
+            )
+
+4. 优化层 (Optimizer Layer)
+
+4.1 去重优化器
+
+去除冗余步骤，合并相似操作：
+
+class DedupOptimizer:
+    def optimize(self, ast: TestAST) -> TestAST:
+        optimized_body = []
+        prev_node = None
+        
+        for node in ast.body:
+            # 合并连续的相同定位器等待
+            if self._is_redundant_wait(prev_node, node):
+                continue
+            
+            # 合并连续输入到同一元素
+            if self._is_consecutive_input(prev_node, node):
+                prev_node.value += node.value
+                continue
+            
+            optimized_body.append(node)
+            prev_node = node
+        
+        ast.body = optimized_body
+        return ast
+
+4.2 参数提取器
+
+识别可参数化的数据，支持数据驱动：
+
+class ParameterExtractor:
+    # 可参数化的数据模式
+    PATTERNS = {
+        "username": r"user\d+|admin|test",
+        "password": r".*password.*|pass\d+",
+        "email": r"[\w.]+@[\w.]+",
+        "phone": r"1[3-9]\d{9}",
+        "date": r"\d{4}-\d{2}-\d{2}",
+        "amount": r"\d+\.?\d*"
+    }
+    
+    def extract(self, ast: TestAST) -> tuple[TestAST, list[Parameter]]:
+        parameters = []
+        
+        for node in ast.body:
+            if hasattr(node, 'value') and node.value:
+                param = self._detect_parameter(node.value)
+                if param:
+                    # 替换为参数引用
+                    node.value = f"{{{{ {param.name} }}}}"
+                    parameters.append(param)
+        
+        return ast, parameters
+    
+    def _detect_parameter(self, value: str) -> Parameter | None:
+        for param_type, pattern in self.PATTERNS.items():
+            if re.match(pattern, value, re.IGNORECASE):
+                return Parameter(
+                    name=f"test_{param_type}",
+                    type=param_type,
+                    default_value=value
+                )
+        return None
+
+提取结果示例：
+
+原始:
+- input username: "testuser001"
+- input password: "Test@1234"
+- input email: "test@example.com"
+
+参数化后:
+- input username: {{ test_username }}
+- input password: {{ test_password }}
+- input email: {{ test_email }}
+
+参数文件 (conftest.py):
+@pytest.fixture
+def test_data():
+    return {
+        "test_username": "testuser001",
+        "test_password": "Test@1234",
+        "test_email": "test@example.com"
+    }
+
+4.3 断言增强器
+
+自动补充断言，提高测试覆盖：
+
+class AssertionEnhancer:
+    def enhance(self, ast: TestAST, trace: ParsedTrace) -> TestAST:
+        enhanced_body = []
+        
+        for i, node in enumerate(ast.body):
+            enhanced_body.append(node)
+            
+            # 导航后添加 URL 断言
+            if node.action == "navigate":
+                enhanced_body.append(URLAssertNode(
+                    expected_url_pattern=node.target
+                ))
+            
+            # 点击后添加视觉变化断言
+            if node.action == "click":
+                enhanced_body.append(VisualChangeAssertNode(
+                    description=f"点击后页面应发生变化"
+                ))
+            
+            # 表单提交后添加成功提示断言
+            if self._is_form_submit(node):
+                enhanced_body.append(ElementAssertNode(
+                    selector=".success-message, .toast-success",
+                    should_exist=True
+                ))
+        
+        ast.body = enhanced_body
+        return ast
+
+5. 编译层 (Compiler Layer)
+
+5.1 代码生成器
+
+class PythonCompiler:
+    def compile(self, ast: TestAST, parameters: list[Parameter]) -> str:
+        template = self._load_template("pytest_template.j2")
+        
+        code = template.render(
+            test_name=ast.name,
+            docstring=ast.docstring,
+            fixtures=ast.fixtures,
+            parameters=parameters,
+            steps=self._compile_steps(ast.body),
+            imports=self._generate_imports(ast)
+        )
+        
+        return code
+    
+    def _compile_steps(self, nodes: list[ASTNode]) -> list[str]:
+        code_lines = []
+        
+        for node in nodes:
+            if isinstance(node, UIActionNode):
+                code_lines.append(self._compile_ui_action(node))
+            elif isinstance(node, APICallNode):
+                code_lines.append(self._compile_api_call(node))
+            elif isinstance(node, AssertNode):
+                code_lines.append(self._compile_assertion(node))
+        
+        return code_lines
+
+5.2 Jinja2 模板
+
+# pytest_template.j2
+
+"""
+{{ docstring }}
+
+Auto-generated by Phoenix Nirvana Layer
+Source: {{ source_tc_id }}
+Generated: {{ generated_at }}
+"""
+import pytest
+from playwright.sync_api import Page, expect
+{% if has_api_calls %}
+import httpx
+{% endif %}
+
+
+{% if parameters %}
+@pytest.fixture
+def test_data():
+    return {
+        {% for param in parameters %}
+        "{{ param.name }}": "{{ param.default_value }}",
+        {% endfor %}
+    }
+{% endif %}
+
+
+class Test{{ class_name }}:
+    """{{ docstring }}"""
+    
+    {% for test in tests %}
+    def test_{{ test.name }}(self, page: Page{% if parameters %}, test_data{% endif %}):
+        """{{ test.docstring }}"""
+        {% for step in test.steps %}
+        {{ step.code }}
+        {% if step.comment %}
+        # {{ step.comment }}
+        {% endif %}
+        {% endfor %}
+    {% endfor %}
+
+5.3 UI 操作编译规则
+
+| AUI-IR 动作 | Playwright 代码 |
+|------------|-----------------|
+| click (visual) | `page.mouse.click(x, y)` |
+| click (dom) | `page.locator("selector").click()` |
+| input | `page.locator("selector").fill("value")` |
+| hover | `page.locator("selector").hover()` |
+| scroll | `page.mouse.wheel(0, delta)` |
+| navigate | `page.goto("url")` |
+| wait | `page.wait_for_selector("selector")` |
+
+def _compile_ui_action(self, node: UIActionNode) -> str:
+    if node.action == "click":
+        if node.strategy == "visual":
+            return f'page.mouse.click({node.coordinates[0]}, {node.coordinates[1]})'
+        else:
+            return f'page.locator("{node.selector}").click()'
+    
+    elif node.action == "input":
+        return f'page.locator("{node.selector}").fill("{node.value}")'
+    
+    elif node.action == "navigate":
+        return f'page.goto("{node.target}")'
+    
+    elif node.action == "hover":
+        return f'page.locator("{node.selector}").hover()'
+
+5.4 API 调用编译规则
+
+def _compile_api_call(self, node: APICallNode) -> str:
+    code_lines = []
+    
+    # 构建请求
+    code_lines.append(f'response = client.{node.method.lower()}(')
+    code_lines.append(f'    "{node.url}",')
+    
+    if node.headers:
+        code_lines.append(f'    headers={repr(node.headers)},')
+    
+    if node.body:
+        code_lines.append(f'    json={repr(node.body)},')
+    
+    code_lines.append(')')
+    
+    # 添加断言
+    for assertion in node.assertions:
+        if assertion.type == "status_code":
+            code_lines.append(f'assert response.status_code == {assertion.expected}')
+        elif assertion.type == "json_path":
+            code_lines.append(
+                f'assert response.json(){assertion.path} == {repr(assertion.expected)}'
+            )
+    
+    return '\n'.join(code_lines)
+
+6. 注释层 (Annotator Layer)
+
+6.1 意图注释器
+
+保留业务语义，让代码更易维护：
+
+class IntentAnnotator:
+    def annotate(self, code: str, trace: ParsedTrace) -> str:
+        # 1. 添加文件头注释
+        header = self._generate_header(trace)
+        
+        # 2. 为每个步骤添加业务注释
+        annotated_code = code
+        for step in trace.steps:
+            if step.description:
+                # 在代码行前插入注释
+                annotated_code = self._insert_comment(
+                    annotated_code,
+                    step.code_line,
+                    step.description
+                )
+        
+        # 3. 添加来源追溯
+        footer = self._generate_footer(trace)
+        
+        return header + annotated_code + footer
+
+6.2 生成示例
+
+"""
+测试用例: 用户登录功能验证
+用例ID: TC_LOGIN_001
+来源: AI 液态探索 → 凤凰涅槃层编译
+生成时间: 2026-02-06 10:00:00
+执行轨迹: TRACE_20260206_001
+"""
+import pytest
+from playwright.sync_api import Page, expect
+
+
+class TestUserLogin:
+    """验证用户使用正确的用户名和密码可以成功登录系统"""
+    
+    def test_login_with_valid_credentials(self, page: Page, test_data):
+        """正常登录流程测试"""
+        
+        # Step 1: 导航到登录页面
+        page.goto("https://example.com/login")
+        
+        # Step 2: 输入用户名
+        page.locator("#username").fill(test_data["username"])
+        
+        # Step 3: 输入密码
+        page.locator("#password").fill(test_data["password"])
+        
+        # Step 4: 点击登录按钮
+        page.locator("[data-testid='login-btn']").click()
+        
+        # Step 5: 验证登录成功
+        expect(page).to_have_url("https://example.com/dashboard")
+        expect(page.locator(".welcome-message")).to_be_visible()
+
+
+# === 来源追溯 ===
+# 原始 TC-IR: TC_LOGIN_001
+# 执行器: 右瞳引擎 v2.0
+# 编译器: 凤凰涅槃层 v1.0
+# 生成策略: visual-first, dom-fallback
+
+7. 版本管理层 (Versioner Layer)
+
+7.1 资产版本控制
+
+class AssetVersioner:
+    def __init__(self, repo_path: str):
+        self.repo = git.Repo(repo_path)
+    
+    def save(self, test_file: TestFile) -> str:
+        # 1. 写入文件
+        file_path = self._get_file_path(test_file)
+        with open(file_path, 'w') as f:
+            f.write(test_file.content)
+        
+        # 2. 检测变更
+        if self._has_changes(file_path):
+            # 3. 生成变更摘要
+            diff = self._get_diff(file_path)
+            commit_message = self._generate_commit_message(test_file, diff)
+            
+            # 4. 提交
+            self.repo.index.add([file_path])
+            commit = self.repo.index.commit(commit_message)
+            
+            return commit.hexsha
+        
+        return None
+    
+    def _generate_commit_message(self, test_file: TestFile, diff: str) -> str:
+        return f"""[Phoenix-Auto] Update {test_file.name}
+
+Source: {test_file.source_tc_id}
+Changes:
+{self._summarize_diff(diff)}
+
+Generated by Phoenix Nirvana Layer v1.0
+"""
+
+7.2 版本历史查询
+
+def get_version_history(self, file_path: str) -> list[VersionInfo]:
+    commits = list(self.repo.iter_commits(paths=file_path, max_count=20))
+    
+    return [
+        VersionInfo(
+            version=commit.hexsha[:8],
+            author=commit.author.name,
+            date=commit.committed_datetime,
+            message=commit.message,
+            changes=self._get_commit_diff(commit, file_path)
+        )
+        for commit in commits
+    ]
+
+8. 编译策略 (Compilation Strategies)
+
+8.1 策略选择
+
+| 策略 | 描述 | 适用场景 |
+|------|------|---------|
+| 精确复现 | 保留所有步骤，包括等待和中间状态 | 调试、回归测试 |
+| 简化优化 | 去除冗余，合并步骤 | 持续集成 |
+| 数据驱动 | 提取参数，支持多数据集 | 批量测试 |
+| 混合模式 | 视觉 + DOM 双保险 | 稳定性要求高 |
+
+8.2 策略配置
+
+compilation_config = {
+    "strategy": "optimized",  # exact | optimized | data_driven | hybrid
+    
+    "optimizations": {
+        "dedup_waits": True,       # 去重等待
+        "merge_inputs": True,      # 合并输入
+        "enhance_asserts": True,   # 增强断言
+        "extract_params": True     # 提取参数
+    },
+    
+    "code_style": {
+        "framework": "pytest",     # pytest | unittest
+        "async_mode": False,       # 同步/异步
+        "page_object": False       # 是否生成 Page Object
+    },
+    
+    "locator_strategy": {
+        "prefer_testid": True,     # 优先使用 data-testid
+        "fallback_chain": ["id", "name", "css", "xpath"]
+    }
+}
+
+9. 自愈脚本编译 (Self-Healing Compilation)
+
+9.1 气态→固态编译
+
+当脚本自愈成功后，将修复策略编译回脚本：
+
+class SelfHealingCompiler:
+    def compile_healing(self, original_script: str, 
+                        healing_record: HealingRecord) -> str:
+        # 1. 解析原脚本
+        ast = parse(original_script)
+        
+        # 2. 定位失败步骤
+        failed_node = self._find_node(ast, healing_record.failed_step)
+        
+        # 3. 应用修复
+        if healing_record.healing_type == "locator_update":
+            # 更新定位器
+            failed_node.selector = healing_record.new_selector
+        
+        elif healing_record.healing_type == "strategy_switch":
+            # 切换策略 (visual → dom 或 dom → visual)
+            failed_node.strategy = healing_record.new_strategy
+            failed_node.coordinates = healing_record.new_coordinates
+        
+        # 4. 添加自愈注释
+        self._add_healing_comment(failed_node, healing_record)
+        
+        # 5. 重新生成代码
+        return unparse(ast)
+
+9.2 自愈注释示例
+
+# [HEALED] 2026-02-06 10:30:00
+# 原因: 元素定位器失效
+# 旧: page.locator("#submit-btn").click()
+# 新: page.locator("[data-testid='submit-btn']").click()
+# 治愈方式: DOM 选择器更新
+page.locator("[data-testid='submit-btn']").click()
+
+10. API 接口设计
+
+10.1 编译请求
+
+POST /api/v1/phoenix/compile
+{
+  "trace_id": "TRACE_001",
+  "strategy": "optimized",
+  "output_format": "pytest",
+  "options": {
+    "extract_params": true,
+    "enhance_asserts": true
+  }
+}
+
+响应：
+{
+  "script_id": "SCRIPT_001",
+  "file_path": "tests/test_login.py",
+  "code_preview": "...",
+  "parameters_extracted": 3,
+  "steps_generated": 8
+}
+
+10.2 获取编译结果
+
+GET /api/v1/phoenix/scripts/{script_id}
+
+10.3 版本历史
+
+GET /api/v1/phoenix/scripts/{script_id}/history
+
+11. 前端界面设计
+
++------------------------------------------------------------------+
+| 🔥 凤凰涅槃 - 资产编译器                                          |
++------------------------------------------------------------------+
+|                                                                  |
+| 输入轨迹: TRACE_20260206_001                    [选择轨迹 ▼]     |
+|                                                                  |
+| 编译策略                                                         |
+| ┌───────────────────────────────────────────────────────────┐   |
+| │ ○ 精确复现  ● 简化优化  ○ 数据驱动  ○ 混合模式             │   |
+| └───────────────────────────────────────────────────────────┘   |
+|                                                                  |
+| 优化选项                                                         |
+| ☑ 去重等待  ☑ 合并输入  ☑ 增强断言  ☑ 提取参数                 |
+|                                                                  |
+| 代码预览                                                         |
+| ┌───────────────────────────────────────────────────────────┐   |
+| │ """                                                        │   |
+| │ 测试用例: 用户登录功能验证                                  │   |
+| │ """                                                        │   |
+| │ import pytest                                              │   |
+| │ from playwright.sync_api import Page, expect               │   |
+| │                                                            │   |
+| │ class TestUserLogin:                                       │   |
+| │     def test_login(self, page: Page, test_data):           │   |
+| │         page.goto("https://example.com/login")             │   |
+| │         page.locator("#username").fill(test_data["user"])  │   |
+| │         ...                                                │   |
+| └───────────────────────────────────────────────────────────┘   |
+|                                                                  |
+| 提取的参数: username, password, email                           |
+| 生成步骤数: 8 步                                                 |
+|                                                                  |
+| [预览完整代码]  [下载脚本]  [提交到仓库]                         |
++------------------------------------------------------------------+
+
+12. 与其他模块集成
+
+12.1 与执行引擎集成
+
+液态执行完成后自动触发编译：
+
+# 执行引擎回调
+async def on_execution_complete(trace: TraceLog):
+    if trace.all_passed:
+        # 自动编译为固态脚本
+        script = await phoenix.compile(trace)
+        await asset_store.save(script)
+
+12.2 脚本版本管理 (Script Version Management)
+
+12.2.1 Git 管理器实现
+
+class GitManager:
+    """脚本版本管理器 - 自动提交生成的测试脚本到 Git 仓库"""
+    
+    def __init__(self, config: dict):
+        self.repo_path = Path(config.get("repo_path", "./test_assets"))
+        self.repo = git.Repo(self.repo_path)
+        self.branch_prefix = config.get("branch_prefix", "phoenix-auto")
+        self.auto_commit = config.get("auto_commit", True)
+        self.auto_pr = config.get("auto_pr", False)
+    
+    async def commit_script(self, script: CompiledScript) -> GitCommitResult:
+        """提交编译后的脚本"""
+        
+        # 1. 切换/创建分支
+        branch_name = f"{self.branch_prefix}/{script.tc_id}"
+        self._ensure_branch(branch_name)
+        
+        # 2. 写入脚本文件
+        script_path = self.repo_path / script.relative_path
+        script_path.parent.mkdir(parents=True, exist_ok=True)
+        script_path.write_text(script.content, encoding="utf-8")
+        
+        # 3. Git add
+        self.repo.index.add([str(script_path)])
+        
+        # 4. 生成提交信息
+        commit_msg = self._generate_commit_message(script)
+        
+        # 5. Git commit
+        commit = self.repo.index.commit(commit_msg)
+        
+        return GitCommitResult(
+            commit_sha=commit.hexsha,
+            branch=branch_name,
+            file_path=str(script_path),
+            message=commit_msg
+        )
+    
+    def _generate_commit_message(self, script: CompiledScript) -> str:
+        """生成标准化提交信息"""
+        return f"""[Phoenix] {script.tc_id}: {script.name}
+
+自动编译自 Trace ID: {script.source_trace_id}
+编译策略: {script.compilation_strategy}
+生成步骤数: {script.step_count}
+参数化字段: {', '.join(script.parameters)}
+
+Co-authored-by: Phoenix Nirvana Layer <phoenix@chongming.ai>
+"""
+    
+    def _ensure_branch(self, branch_name: str):
+        """确保分支存在并切换"""
+        if branch_name not in [b.name for b in self.repo.branches]:
+            self.repo.create_head(branch_name)
+        self.repo.heads[branch_name].checkout()
+
+12.2.2 Git 工作流
+
+凤凰涅槃层生成脚本
+       ↓
+   自动提交到 feature/phoenix-auto/{tc_id} 分支
+       ↓
+   (可选) 自动创建 Pull Request
+       ↓
+   人工审核 / 自动合并
+       ↓
+   合并到主分支 (main/master)
+
+12.2.3 分支策略
+
+| 分支类型 | 命名规则 | 用途 |
+|---------|---------|------|
+| 自动生成 | phoenix-auto/{tc_id} | 单个用例的自动生成脚本 |
+| 批量生成 | phoenix-batch/{date} | 批量编译的脚本集合 |
+| VRT 基线 | vrt-baseline/{page} | VRT 视觉回归基线 |
+
+12.2.4 版本回滚
+
+class ScriptVersionManager:
+    """脚本版本历史管理"""
+    
+    async def get_history(self, script_path: str, limit: int = 10) -> list:
+        """获取脚本的版本历史"""
+        commits = list(self.repo.iter_commits(paths=script_path, max_count=limit))
+        return [
+            {
+                "sha": c.hexsha[:7],
+                "message": c.message.split("\n")[0],
+                "author": str(c.author),
+                "date": c.committed_datetime.isoformat(),
+                "diff_stats": c.stats.total
+            }
+            for c in commits
+        ]
+    
+    async def rollback(self, script_path: str, target_sha: str) -> bool:
+        """回滚脚本到指定版本"""
+        # 1. 获取目标版本的内容
+        blob = self.repo.commit(target_sha).tree / script_path
+        content = blob.data_stream.read().decode("utf-8")
+        
+        # 2. 写入当前文件
+        Path(self.repo_path / script_path).write_text(content)
+        
+        # 3. 提交回滚
+        self.repo.index.add([script_path])
+        self.repo.index.commit(f"[Phoenix] Rollback {script_path} to {target_sha[:7]}")
+        
+        return True
+
+12.2.5 提交规范
+
+| 前缀 | 用途 | 示例 |
+|------|------|------|
+| [Phoenix] | 自动编译生成 | [Phoenix] TC_LOGIN_001: 用户登录验证 |
+| [Phoenix-Fix] | 自愈修复后重编译 | [Phoenix-Fix] TC_LOGIN_001: 修复定位器 |
+| [Phoenix-VRT] | VRT 基线更新 | [Phoenix-VRT] login_page: 更新基线 |
+
+12.2.6 PR 自动创建 (可选)
+
+class PullRequestManager:
+    """自动创建 Pull Request"""
+    
+    async def create_pr(self, branch: str, script: CompiledScript) -> str:
+        """创建 GitHub/GitLab Pull Request"""
+        pr_title = f"[Phoenix] 自动生成: {script.tc_id}"
+        pr_body = f"""
+## 自动编译的测试脚本
+
+- **用例ID**: {script.tc_id}
+- **用例名称**: {script.name}
+- **来源轨迹**: {script.source_trace_id}
+- **编译策略**: {script.compilation_strategy}
+
+### 变更内容
+- 新增测试脚本: `{script.relative_path}`
+- 步骤数: {script.step_count}
+- 参数化字段: {', '.join(script.parameters)}
+
+---
+_此 PR 由 Phoenix Nirvana Layer 自动创建_
+"""
+        # GitHub API / GitLab API 调用
+        pr_url = await self.github_client.create_pr(
+            base="main",
+            head=branch,
+            title=pr_title,
+            body=pr_body
+        )
+        return pr_url
+
+13. 部署说明
+
+13.1 依赖
+
+- Jinja2: 模板渲染
+- GitPython: Git 操作
+- Black: 代码格式化
+
+13.2 配置
+
+phoenix:
+  output_dir: "./generated_tests"
+  template_dir: "./templates"
+  
+  git:
+    enabled: true
+    repo_path: "./test_assets"
+    auto_commit: true
+    branch_prefix: "phoenix-auto"
+  
+  code_formatter: "black"
+  
+  compilation:
+    default_strategy: "optimized"
+    framework: "pytest"
+
+14. 竞品参考与设计灵感 (Competitor References) 【v1.1 新增】
+
+14.1 Skyvern 自愈逻辑参考
+
+Skyvern 的重试/自愈逻辑与凤凰涅槃层的资产更新策略相关：
+
+    Skyvern 特性:
+    • 元素定位失败时自动重试
+    • 使用 LLM 推理新的元素位置
+    • 抗布局变化能力
+
+    凤凰涅槃层借鉴:
+    • 自愈脚本编译 (Self-Healing Compilation)
+    • 将成功的修复策略固化回脚本
+
+14.2 UFO Human-in-the-loop 参考
+
+UFO 的人工确认机制与脚本版本确认相似：
+
+    UFO 特性:
+    • 关键操作前弹窗确认
+    • 记录人类操作供后续学习
+
+    凤凰涅槃层借鉴:
+    • [✓ 确认] [✏️ 修改] [✗ 拒绝] 三选卡片
+    • 修改反馈驱动脚本改进
+
+14.3 Mind2Web 数据结构参考
+
+Mind2Web 的 cleaned_html 格式对脚本生成有参考价值：
+
+    Mind2Web 字段          →    凤凰涅槃层对应
+    ─────────────────────────────────────────────────
+    raw_html              →    原始 Trace Log
+    cleaned_html          →    优化后的代码
+    pos_candidates        →    多策略定位器
+    operation.op          →    Playwright 动作
+
+End of Design Document
+
