@@ -55,6 +55,10 @@ dependencies = [
     "loguru>=0.7.2",
     "tenacity>=8.2.3",
     "aiofiles>=23.2.1",
+    "cryptography>=42.0.0",
+    
+    # === Data Factory ===
+    "faker>=22.0.0",
 ]
 
 [project.optional-dependencies]

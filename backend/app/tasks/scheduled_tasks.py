@@ -5,7 +5,7 @@ Celery Beat 调度的周期性任务
 对应 Issue: #CL-005
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from celery import shared_task
 from loguru import logger
@@ -26,7 +26,7 @@ def daily_regression():
     # 3. 发送通知
     
     return {
-        "triggered_at": datetime.utcnow().isoformat(),
+        "triggered_at": datetime.now(UTC).isoformat(),
         "status": "scheduled",
         "message": "每日回归测试已触发",
     }
@@ -46,7 +46,7 @@ def generate_weekly_report():
     # 2. 生成报告
     # 3. 发送邮件/通知
     
-    end_date = datetime.utcnow()
+    end_date = datetime.now(UTC)
     start_date = end_date - timedelta(days=7)
     
     return {
@@ -80,7 +80,7 @@ def cleanup_expired_data():
     }
     
     return {
-        "cleaned_at": datetime.utcnow().isoformat(),
+        "cleaned_at": datetime.now(UTC).isoformat(),
         "cleaned_items": cleaned,
         "status": "completed",
     }
@@ -108,7 +108,7 @@ def health_check():
     }
     
     return {
-        "checked_at": datetime.utcnow().isoformat(),
+        "checked_at": datetime.now(UTC).isoformat(),
         "status": status,
         "overall": "healthy",
     }
@@ -129,7 +129,7 @@ def sync_git_scripts():
     # 3. 更新脚本状态
     
     return {
-        "synced_at": datetime.utcnow().isoformat(),
+        "synced_at": datetime.now(UTC).isoformat(),
         "scripts_synced": 0,
         "status": "completed",
     }

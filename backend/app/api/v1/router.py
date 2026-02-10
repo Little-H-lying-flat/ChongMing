@@ -14,6 +14,9 @@ from app.api.v1.endpoints import (
     phoenix,
     tasks,
     api_engine,
+    environments,
+    data_factory,
+    left_pupil,
 )
 
 api_router = APIRouter()
@@ -67,4 +70,23 @@ api_router.include_router(
     tags=["左瞳引擎"]
 )
 
+# 环境管理
+api_router.include_router(
+    environments.router,
+    prefix="/environments",
+    tags=["环境管理"]
+)
 
+# 数据工厂
+api_router.include_router(
+    data_factory.router,
+    prefix="/data-factory",
+    tags=["数据工厂"]
+)
+
+# 左瞳引擎 v2 (API 测试)
+api_router.include_router(
+    left_pupil.router,
+    prefix="/left-pupil",
+    tags=["左瞳引擎"]
+)
