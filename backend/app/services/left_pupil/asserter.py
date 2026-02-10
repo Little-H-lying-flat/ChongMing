@@ -321,20 +321,29 @@ class Asserter:
             if isinstance(response_data, dict):
                 data_value = response_data.get("data", {})
             
-            context = {
+            # 分离变量和函数
+            names = {
                 "response": response_data,
                 "data": data_value,
+            }
+            functions = {
                 "len": len,
                 "str": str,
                 "int": int,
                 "float": float,
                 "bool": bool,
-                "isinstance": isinstance,
                 "list": list,
                 "dict": dict,
             }
             
-            passed = bool(eval(expression, {"__builtins__": {}}, context))
+            from simpleeval import SimpleEval
+            import ast
+            
+            s = SimpleEval(names=names, functions=functions)
+            # 支持列表字面量 []
+            s.nodes[ast.List] = lambda node: [s._eval(x) for x in node.elts]
+            
+            passed = bool(s.eval(expression))
         except Exception as e:
             passed = False
             return AssertionResult(

@@ -278,6 +278,20 @@ class ApiRunner:
     
     def _extract_json_path(self, data: dict, path: str) -> Any:
         """提取 JsonPath 值"""
+        # 优先使用 jsonpath-ng
+        try:
+            from jsonpath_ng import parse
+            jsonpath_expr = parse(path)
+            matches = jsonpath_expr.find(data)
+            if matches:
+                return matches[0].value
+            return None
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+        # 简单实现回退
         if path.startswith("$."):
             path = path[2:]
         

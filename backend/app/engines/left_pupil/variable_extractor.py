@@ -48,7 +48,22 @@ class VariableExtractor:
         - $.array[0] - 数组索引
         - $.array[*] - 所有数组元素
         - $.obj.nested - 嵌套路径
+        - [?(@.price < 10)] - 过滤器 (由 jsonpath-ng 支持)
         """
+        try:
+            from jsonpath_ng import parse
+            jsonpath_expr = parse(path)
+            matches = jsonpath_expr.find(data)
+            if matches:
+                # 如果匹配多个，返回列表；否则返回单个值
+                if len(matches) > 1:
+                    return [m.value for m in matches]
+                return matches[0].value
+        except ImportError:
+            logger.warning("jsonpath-ng 未安装，回退到简单实现")
+        except Exception as e:
+            logger.warning(f"jsonpath-ng 提取失败: {path} - {e}, 尝试简单实现")
+
         try:
             # 移除开头的 $.
             path = path[2:] if path.startswith("$.") else path

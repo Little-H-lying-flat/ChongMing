@@ -123,7 +123,7 @@ class RagRetriever:
             response = await self.llm_client.post(
                 "/chat/completions",
                 json={
-                    "model": settings.QWEN_MODEL_NAME,
+                    "model": settings.MODEL_GENERAL_CHAT,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.3,
                     "max_tokens": 200,
