@@ -54,11 +54,11 @@ class RefinedAssertionSpec(BaseModel):
     contains: Optional[str] = None
     expression: Optional[str] = None
 
-class RefinedTCIR(BaseModel):
+class RefinedTestStep(BaseModel):
     """
-    Refined Test Case IR
+    Refined Test Step
     
-    符合 API-IR 标准的 Pydantic 模型，用于最终生成
+    符合 API-IR 标准的单步测试模型
     """
     id: str
     name: str
@@ -67,4 +67,16 @@ class RefinedTCIR(BaseModel):
     dependencies: List[str] = Field(default_factory=list)
     extraction: Dict[str, str] = Field(default_factory=dict)
     assertion: RefinedAssertionSpec = Field(default_factory=RefinedAssertionSpec)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+class RefinedTestCase(BaseModel):
+    """
+    Refined Test Case
+    
+    包含多个步骤的完整测试用例 (Chain)
+    """
+    id: str
+    name: str
+    description: str = ""
+    steps: List[RefinedTestStep] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)

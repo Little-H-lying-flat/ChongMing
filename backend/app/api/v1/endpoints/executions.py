@@ -7,11 +7,21 @@
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel, Field
+from celery.result import AsyncResult
+import uuid
+
+from app.engines.right_pupil import RightPupilEngine
+from app.tasks.execution_tasks import execute_test_cases, cancel_execution as cancel_task
 
 router = APIRouter()
 
 
 # ===================== 数据模型 =====================
+
+class UiRunRequest(BaseModel):
+    prompt: str
+    url: str
+
 
 class ExecutionRequest(BaseModel):
     """执行请求"""
@@ -66,12 +76,26 @@ async def start_execution(
     
     将 TC-IR 分发到执行引擎，返回执行 ID
     """
-    # TODO: 创建执行任务，发送到 Celery
+    # 生成执行 ID (虽然 Task 会生成，但我们这里预生成以便返回，或者让 Task 返回)
+    # 策略：由 Task 生成 ID 比较麻烦，因为 .delay() 返回的是 Task ID。
+    # 我们使用 Task ID 作为 Execution ID，或者在 Task 内部生成业务 ID。
+    # 这里为了简单，我们使用 Task ID 作为 Execution ID。
+    
+    task = execute_test_cases.delay(
+        tc_ids=request.tc_ids,
+        config={
+            "mode": request.mode,
+            "parallel": request.parallel,
+            "max_workers": request.max_workers,
+            "env": request.env
+        }
+    )
+    
     return ExecutionResponse(
-        execution_id="EXEC_PLACEHOLDER",
+        execution_id=task.id,
         status="pending",
         total_cases=len(request.tc_ids),
-        dashboard_url="/executions/EXEC_PLACEHOLDER",
+        dashboard_url=f"/executions/{task.id}",
     )
 
 
@@ -82,8 +106,39 @@ async def get_execution_status(execution_id: str):
     
     实时查询执行进度
     """
-    # TODO: 从 Redis/数据库查询状态
-    raise HTTPException(status_code=404, detail=f"执行 {execution_id} 不存在")
+    task_result = AsyncResult(execution_id)
+    
+    # 默认值
+    status = task_result.status
+    progress = 0.0
+    meta = {
+        "passed": 0, "failed": 0, "skipped": 0, "running": 0, 
+        "pending": 0, "start_time": "", "elapsed_seconds": 0.0
+    }
+    
+    if task_result.state == 'PROGRESS':
+        meta.update(task_result.info or {})
+        progress = meta.get("progress", 0.0)
+    elif task_result.state == 'SUCCESS':
+        progress = 100.0
+        # 尝试从结果中获取更多详情
+        if isinstance(task_result.result, dict):
+             meta.update(task_result.result) # 结果可能包含统计信息
+    elif task_result.state == 'FAILURE':
+        progress = 0.0
+        
+    return ExecutionStatus(
+        execution_id=execution_id,
+        status=status,
+        progress=progress,
+        passed=meta.get("passed", 0),
+        failed=meta.get("failed", 0),
+        skipped=meta.get("skipped", 0),
+        running=meta.get("running", 0),
+        pending=meta.get("pending", 0),
+        start_time=meta.get("start_time", ""),
+        elapsed_seconds=meta.get("elapsed_seconds", 0.0)
+    )
 
 
 @router.get("/{execution_id}/result", response_model=ExecutionResult)
@@ -98,13 +153,18 @@ async def get_execution_result(execution_id: str):
 
 
 @router.post("/{execution_id}/cancel", status_code=202)
-async def cancel_execution(execution_id: str):
+async def cancel_execution_endpoint(execution_id: str):
     """
     取消执行
     
     终止正在运行的执行任务
     """
-    # TODO: 发送取消信号到 Celery
+    # 调用 Celery 的终止方法
+    AsyncResult(execution_id).revoke(terminate=True)
+    
+    # 也可以发送一个专门的取消任务来清理资源
+    cancel_task.delay(execution_id)
+    
     return {"message": f"取消请求已发送: {execution_id}"}
 
 
@@ -120,3 +180,13 @@ async def list_executions(
     """
     # TODO: 从数据库查询
     return []
+
+
+@router.post("/ui/run")
+async def run_ui_task(request: UiRunRequest):
+    """
+    运行 UI 自动化任务 (Right Pupil)
+    """
+    engine = RightPupilEngine()
+    logs = await engine.run_task(request.prompt, request.url)
+    return logs

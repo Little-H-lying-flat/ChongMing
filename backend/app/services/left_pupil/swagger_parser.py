@@ -187,10 +187,18 @@ class SwaggerParser:
         paths = spec.get("paths", {})
         
         for path, methods in paths.items():
+            if not isinstance(methods, dict):
+                continue
             for method, details in methods.items():
+                if not isinstance(details, dict):
+                    continue
                 if method.lower() in ["get", "post", "put", "patch", "delete", "head", "options"]:
-                    endpoint = self._parse_endpoint(path, method, details)
-                    endpoints.append(endpoint)
+                    try:
+                        endpoint = self._parse_endpoint(path, method, details)
+                        endpoints.append(endpoint)
+                    except Exception:
+                        # Skip malformed endpoints
+                        continue
         
         return endpoints
     

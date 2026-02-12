@@ -67,7 +67,8 @@ class Settings(BaseSettings):
 
     
     # === OmniParser ===
-    OMNIPARSER_URL: str = "http://localhost:8080"
+    OMNIPARSER_URL: str = "http://localhost:7861"
+    MOCK_OMNIPARSER: bool = False
     
     # === CORS ===
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]

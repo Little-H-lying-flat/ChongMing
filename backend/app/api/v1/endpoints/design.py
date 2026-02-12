@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from pydantic import BaseModel
 
 from app.services.neural_design.service import DesignService
-from app.services.neural_design.models import DesignRequest, RefinedTCIR
+from app.services.neural_design.models import DesignRequest, RefinedTestCase
 from app.core.ai_client import get_ai_manager
 from app.services.left_pupil.rag_retriever import RagRetriever
 
@@ -38,7 +38,7 @@ async def analyze_prd(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Requirement analysis failed: {str(e)}")
 
-@router.post("/generate", response_model=RefinedTCIR)
+@router.post("/generate", response_model=RefinedTestCase)
 async def generate_test_case_endpoint(
     scenario: Dict[str, Any] = Body(..., description="Scenario definition object"),
     project_id: str = Body(..., description="Project ID context"),
@@ -59,8 +59,8 @@ async def generate_test_case_endpoint(
         # To make it clean, let's accept a wrapper model or just dict.
         # Using Body(...) for scenario dict is fine.
         
-        tcir = await service.generate_test_case(scenario, project_id)
-        return tcir
+        test_case = await service.generate_test_case(scenario, project_id)
+        return test_case
     except ValueError as e:
         # Validation or parsing error
         raise HTTPException(status_code=400, detail=str(e))

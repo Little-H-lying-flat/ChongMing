@@ -35,7 +35,8 @@ def execute_api_test(
         执行结果
     """
     import asyncio
-    from app.engines.left_pupil import APIExecutor, APIIR, AuthConfig, AuthType
+    from app.engines.left_pupil import APIExecutor, AuthConfig, AuthType
+    from app.schemas.execution import APIIR
     
     logger.info(f"开始执行 API 测试: {api_ir.get('method')} {api_ir.get('url')}")
     
@@ -124,7 +125,8 @@ def execute_api_chain(
         链式执行结果
     """
     import asyncio
-    from app.engines.left_pupil import APIExecutor, APIIR, AuthConfig, AuthType
+    from app.engines.left_pupil import APIExecutor, AuthConfig, AuthType
+    from app.schemas.execution import APIIR
     
     logger.info(f"开始执行 API 链: {len(chain)} 个请求")
     

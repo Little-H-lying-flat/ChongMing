@@ -1,0 +1,47 @@
+2026-02-11 02:28:52 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-11 02:28:52 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-11 02:28:52 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-11 02:29:57 | INFO     | app.core.request_logger:request_logging_middleware:71 | [a857ee02] --> POST /api/v1/executions/ui/run
+2026-02-11 02:29:58 | INFO     | app.core.ai_client:_init_clients:189 | DashScope 客户端已初始化
+2026-02-11 02:30:06 | INFO     | app.core.request_logger:request_logging_middleware:71 | [aeb831b1] --> POST /parse
+2026-02-11 02:30:06 | INFO     | app.core.request_logger:request_logging_middleware:91 | [aeb831b1] <-- 404 (0.54ms)
+2026-02-11 02:30:07 | INFO     | app.core.request_logger:request_logging_middleware:91 | [a857ee02] <-- 200 (9993.93ms)
+2026-02-11 02:47:21 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-11 02:47:21 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-11 02:47:21 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-11 02:47:21 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-11 02:47:29 | INFO     | app.core.request_logger:request_logging_middleware:71 | [c9af9ae6] --> POST /api/v1/executions/ui/run
+2026-02-11 02:47:38 | INFO     | app.core.request_logger:request_logging_middleware:71 | [6e6b1de2] --> POST /parse
+2026-02-11 02:47:38 | INFO     | app.core.request_logger:request_logging_middleware:91 | [6e6b1de2] <-- 404 (0.56ms)
+2026-02-11 02:47:38 | INFO     | app.core.request_logger:request_logging_middleware:91 | [c9af9ae6] <-- 200 (9607.32ms)
+2026-02-11 02:48:47 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-11 02:48:47 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-11 02:48:47 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-11 02:49:00 | INFO     | app.core.request_logger:request_logging_middleware:71 | [fb3f1e7a] --> POST /api/v1/executions/ui/run
+2026-02-11 02:49:01 | INFO     | app.core.ai_client:_init_clients:189 | DashScope 客户端已初始化
+2026-02-11 02:49:10 | INFO     | app.core.request_logger:request_logging_middleware:91 | [fb3f1e7a] <-- 200 (10897.06ms)
+2026-02-11 03:06:52 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-11 03:06:52 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-11 03:06:52 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-11 03:06:52 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-11 03:07:05 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-11 03:07:05 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-11 03:07:05 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-11 03:07:16 | INFO     | app.core.request_logger:request_logging_middleware:71 | [b4674691] --> POST /api/v1/executions/ui/run
+2026-02-11 03:07:18 | INFO     | app.core.ai_client:_init_clients:189 | DashScope 客户端已初始化
+2026-02-11 03:07:30 | INFO     | app.core.request_logger:request_logging_middleware:91 | [b4674691] <-- 200 (13620.31ms)
+2026-02-11 19:18:49 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-11 19:18:49 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-11 19:18:49 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-11 19:19:41 | INFO     | app.core.request_logger:request_logging_middleware:71 | [f4092824] --> POST /api/v1/executions/ui/run
+2026-02-11 19:19:43 | INFO     | app.core.ai_client:_init_clients:189 | DashScope 客户端已初始化
+2026-02-11 19:20:03 | INFO     | app.core.request_logger:request_logging_middleware:91 | [f4092824] <-- 200 (21876.79ms)
+2026-02-11 19:21:35 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-11 19:21:35 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-11 19:21:35 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-11 19:22:41 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-11 19:22:41 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-11 19:22:41 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-11 19:25:25 | INFO     | app.core.request_logger:request_logging_middleware:71 | [237aff30] --> POST /api/v1/executions/ui/run
+2026-02-11 19:25:26 | INFO     | app.core.ai_client:_init_clients:189 | DashScope 客户端已初始化
+2026-02-11 19:25:46 | INFO     | app.core.request_logger:request_logging_middleware:91 | [237aff30] <-- 200 (21119.10ms)

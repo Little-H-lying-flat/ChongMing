@@ -5,11 +5,15 @@ from app.engines.left_pupil.api_executor import APIExecutor, APIIR, ExecutionRes
 from app.engines.left_pupil.variable_extractor import VariableExtractor
 from app.engines.left_pupil.assertion_engine import AssertionEngine
 
+# Alias for backward compatibility or conceptual name
+LeftPupilEngine = APIExecutor
+
 __all__ = [
     "SwaggerParser",
     "APISpec",
     "EndpointInfo",
     "APIExecutor",
+    "LeftPupilEngine",
     "APIIR",
     "ExecutionResult",
     "AuthConfig",

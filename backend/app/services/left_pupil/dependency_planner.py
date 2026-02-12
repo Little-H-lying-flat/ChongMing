@@ -77,18 +77,6 @@ class DependencyPlanner:
             retriever: RAG 检索器
         """
         self.retriever = retriever or RagRetriever()
-        self._llm_client = None
-    
-    @property
-    def llm_client(self):
-        """延迟初始化 LLM 客户端"""
-        if self._llm_client is None:
-            self._llm_client = httpx.AsyncClient(
-                base_url=settings.QWEN_BASE_URL,
-                headers={"Authorization": f"Bearer {settings.QWEN_API_KEY}"},
-                timeout=30.0,
-            )
-        return self._llm_client
     
     async def plan(
         self,

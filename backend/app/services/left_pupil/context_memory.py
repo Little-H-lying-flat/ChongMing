@@ -78,6 +78,14 @@ class ContextMemory:
         """设置变量别名"""
         self._aliases[alias] = target
     
+    def _to_json_str(self, value: Any) -> str:
+        """转换为 JSON 安全的字符串表示"""
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+
     def inject(self, template: str) -> str:
         """
         将模板中的变量占位符替换为实际值
@@ -101,14 +109,14 @@ class ContextMemory:
             var_name = match.group(1)
             default_value = match.group(2) or ""
             value = self.get(var_name, default_value)
-            result = result.replace(match.group(0), str(value))
+            result = result.replace(match.group(0), self._to_json_str(value))
         
         # 处理 {{var}} 语法
         pattern_brace = r'\{\{([^}]+)\}\}'
         for match in re.finditer(pattern_brace, result):
             var_name = match.group(1).strip()
             value = self.get(var_name, "")
-            result = result.replace(match.group(0), str(value))
+            result = result.replace(match.group(0), self._to_json_str(value))
         
         return result
     

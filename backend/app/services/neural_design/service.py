@@ -9,16 +9,19 @@ import logging
 import uuid
 from typing import List, Dict, Any, Optional
 
-from app.core.ai_client import AIClientManager, get_ai_manager
+from app.core.ai_client import AIClientManager, get_ai_manager, Message
 from app.core.ai_models import AIModule
 from app.services.left_pupil.rag_retriever import RagRetriever
 from app.services.neural_design.models import (
-    DesignRequest, DraftTestCase, RefinedTCIR, 
+    DesignRequest, DraftTestCase, RefinedTestCase, RefinedTestStep,
     RefinedRequestSpec, RefinedAssertionSpec
 )
 from app.core.prompts.neural_design import (
-    PRD_ANALYSIS_PROMPT, TC_GENERATION_PROMPT, CRITIC_PROMPT
+    PRD_ANALYSIS_SYSTEM_PROMPT, PRD_ANALYSIS_USER_TEMPLATE,
+    TC_GENERATION_SYSTEM_PROMPT, TC_GENERATION_USER_TEMPLATE,
+    CRITIC_SYSTEM_PROMPT, CRITIC_USER_TEMPLATE
 )
+from app.utils.json_repair import repair_json
 
 logger = logging.getLogger(__name__)
 
@@ -47,15 +50,24 @@ class DesignService:
         """
         logger.info(f"开始分析需求: Project={request.project_id}")
         
-        prompt = PRD_ANALYSIS_PROMPT.format(
+        # 使用 System/User Role 分离防止 Prompt Injection
+        user_content = PRD_ANALYSIS_USER_TEMPLATE.format(
             requirement_text=request.requirement_text,
             context=request.context or "无额外上下文"
         )
         
+        messages = [
+            Message(role="system", content=PRD_ANALYSIS_SYSTEM_PROMPT),
+            Message(role="user", content=user_content)
+        ]
+        
         try:
-            # 调用 LLM 分析需求
-            response_text = await self.ai.simple_chat(prompt, module=AIModule.NEURAL_SCENARIO_GENERATOR)
-            data = self._parse_json(response_text)
+            # 调用 LLM 分析需求 (使用 invoke 以支持 Message 对象)
+            response = await self.ai.invoke(
+                module=AIModule.NEURAL_SCENARIO_GENERATOR,
+                messages=messages
+            )
+            data = self._parse_json(response.content)
             
             scenarios = data.get("scenarios", [])
             logger.info(f"需求分析完成，提取了 {len(scenarios)} 个场景")
@@ -63,50 +75,73 @@ class DesignService:
             
         except Exception as e:
             logger.error(f"需求分析失败: {e}")
-            # 返回空列表或抛出异常，视业务策略而定
-            # 这里即使失败也尝试返回原始文本包装的场景，或抛出
             raise RuntimeError(f"需求分析失败: {str(e)}") from e
 
-    async def generate_test_case(self, scenario: Dict[str, Any], project_id: str) -> RefinedTCIR:
+    async def generate_test_case(self, scenario: Dict[str, Any], project_id: str) -> RefinedTestCase:
         """
         根据场景生成测试用例
         
-        流程: Retrieve -> Draft -> Critic -> Refine
+        流程: Retrieve -> Draft (Retry) -> Critic -> Refine
         """
         scenario_name = scenario.get("name", "未命名场景")
         logger.info(f"开始生成测试用例: {scenario_name}")
         
-        # 1. Retrieve Context (检索相关 API)
-        # 使用场景描述和测试点作为查询
+        # 1. Retrieve Context
         query = f"{scenario.get('description', '')} {' '.join(scenario.get('test_points', []))}"
-        
-        logger.info(f"检索 API 上下文: {query}")
         relevant_apis = await self.retriever.retrieve(query, project_id)
         
-        # 格式化 API 上下文供 Prompt 使用
         api_context_str = "\n".join([
             f"- {api.method} {api.path}: {api.metadata.get('summary', '')}" 
             for api in relevant_apis
         ])
-        
         if not api_context_str:
-            logger.warning("未检索到相关 API，只能基于通用知识生成")
             api_context_str = "未检索到具体 API 定义，请基于 RESTful 通用规范生成。"
 
-        # 2. Draft Generation (生成草稿)
-        prompt = TC_GENERATION_PROMPT.format(
+        # 2. Draft Generation with Semantic Retry
+        user_content = TC_GENERATION_USER_TEMPLATE.format(
             scenario_description=json.dumps(scenario, ensure_ascii=False),
             available_apis=api_context_str
         )
         
-        draft_json_str = await self.ai.simple_chat(prompt, module=AIModule.NEURAL_INTENT_PARSER)
-        draft_data = self._parse_json(draft_json_str)
+        messages = [
+            Message(role="system", content=TC_GENERATION_SYSTEM_PROMPT),
+            Message(role="user", content=user_content)
+        ]
         
-        # 3. Self-Correction (Critic) (自我审查) - 可选
-        # 这里演示简单流程，暂不进行 Critic 循环， direct output
-        # 若要 Critic，可在此处再次调用 AI
+        draft_data = await self._invoke_with_retry(messages, AIModule.NEURAL_INTENT_PARSER)
         
-        # 4. Refine & Convert (转换为强类型)
+        # 3. Self-Correction (Critic)
+        try:
+            critic_user_content = CRITIC_USER_TEMPLATE.format(
+                draft_test_case=json.dumps(draft_data, ensure_ascii=False, indent=2)
+            )
+            critic_messages = [
+                Message(role="system", content=CRITIC_SYSTEM_PROMPT),
+                Message(role="user", content=critic_user_content)
+            ]
+            
+            logger.info("执行 Critic 自我审查...")
+            critic_response = await self.ai.invoke(
+                module=AIModule.NEURAL_INTENT_PARSER, # or CRITIC module
+                messages=critic_messages
+            )
+            
+            # 尝试解析 Critic 的输出
+            try:
+                critic_data = self._parse_json(critic_response.content)
+                # 验证是否为有效测试用例
+                if "steps" in critic_data and isinstance(critic_data["steps"], list):
+                    logger.info("Critic 提供了修正后的测试用例，采纳修正。")
+                    draft_data = critic_data
+                else:
+                     logger.info("Critic 输出有效JSON但非测试用例结构，保持原样。")
+            except Exception:
+                logger.debug("Critic 未返回 JSON，忽略修正建议。")
+
+        except Exception as e:
+            logger.warning(f"Critic 步骤执行失败，回退到原始草稿: {e}")
+        
+        # 4. Refine & Convert
         try:
             refined_case = self._convert_draft_to_refined(draft_data)
             logger.info(f"测试用例生成成功: {refined_case.id} - {refined_case.name}")
@@ -115,57 +150,44 @@ class DesignService:
             logger.error(f"测试用例转换失败: {e}")
             raise ValueError("生成的测试用例格式不正确，无法转换为标准 API-IR") from e
 
+    async def _invoke_with_retry(self, messages: List[Message], module: AIModule, max_retries: int = 2) -> Dict[str, Any]:
+        """
+        带语义重试的 LLM 调用
+        """
+        current_messages = messages.copy()
+        
+        for attempt in range(max_retries + 1):
+            try:
+                response = await self.ai.invoke(module, current_messages)
+                return self._parse_json(response.content)
+            except ValueError as e:
+                # JSON 解析错误
+                logger.warning(f"JSON 解析失败 (尝试 {attempt+1}/{max_retries+1}): {e}")
+                if attempt < max_retries:
+                    # 将错误反馈给 LLM
+                    current_messages.append(Message(role="assistant", content=response.content))
+                    current_messages.append(Message(role="user", content=f"JSON Parse Error: {str(e)}. Please fix the JSON and output ONLY the JSON object."))
+                else:
+                    raise
+            except Exception as e:
+                # 其他错误 (网络等已经在 Client 层重试，这里处理逻辑错误)
+                logger.error(f"LLM 调用严重错误: {e}")
+                raise
+
     def _parse_json(self, text: str) -> Dict[str, Any]:
         """
-        解析 LLM 输出的 JSON
-        
-        处理可能包含 Markdown 代码块的情况
+        解析 LLM 输出的 JSON (Robust)
         """
-        clean_text = text.strip()
-        if clean_text.startswith("```json"):
-            clean_text = clean_text[7:]
-        if clean_text.startswith("```"):
-            clean_text = clean_text[3:]
-        if clean_text.endswith("```"):
-            clean_text = clean_text[:-3]
-        
         try:
-            return json.loads(clean_text)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON 解析失败: {text[:100]}... Error: {e}")
-            # 简单重试机制或清洗可以是此处扩展点
-            raise
+            return repair_json(text)
+        except Exception as e:
+            logger.error(f"JSON 解析最终失败: {text[:100]}...")
+            raise ValueError(f"Invalid JSON: {str(e)}") from e
     
-    def _convert_draft_to_refined(self, draft: Dict[str, Any]) -> RefinedTCIR:
+    def _convert_draft_to_refined(self, draft: Dict[str, Any]) -> RefinedTestCase:
         """
-        将草稿 JSON 转换为 RefinedTCIR 对象
+        将草稿 JSON 转换为 RefinedTestCase 对象
         """
-        # 验证草稿数据符合 DraftTestCase 模型 (可选，增加鲁棒性)
-        # draft_obj = DraftTestCase(**draft) 
-        
-        # 构建 RefinedTCIR (Mapping Draft -> Refined)
-        # 假设 DraftTC -> ApiIRChain or ApiIR? 
-        # 这里假设 RefinedTCIR 代表一个完整的测试 *步骤* 还是 *用例*?
-        # 根据 models.py, RefinedTCIR 结构类似 ApiIR (单个步骤).
-        # 但 Prompt 可能会生成多个步骤。
-        # 如果生成多个步骤，RefinedTCIR 应该是一个 Chain 还是 List[ApiIR]?
-        # 暂时假设生成的 DraftTestCase 包含 steps，我们需要将其转换为 API-IR Chain 或者是单个复杂 API-IR?
-        # 根据 models.py, RefinedTCIR 结构本身包含 request, assertion 等，看起来是 SINGLE step definition.
-        
-        # 如果 Prompt 生成了 steps 列表，我们需要把第一个主要步骤或者聚合步骤转化为 RefinedTCIR。
-        # 或者 models.py 定义应该包含 steps?
-        # 查看 models.py, RefinedTCIR 确实是单步结构 (method, url, request...)
-        
-        # 修正：如果生成的DraftTestCase包含多个步骤，我们应该返回一个 List[RefinedTCIR] 或者 修改 RefinedTCIR 为 Chain?
-        # 为了符合 Phase 2 的设计，ApiIR 是单步。
-        # 这里为了简化，我们只提取 steps 中的第一个步骤作为主要测试步骤，或者该服务应该返回 List[RefinedTCIR]。
-        # 鉴于 RefinedTCIR 定义，我将返回 List[RefinedTCIR] 或者只转换第一个。
-        # 目前函数签名是 -> RefinedTCIR，我会只转换第一个步骤，或者抛出异常如果多步。
-        # 但 TC_GENERATION_PROMPT 明确要求生成 steps 列表。
-        
-        # 策略：取 Draft 中的第一个步骤作为主测试。
-        # 更好的做法是修改 Service 返回 List[RefinedTCIR]。我将修改函数签名为 List[RefinedTCIR]。
-        
         steps_data = draft.get("steps", [])
         if not steps_data:
             raise ValueError("生成的测试用例不包含任何步骤")
@@ -175,26 +197,28 @@ class DesignService:
             req_spec = RefinedRequestSpec(
                 method=step.get("method", "GET").upper(),
                 url=step.get("url_path", "/"),
-                body=step.get("input_data"), # 假设 input_data 就是 body
+                body=step.get("input_data"),
             )
             
-            # 从 expected_outcome 构造断言 (简单处理)
             assertion_spec = RefinedAssertionSpec(
-                status_code=200, # 默认
+                status_code=200, 
                 contains=step.get("expected_outcome")
             )
             
-            refined = RefinedTCIR(
+            refined_step = RefinedTestStep(
                 id=step.get("step_id") or uuid.uuid4().hex[:8],
-                name=step.get("intent") or draft.get("case_name", "Unnamed"),
+                name=step.get("intent") or "Step",
                 description=step.get("description", ""),
                 request=req_spec,
                 assertion=assertion_spec
             )
-            refined_steps.append(refined)
+            refined_steps.append(refined_step)
             
-        # 这里为了配合必须返回单个 RefinedTCIR 的限制 (如果 models.py 没变)，我返回第一个。
-        # 但逻辑上应该返回列表。
-        # 我会在代码中修改返回类型提示。
-        return refined_steps[0]
+        return RefinedTestCase(
+            id=uuid.uuid4().hex[:8],
+            name=draft.get("case_name", "Generated Case"),
+            description=draft.get("description", ""),
+            steps=refined_steps,
+            metadata={"origin": "neural_design"} 
+        )
 

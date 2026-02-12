@@ -83,36 +83,77 @@
          └─────────────────────────────────────────────────────────────┘
 ```
 
-### 系统架构
+### 核心分层架构 (Core Layered Architecture)
 
+本项目采用严格的 **API -> Services -> Engines** 分层架构，确保职责单一和代码解耦。
+
+```mermaid
+classDiagram
+    %% Layers
+    class API_Layer {
+        +Endpoints
+    }
+    class Service_Layer {
+        +TestCaseService
+        +PhoenixService
+    }
+    class Engine_Layer {
+        +Dispatcher
+        +RightPupilEngine
+        +LeftPupilEngine
+        +UiRunner
+        +OmniClient
+    }
+    class Schema_Layer {
+        +TCIR
+        +ExecutionMode
+        +AUIIR
+        +APIIR
+    }
+    class Core_Layer {
+        +Config
+        +DB
+    }
+
+    %% Relationships
+    API_Layer --> Service_Layer : Calls (Business Logic)
+    API_Layer --> Engine_Layer : Calls (Execution via Tasks)
+    
+    Service_Layer --> Core_Layer : Uses
+    Engine_Layer --> Core_Layer : Uses
+    
+    %% Implicit Dependency Breaker
+    Service_Layer ..> Schema_Layer : Uses Types
+    Engine_Layer ..> Schema_Layer : Uses Types
+    API_Layer ..> Schema_Layer : Uses Types
+
+    %% Internal Engine Structure
+    Dispatcher --> RightPupilEngine : Routes UI Steps
+    Dispatcher --> LeftPupilEngine : Routes API Steps
+    RightPupilEngine --> UiRunner : Delegates Execution
+    RightPupilEngine --> OmniClient : Uses Vision
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                            Frontend (React)                            │
-├────────────────────────────────────────────────────────────────────────┤
-│                         API Gateway (FastAPI)                          │
-├───────────────────┬────────────────────┬───────────────────────────────┤
-│   神经设计层       │     执行引擎层      │        支撑服务层              │
-│   (Neural)        │    (Execution)     │       (Support)               │
-│                   │                    │                               │
-│  ┌─────────────┐  │  ┌──────────────┐  │  ┌──────────────────────────┐ │
-│  │ PRD Parser  │  │  │ 右瞳 (UI)    │  │  │ Celery Task Scheduler   │ │
-│  │ TC Generator│  │  │ 左瞳 (API)   │  │  │ LangGraph Orchestrator  │ │
-│  │ Critic Agent│  │  │ 涡轮 (Perf)  │  │  │ Report Visualizer       │ │
-│  └─────────────┘  │  │ 智能等待     │  │  │ Data Factory            │ │
-│                   │  └──────────────┘  │  │ Environment Manager     │ │
-│  ┌─────────────┐  │                    │  └──────────────────────────┘ │
-│  │凤凰涅槃层   │  │  ┌──────────────┐  │                               │
-│  │ Trace→Script│  │  │ 缺陷分析     │  │                               │
-│  │ Git Commit  │  │  │ 自愈中心     │  │                               │
-│  └─────────────┘  │  │ VRT 视觉回归 │  │                               │
-│                   │  └──────────────┘  │                               │
-├───────────────────┴────────────────────┴───────────────────────────────┤
-│                      Data Layer (PostgreSQL / Redis)                   │
-├───────────────────┬────────────────────┬───────────────────────────────┤
-│    ChromaDB       │      Milvus        │         OmniParser            │
-│   (Knowledge)     │  (Defect Vector)   │    (Visual Recognition)       │
-└───────────────────┴────────────────────┴───────────────────────────────┘
-```
+
+#### 层级职责 (Layer Responsibilities)
+
+| 层级 | 职责描述 |
+| :--- | :--- |
+| **API Layer** | **仅处理 HTTP 请求/响应**。负责参数解析、验证和响应格式化，**严禁**包含任何业务逻辑。 |
+| **Service Layer** | **业务逻辑核心**。负责用户数据管理、数据库事务 (CRUD)、权限校验和领域业务规则。 |
+| **Engine Layer** | **执行与智能核心**。负责浏览器自动化 (Playwright)、视觉处理 (OmniParser)、LLM 编排和任务执行。 |
+| **Schema Layer** | **数据契约**。存放所有跨层级共享的 DTO (Data Transfer Objects)、Enums 和中间表示 (IR)，用于打破循环依赖。 |
+
+#### 开发守则 (Development Guidelines)
+
+> [!IMPORTANT]
+> 违反以下规则的 PR 将被拒绝合并。
+
+1.  **单向依赖原则**：
+    -   `Service` 可以调用 `Engine` (通常是通过 Task 或 Interface)。
+    -   **严禁** `Engine` 反向导入 `Service`。如果需要共享数据结构，请移至 `app/schemas`。
+2.  **执行逻辑归位**：
+    -   所有涉及 "运行"、"执行"、"自动化" 的逻辑 (如 Runner, Parser, Client) 必须放入 `app/engines/`。
+    -   禁止将执行逻辑放入 `app/services/`。
 
 ---
 

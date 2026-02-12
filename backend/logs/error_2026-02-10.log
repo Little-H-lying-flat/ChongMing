@@ -149,3 +149,12 @@ Traceback (most recent call last):
     "type": p.param_type,
 
 AttributeError: 'Parameter' object has no attribute 'param_type'
+2026-02-10 20:46:36.888 | ERROR    | app.core.request_logger:request_logging_middleware:111 - [e1b5bd0f] <-- ERROR: Error: BrowserType.launch: Executable doesn't exist at C:\Users\H\AppData\Local\ms-playwright\chromium-1208\chrome-win64\chrome.exe
+╔════════════════════════════════════════════════════════════╗
+║ Looks like Playwright was just installed or updated.       ║
+║ Please run the following command to download new browsers: ║
+║                                                            ║
+║     playwright install                                     ║
+║                                                            ║
+║ <3 Playwright Team                                         ║
+╚════════════════════════════════════════════════════════════╝ (2458.68ms)

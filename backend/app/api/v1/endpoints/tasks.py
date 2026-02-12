@@ -33,7 +33,18 @@ async def progress_event_generator(
     last_state = None
     heartbeat_count = 0
     
+    import time
+    start_time = time.time()
+    MAX_DURATION = 60 * 5 # 5 Minutes max connection
+    
     while True:
+        if time.time() - start_time > MAX_DURATION:
+            yield {
+                "event": "timeout",
+                "data": {"message": "Connection timeout, please reconnect"}
+            }
+            return
+
         try:
             state = result.state
             info = result.info

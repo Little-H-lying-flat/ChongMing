@@ -18,52 +18,12 @@ import httpx
 from loguru import logger
 
 from app.core.config import settings
-
-
-class HTTPMethod(Enum):
-    """HTTP 方法"""
-    GET = "GET"
-    POST = "POST"
-    PUT = "PUT"
-    PATCH = "PATCH"
-    DELETE = "DELETE"
-
-
-@dataclass
-class APISpec:
-    """API 规格定义"""
-    path: str
-    method: HTTPMethod
-    summary: str
-    parameters: List[dict]
-    request_body: Optional[dict]
-    responses: Dict[str, dict]
-
-
-@dataclass
-class APIIR:
-    """API-IR 协议 (API Intermediate Representation)"""
-    method: str
-    url: str
-    headers: Dict[str, str]
-    query_params: Dict[str, Any]
-    body: Optional[Any]
-    assertions: List[dict]
-    extract: Dict[str, str]  # JSONPath 提取
-
-
-@dataclass
-class APIResult:
-    """API 执行结果"""
-    success: bool
-    status_code: int
-    headers: Dict[str, str]
-    body: Any
-    duration_ms: float
-    assertions_passed: List[str]
-    assertions_failed: List[str]
-    extracted_values: Dict[str, Any]
-    error: Optional[str] = None
+from app.schemas.execution import (
+    HTTPMethod,
+    APISpec,
+    APIIR,
+    APIResult
+)
 
 
 class LeftPupilEngine:

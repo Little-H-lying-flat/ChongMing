@@ -167,3 +167,19 @@ AttributeError: 'Parameter' object has no attribute 'param_type'
 2026-02-10 15:22:11 | INFO     | app.core.request_logger:request_logging_middleware:91 | [6928e1c5] <-- 200 (3613.21ms)
 2026-02-10 15:23:02 | INFO     | app.core.request_logger:request_logging_middleware:71 | [ff208ce9] --> POST /api/v1/left-pupil/assert
 2026-02-10 15:23:02 | INFO     | app.core.request_logger:request_logging_middleware:91 | [ff208ce9] <-- 200 (9.02ms)
+2026-02-10 20:45:30 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-10 20:45:30 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-10 20:45:30 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-10 20:46:34 | INFO     | app.core.request_logger:request_logging_middleware:71 | [e1b5bd0f] --> POST /api/v1/executions/ui/run
+2026-02-10 20:46:35 | INFO     | app.core.ai_client:_init_clients:189 | DashScope 客户端已初始化
+2026-02-10 20:46:36 | ERROR    | app.core.request_logger:request_logging_middleware:111 | [e1b5bd0f] <-- ERROR: Error: BrowserType.launch: Executable doesn't exist at C:\Users\H\AppData\Local\ms-playwright\chromium-1208\chrome-win64\chrome.exe
+╔════════════════════════════════════════════════════════════╗
+║ Looks like Playwright was just installed or updated.       ║
+║ Please run the following command to download new browsers: ║
+║                                                            ║
+║     playwright install                                     ║
+║                                                            ║
+║ <3 Playwright Team                                         ║
+╚════════════════════════════════════════════════════════════╝ (2458.68ms)
+2026-02-10 20:49:07 | INFO     | app.core.request_logger:request_logging_middleware:71 | [d0e4f48a] --> POST /api/v1/executions/ui/run
+2026-02-10 20:49:13 | INFO     | app.core.request_logger:request_logging_middleware:91 | [d0e4f48a] <-- 200 (6560.79ms)

@@ -139,7 +139,9 @@ async def execute_api(request: ExecuteAPIRequest):
         }
     
     # 同步执行
-    from app.engines.left_pupil import APIExecutor, APIIR, AuthConfig, AuthType
+    # 同步执行
+    from app.engines.left_pupil import APIExecutor, AuthConfig, AuthType
+    from app.schemas.execution import APIIR
     
     try:
         ir = APIIR(
@@ -217,7 +219,9 @@ async def execute_api_chain(request: ExecuteChainRequest):
         )
     
     # 同步执行
-    from app.engines.left_pupil import APIExecutor, APIIR, AuthConfig, AuthType
+    # 同步执行
+    from app.engines.left_pupil import APIExecutor, AuthConfig, AuthType
+    from app.schemas.execution import APIIR
     
     try:
         auth = None

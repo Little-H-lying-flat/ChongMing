@@ -9,50 +9,20 @@ from enum import Enum
 from typing import List, Optional, Any
 from loguru import logger
 
-from app.engines.right_pupil import RightPupilEngine, AUIIR
-from app.engines.left_pupil import LeftPupilEngine, APIIR
 
 
-class ExecutionMode(Enum):
-    """执行模式"""
-    UI = "UI"          # UI 自动化
-    API = "API"        # API 自动化
-    HYBRID = "HYBRID"  # 混合模式
+from app.engines.right_pupil import RightPupilEngine
+from app.engines.left_pupil import LeftPupilEngine
 
-
-@dataclass
-class TCIR:
-    """TC-IR 协议 (Test Case Intermediate Representation)"""
-    id: str
-    name: str
-    mode: ExecutionMode
-    steps: List[dict]
-    priority: str = "P1"
-    tags: List[str] = None
-
-
-@dataclass
-class StepResult:
-    """步骤执行结果"""
-    step_index: int
-    success: bool
-    duration_ms: float
-    screenshot: Optional[str] = None
-    error: Optional[str] = None
-    details: Optional[dict] = None
-
-
-@dataclass
-class ExecutionResult:
-    """用例执行结果"""
-    tc_id: str
-    success: bool
-    status: str  # passed, failed, skipped, error
-    step_results: List[StepResult]
-    total_duration_ms: float
-    trace_id: str
-    error: Optional[str] = None
-
+# Import schemas from new location
+from app.schemas.execution import (
+    ExecutionMode,
+    TCIR,
+    StepResult,
+    ExecutionResult,
+    AUIIR,
+    APIIR
+)
 
 class Dispatcher:
     """

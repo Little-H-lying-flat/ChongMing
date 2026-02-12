@@ -24,11 +24,11 @@ volumes:
   reports:
   logs:
 
-# ==================== 服务定义 ====================
+    # ==================== 服务定义 ====================
 services:
 
   # ========== 核心服务 ==========
-  
+
   # API 网关
   api-gateway:
     build:
@@ -65,7 +65,7 @@ services:
     networks:
       - chongming-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -86,7 +86,7 @@ services:
       - chongming-net
 
   # ========== Celery Workers ==========
-  
+
   # UI 测试 Worker
   worker-ui:
     build:
@@ -102,7 +102,7 @@ services:
       - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
     volumes:
       - recordings:/app/recordings
-      - /dev/shm:/dev/shm  # Playwright 共享内存
+      - /dev/shm:/dev/shm # Playwright 共享内存
     depends_on:
       - redis
       - api-gateway
@@ -195,7 +195,7 @@ services:
       - chongming-net
 
   # ========== 数据库 ==========
-  
+
   # PostgreSQL
   postgres:
     image: postgres:15-alpine
@@ -213,7 +213,7 @@ services:
     networks:
       - chongming-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chongming"]
+      test: [ "CMD-SHELL", "pg_isready -U chongming" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -231,13 +231,13 @@ services:
     networks:
       - chongming-net
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
   # ========== 向量数据库 ==========
-  
+
   # ChromaDB (项目知识库)
   chromadb:
     image: chromadb/chroma:latest
@@ -300,28 +300,31 @@ services:
       - chongming-net
 
   # ========== AI 服务 ==========
-  
+
   # OmniParser (视觉识别)
   omniparser:
+    build:
+      context: ../omniparser
+      dockerfile: Dockerfile
     image: chongming/omniparser:latest
     container_name: chongming-omniparser
     restart: unless-stopped
     ports:
       - "7861:7861"
     volumes:
-      - omniparser_models:/app/models
+      - omniparser_models:/app/weights
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: 1
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     networks:
       - chongming-net
 
   # ========== Locust 性能测试 ==========
-  
+
   locust-master:
     image: locustio/locust:2.20
     container_name: chongming-locust-master
@@ -336,7 +339,7 @@ services:
 
   locust-worker:
     image: locustio/locust:2.20
-    container_name: chongming-locust-worker
+    # container_name removed to support replicas
     restart: unless-stopped
     command: -f /locust/locustfile.py --worker --master-host=locust-master
     volumes:
@@ -349,7 +352,7 @@ services:
       replicas: 4
 
   # ========== 监控 ==========
-  
+
   # Prometheus
   prometheus:
     image: prom/prometheus:v2.47.0

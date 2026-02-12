@@ -161,11 +161,13 @@ class AIModule(str, Enum):
     
     # === 凤凰涅槃层 ===
     PHOENIX_CODE_GEN = "phoenix.code_gen"               # 代码生成
+    PHOENIX_CODEGEN = "phoenix.code_gen"                # Alias for compatibility
     PHOENIX_ASSERTION_GEN = "phoenix.assertion"         # 断言生成
     
     # === 缺陷分析 ===
     DEFECT_ROOT_CAUSE = "defect.root_cause"             # 根因分析
     DEFECT_FIX_SUGGEST = "defect.fix_suggest"           # 修复建议
+    DEFECT_ANALYSIS = "defect.root_cause"               # Alias for compatibility
     
     # === 通用 ===
     GENERAL_CHAT = "general.chat"                       # 通用对话
@@ -191,11 +193,13 @@ DEFAULT_MODEL_MAPPING = {
     
     # === 凤凰涅槃层 ===
     AIModule.PHOENIX_CODE_GEN: "qwen-plus",
+    AIModule.PHOENIX_CODEGEN: "qwen-plus",
     AIModule.PHOENIX_ASSERTION_GEN: "qwen-turbo",
     
     # === 缺陷分析 - 需要推理能力 ===
     AIModule.DEFECT_ROOT_CAUSE: "qwen-max",
     AIModule.DEFECT_FIX_SUGGEST: "qwen-plus",
+    AIModule.DEFECT_ANALYSIS: "qwen-max",
     
     # === 通用 ===
     AIModule.GENERAL_CHAT: "qwen-turbo",
