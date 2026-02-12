@@ -4,10 +4,18 @@ ChromaDB 向量数据库客户端
 用于存储和检索 API 文档向量
 """
 
-from typing import Optional
-import chromadb
-from chromadb.config import Settings
 
+try:
+    import chromadb
+    from chromadb.config import Settings
+except Exception as e:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"ChromaDB import failed: {e}. Vector database features will be disabled.")
+    chromadb = None
+    
+    class Settings:
+        def __init__(self, **kwargs): pass
 
 class ChromaClient:
     """
@@ -21,18 +29,18 @@ class ChromaClient:
     def __init__(self, persist_dir: str = "./data/chroma"):
         """
         初始化 ChromaDB 客户端
-        
-        Args:
-            persist_dir: 持久化目录
         """
         self.persist_dir = persist_dir
-        self.client = chromadb.PersistentClient(
-            path=persist_dir,
-            settings=Settings(
-                anonymized_telemetry=False,
-                allow_reset=True,
+        if chromadb:
+            self.client = chromadb.PersistentClient(
+                path=persist_dir,
+                settings=Settings(
+                    anonymized_telemetry=False,
+                    allow_reset=True,
+                )
             )
-        )
+        else:
+            self.client = None
     
     @classmethod
     def get_instance(cls, persist_dir: str = "./data/chroma") -> "ChromaClient":
@@ -41,16 +49,13 @@ class ChromaClient:
             cls._instance = cls(persist_dir)
         return cls._instance
     
-    def get_collection(self, name: str) -> chromadb.Collection:
+    def get_collection(self, name: str) -> Any:
         """
         获取或创建集合
-        
-        Args:
-            name: 集合名称
-        
-        Returns:
-            ChromaDB Collection
         """
+        if not self.client:
+            return None
+            
         return self.client.get_or_create_collection(
             name=name,
             metadata={"hnsw:space": "cosine"}

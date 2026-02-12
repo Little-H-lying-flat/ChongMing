@@ -1,0 +1,36 @@
+# General
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.DS_Store
+.env
+.venv
+venv/
+ENV/
+
+# Logs
+*.log
+logs/
+*.out
+*.err
+
+# Temporary Files
+tmp/
+temp/
+output/
+*.tmp
+*.bak
+*.swp
+
+# Reports
+*.html
+*.xml
+coverage.xml
+.coverage
+htmlcov/
+
+# Editor
+.idea/
+.vscode/
+*.sublime-workspace
