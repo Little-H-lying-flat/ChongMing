@@ -121,9 +121,22 @@ async def get_execution_status(execution_id: str):
         progress = meta.get("progress", 0.0)
     elif task_result.state == 'SUCCESS':
         progress = 100.0
-        # 尝试从结果中获取更多详情
-        if isinstance(task_result.result, dict):
-             meta.update(task_result.result) # 结果可能包含统计信息
+        result_data = task_result.result
+        if isinstance(result_data, dict):
+            # 1. 尝试提取 Task 中的 summary 字段 (execute_test_cases)
+            if "summary" in result_data and isinstance(result_data["summary"], dict):
+                meta.update(result_data["summary"])
+            
+            # 2. 尝试提取直接字段 (兼容旧格式或部分更新)
+            meta.update(result_data)
+            
+            # 3. 针对 Ad-hoc 任务 (execute_adhoc_task) 的特殊处理
+            # 它的结果是 {"status": "completed", "logs": [...]}
+            if "logs" in result_data and "passed" not in meta:
+                # Ad-hoc 任务成功由于没有 passed/failed 计数，我们手动设置为 1
+                meta["passed"] = 1
+                meta["total"] = 1
+
     elif task_result.state == 'FAILURE':
         progress = 0.0
         
@@ -148,8 +161,49 @@ async def get_execution_result(execution_id: str):
     
     返回完整的执行报告
     """
-    # TODO: 从数据库查询结果
-    raise HTTPException(status_code=404, detail=f"执行 {execution_id} 不存在")
+    task_result = AsyncResult(execution_id)
+    
+    if task_result.state == 'SUCCESS':
+        data = task_result.result
+        if not isinstance(data, dict):
+             # 可能是简单的返回值
+             return ExecutionResult(
+                execution_id=execution_id,
+                status="completed",
+                summary={"result": str(data)},
+                cases=[],
+                duration_seconds=0.0,
+                report_url=None
+            )
+             
+        return ExecutionResult(
+            execution_id=data.get("execution_id", execution_id),
+            status="completed", # Force completed if success
+            summary=data.get("summary", {"total": 0, "passed": 0, "failed": 0, "error": 0}),
+            cases=data.get("results", []) if isinstance(data.get("results"), list) else [],
+            duration_seconds=data.get("duration_ms", 0) / 1000.0 if "duration_ms" in data else 0.0,
+            report_url=None
+        )
+        
+    elif task_result.state == 'FAILURE':
+        return ExecutionResult(
+            execution_id=execution_id,
+            status="failed",
+            summary={"error": 1},
+            cases=[],
+            duration_seconds=0.0,
+            report_url=None
+        )
+        
+    # Running / Pending
+    return ExecutionResult(
+        execution_id=execution_id,
+        status=task_result.state.lower(),
+        summary=task_result.info or {} if isinstance(task_result.info, dict) else {},
+        cases=[],
+        duration_seconds=0.0,
+        report_url=None
+    )
 
 
 @router.post("/{execution_id}/cancel", status_code=202)
@@ -178,15 +232,49 @@ async def list_executions(
     
     查询最近的执行记录
     """
-    # TODO: 从数据库查询
+    # TODO: 从数据库查询 real history
+    # Return empty list to prevent frontend crash
     return []
 
 
-@router.post("/ui/run")
+@router.post("/ui/run", response_model=List[dict])
 async def run_ui_task(request: UiRunRequest):
     """
-    运行 UI 自动化任务 (Right Pupil)
+    运行 UI 自动化任务 (Right Pupil) - 同步 Debug 模式
     """
     engine = RightPupilEngine()
     logs = await engine.run_task(request.prompt, request.url)
     return logs
+
+
+class AdhocTaskResponse(BaseModel):
+    task_id: str
+    status: str
+    dashboard_url: str
+
+
+@router.post("/ui/run/async", response_model=AdhocTaskResponse, status_code=202)
+async def run_ui_task_async(request: UiRunRequest):
+    """
+    运行 UI 自动化任务 (Right Pupil) - 异步生产模式
+    
+    推荐用于高并发场景
+    """
+    try:
+        from app.tasks.execution_tasks import execute_adhoc_task
+        print("Imported execute_adhoc_task")
+        
+        task = execute_adhoc_task.delay(request.prompt, request.url)
+        print(f"Task dispatched: {task.id}")
+        
+        return {
+            "task_id": task.id,
+            "status": "pending",
+            "dashboard_url": f"/tasks/{task.id}/progress"
+        }
+    except Exception as e:
+        import traceback
+        with open("trace.log", "w") as f:
+            f.write(traceback.format_exc())
+        traceback.print_exc()
+        raise e

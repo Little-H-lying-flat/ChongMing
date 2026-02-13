@@ -1,0 +1,6 @@
+2026-02-12 22:32:47.287 | ERROR    | app.core.request_logger:request_logging_middleware:111 - [35ec37bf] <-- ERROR: OperationalError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。 (4113.39ms)
+2026-02-12 22:33:18.761 | ERROR    | app.core.request_logger:request_logging_middleware:111 - [326e894d] <-- ERROR: OperationalError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。 (4111.20ms)
+2026-02-12 22:34:33.019 | ERROR    | app.core.request_logger:request_logging_middleware:111 - [850139c4] <-- ERROR: OperationalError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。 (4074.68ms)
+2026-02-12 22:36:28.634 | ERROR    | app.core.request_logger:request_logging_middleware:111 - [5d4fc340] <-- ERROR: OperationalError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。 (4143.65ms)
+2026-02-12 22:38:14.566 | ERROR    | app.core.request_logger:request_logging_middleware:111 - [f6f115d7] <-- ERROR: OSError: [Errno 22] Invalid argument (4109.62ms)
+2026-02-12 22:39:08.901 | ERROR    | app.core.request_logger:request_logging_middleware:111 - [0d03ae85] <-- ERROR: OSError: [Errno 22] Invalid argument (4079.60ms)

@@ -1,5 +1,6 @@
 from typing import List, Optional
 from app.schemas.execution import TCIR, ExecutionMode
+from app.core.config import settings
 
 class TestCaseLoader:
     """
@@ -46,7 +47,7 @@ class TestCaseLoader:
                     {
                         "type": "API",
                         "method": "GET",
-                        "url": "http://localhost:8000/api/health",
+                        "url": f"http://localhost:8000{settings.API_V1_STR}/health",
                         "assertions": [
                             {"type": "status_code", "expected": 200},
                             {"type": "contains", "expected": "ok"}

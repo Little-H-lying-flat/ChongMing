@@ -87,13 +87,19 @@ class RightPupilEngine:
             # or we fetch fresh DOM/Visual state if needed (Scope creep? Keep it simple).
             success = await self.runner.execute(action, id_map={})
             
-            return type('Result', (object,), {
+            strategy_name = "unknown"
+            if action.target:
+                strategy_name = action.target.strategy
+                
+            res = type('Result', (object,), {
                 "success": success,
-                "strategy_used": type('Strategy', (object,), {"value": action.target.strategy})(),
+                "strategy_used": type('Strategy', (object,), {"value": strategy_name})(),
                 "screenshot_after": None, # TODO: Capture if needed
                 "error": None if success else "Execution failed"
             })()
+            return res
         except Exception as e:
+            logger.error(f"RightPupil Execute Error: {e}")
             return type('Result', (object,), {
                 "success": False,
                 "strategy_used": None,
@@ -167,6 +173,7 @@ class RightPupilEngine:
         except Exception as e:
             logger.error(f"Engine Loop Error: {e}")
         finally:
+            logs = self.runner.trace_logs if self.runner else []
             await self.stop_session()
             
-        return self.runner.trace_logs if self.runner else []
+        return logs

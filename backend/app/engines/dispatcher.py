@@ -21,8 +21,9 @@ from app.schemas.execution import (
     StepResult,
     ExecutionResult,
     AUIIR,
-    APIIR
+    APIIR as SchemaAPIIR
 )
+from app.engines.left_pupil import APIIR as EngineAPIIR, ExecutionResult as APIExecutionResult
 
 class Dispatcher:
     """
@@ -135,18 +136,21 @@ class Dispatcher:
                 raise RuntimeError("右瞳引擎未初始化")
             
             aui_ir = AUIIR(
-                action=step.get("action", "click"),
-                target=step.get("target", ""),
-                value=step.get("value"),
-                selector=step.get("selector"),
-                coordinates=step.get("coordinates"),
-                expected=step.get("expected"),
+                action_type=step.get("action", "click"), # Correct field name
+                target=step.get("target"),
+                params=step.get("params", {}), # Pass params
+                expected_visual_change=step.get("expected")
             )
             
             result = await self.right_pupil.execute(aui_ir)
+            
+            strategy_val = "unknown"
+            if getattr(result, "strategy_used", None):
+                 strategy_val = result.strategy_used.value
+            
             return {
                 "success": result.success,
-                "strategy": result.strategy_used.value,
+                "strategy": strategy_val,
                 "screenshot": result.screenshot_after,
                 "error": result.error,
             }
@@ -155,23 +159,41 @@ class Dispatcher:
             if not self.left_pupil:
                 raise RuntimeError("左瞳引擎未初始化")
             
-            api_ir = APIIR(
+            # Use EngineAPIIR which has path_params
+            api_ir = EngineAPIIR(
                 method=step.get("method", "GET"),
                 url=step.get("url", ""),
                 headers=step.get("headers", {}),
                 query_params=step.get("params", {}),
+                path_params=step.get("path_params", {}), # Added path_params
                 body=step.get("body"),
                 assertions=step.get("assertions", []),
                 extract=step.get("extract", {}),
             )
             
-            result = await self.left_pupil.execute(api_ir)
-            return {
-                "success": result.success,
-                "status_code": result.status_code,
-                "assertions_failed": result.assertions_failed,
-                "error": result.error,
-            }
+            try:
+                # Returns Engine's ExecutionResult
+                result: APIExecutionResult = await self.left_pupil.execute(api_ir)
+                
+                status_code = 0
+                if result.response:
+                    status_code = result.response.status_code
+                
+                return {
+                    "success": result.success,
+                    "status_code": status_code,
+                    "assertions_failed": result.assertions_failed,
+                    "error": result.error,
+                }
+            except Exception as e:
+                 logger.error(f"API Step Failed inside Dispatcher: {e}")
+                 # Return failed result structure instead of raising to keep execution flowing if handled
+                 return {
+                    "success": False,
+                    "status_code": 0,
+                    "assertions_failed": [],
+                    "error": str(e),
+                }
         
         else:
             raise ValueError(f"不支持的步骤类型: {step_type}")

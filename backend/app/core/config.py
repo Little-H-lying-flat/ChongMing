@@ -25,16 +25,17 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    API_V1_STR: str = "/api/v1"
     
     # === 数据库 ===
     DATABASE_URL: str = "postgresql+asyncpg://postgres:chongming123@localhost:5432/chongming"
     
     # === Redis ===
-    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_URL: str = "redis://127.0.0.1:6379/0"
     
     # === Celery ===
-    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+    CELERY_BROKER_URL: str = "redis://127.0.0.1:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://127.0.0.1:6379/2"
     
     # === AI/LLM (阿里云 DashScope) ===
     QWEN_API_KEY: str = ""

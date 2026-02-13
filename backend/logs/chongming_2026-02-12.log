@@ -32,3 +32,153 @@
 2026-02-12 21:58:04 | INFO     | app.core.request_logger:request_logging_middleware:71 | [1683ad93] --> POST /api/v1/executions/ui/run
 2026-02-12 21:58:05 | INFO     | app.core.ai_client:_init_clients:189 | DashScope 客户端已初始化
 2026-02-12 21:58:52 | INFO     | app.core.request_logger:request_logging_middleware:91 | [1683ad93] <-- 200 (48866.08ms)
+2026-02-12 22:14:56 | INFO     | app.core.request_logger:request_logging_middleware:71 | [68f05d8f] --> GET /api/v1/health
+2026-02-12 22:14:56 | INFO     | app.core.request_logger:request_logging_middleware:91 | [68f05d8f] <-- 200 (1.04ms)
+2026-02-12 22:14:56 | INFO     | app.core.request_logger:request_logging_middleware:71 | [27fe0053] --> POST /api/v1/executions/ui/run
+2026-02-12 22:14:56 | INFO     | app.core.request_logger:request_logging_middleware:71 | [a86f52c9] --> POST /api/v1/executions/ui/run
+2026-02-12 22:14:56 | INFO     | app.core.request_logger:request_logging_middleware:71 | [bdff31be] --> POST /api/v1/executions/ui/run
+2026-02-12 22:14:56 | INFO     | app.core.request_logger:request_logging_middleware:71 | [a23e6c89] --> POST /api/v1/executions/ui/run
+2026-02-12 22:14:56 | INFO     | app.core.request_logger:request_logging_middleware:71 | [791d586f] --> POST /api/v1/executions/ui/run
+2026-02-12 22:15:54 | INFO     | app.core.request_logger:request_logging_middleware:91 | [791d586f] <-- 200 (57879.24ms)
+2026-02-12 22:15:56 | INFO     | app.core.request_logger:request_logging_middleware:91 | [a23e6c89] <-- 200 (59385.73ms)
+2026-02-12 22:15:56 | INFO     | app.core.request_logger:request_logging_middleware:91 | [bdff31be] <-- 200 (59972.67ms)
+2026-02-12 22:15:57 | INFO     | app.core.request_logger:request_logging_middleware:91 | [27fe0053] <-- 200 (61212.51ms)
+2026-02-12 22:16:00 | INFO     | app.core.request_logger:request_logging_middleware:91 | [a86f52c9] <-- 200 (63845.19ms)
+2026-02-12 22:18:07 | INFO     | app.core.request_logger:request_logging_middleware:71 | [ee845867] --> GET /api/v1/health
+2026-02-12 22:18:07 | INFO     | app.core.request_logger:request_logging_middleware:91 | [ee845867] <-- 200 (1.04ms)
+2026-02-12 22:18:07 | INFO     | app.core.request_logger:request_logging_middleware:71 | [79ce54e7] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:18:07 | INFO     | app.core.request_logger:request_logging_middleware:91 | [79ce54e7] <-- 404 (0.52ms)
+2026-02-12 22:18:08 | INFO     | app.core.request_logger:request_logging_middleware:71 | [2b5960da] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:18:08 | INFO     | app.core.request_logger:request_logging_middleware:71 | [1413070c] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:18:08 | INFO     | app.core.request_logger:request_logging_middleware:71 | [81dd7d6a] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:18:08 | INFO     | app.core.request_logger:request_logging_middleware:71 | [265c6664] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:18:08 | INFO     | app.core.request_logger:request_logging_middleware:91 | [2b5960da] <-- 404 (2.10ms)
+2026-02-12 22:18:08 | INFO     | app.core.request_logger:request_logging_middleware:91 | [1413070c] <-- 404 (1.59ms)
+2026-02-12 22:18:08 | INFO     | app.core.request_logger:request_logging_middleware:91 | [81dd7d6a] <-- 404 (1.59ms)
+2026-02-12 22:18:08 | INFO     | app.core.request_logger:request_logging_middleware:91 | [265c6664] <-- 404 (1.60ms)
+2026-02-12 22:19:14 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:19:14 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:19:14 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:71 | [396bb872] --> GET /api/v1/health
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:91 | [396bb872] <-- 200 (0.53ms)
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:71 | [5765b385] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:91 | [5765b385] <-- 404 (0.51ms)
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:71 | [9cbd0859] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:71 | [e1e93ddc] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:71 | [d633a724] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:71 | [c020063e] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:91 | [9cbd0859] <-- 404 (2.11ms)
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:91 | [e1e93ddc] <-- 404 (1.59ms)
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:91 | [d633a724] <-- 404 (2.13ms)
+2026-02-12 22:19:41 | INFO     | app.core.request_logger:request_logging_middleware:91 | [c020063e] <-- 404 (1.61ms)
+2026-02-12 22:20:21 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:20:21 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:20:21 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:24:03 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:24:03 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:24:03 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:24:45 | INFO     | app.core.request_logger:request_logging_middleware:71 | [be77ac4e] --> GET /api/v1/health
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [be77ac4e] <-- 200 (1099.71ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [f991225e] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [f991225e] <-- 202 (68.99ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [d75459a8] --> GET /api/v1/tasks/dc35ff9a-6603-4f0e-9e62-26d61d138ef0/status
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [d75459a8] <-- 200 (8.23ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [81de05ea] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [d7a01407] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [c2aa6f73] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [19d69e7b] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [81de05ea] <-- 202 (10.37ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [d7a01407] <-- 202 (12.92ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [c2aa6f73] <-- 202 (13.13ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [19d69e7b] <-- 202 (12.90ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [06753e50] --> GET /api/v1/tasks/f122fa61-1730-4c9d-b3a3-dfecf79c1698/status
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [06753e50] <-- 200 (4.09ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [2763cc30] --> GET /api/v1/tasks/2863e0d1-c7e3-4d67-9397-ea19cf2e23c9/status
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [73daa82d] --> GET /api/v1/tasks/8730c6a2-6e05-48a2-ba07-6eb0b178a04b/status
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:71 | [1c936ddf] --> GET /api/v1/tasks/176f9bd6-0d86-4cd8-aba1-bf268d0aec3e/status
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [2763cc30] <-- 200 (9.88ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [73daa82d] <-- 200 (10.02ms)
+2026-02-12 22:24:47 | INFO     | app.core.request_logger:request_logging_middleware:91 | [1c936ddf] <-- 200 (10.09ms)
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:71 | [89587bfb] --> GET /api/v1/tasks/dc35ff9a-6603-4f0e-9e62-26d61d138ef0/status
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:91 | [89587bfb] <-- 200 (5.09ms)
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:71 | [9c8ef0c0] --> GET /api/v1/tasks/f122fa61-1730-4c9d-b3a3-dfecf79c1698/status
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:91 | [9c8ef0c0] <-- 200 (4.76ms)
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:71 | [9d092732] --> GET /api/v1/tasks/2863e0d1-c7e3-4d67-9397-ea19cf2e23c9/status
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:71 | [bd48411a] --> GET /api/v1/tasks/176f9bd6-0d86-4cd8-aba1-bf268d0aec3e/status
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:71 | [20b69742] --> GET /api/v1/tasks/8730c6a2-6e05-48a2-ba07-6eb0b178a04b/status
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:91 | [9d092732] <-- 200 (4.23ms)
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:91 | [bd48411a] <-- 200 (6.66ms)
+2026-02-12 22:24:49 | INFO     | app.core.request_logger:request_logging_middleware:91 | [20b69742] <-- 200 (6.86ms)
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:71 | [74bb72b6] --> GET /api/v1/tasks/dc35ff9a-6603-4f0e-9e62-26d61d138ef0/status
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:91 | [74bb72b6] <-- 200 (1.98ms)
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:71 | [3b9b0833] --> GET /api/v1/tasks/f122fa61-1730-4c9d-b3a3-dfecf79c1698/status
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:91 | [3b9b0833] <-- 200 (1.87ms)
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:71 | [42a60ac8] --> GET /api/v1/tasks/2863e0d1-c7e3-4d67-9397-ea19cf2e23c9/status
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:71 | [eaea1d2d] --> GET /api/v1/tasks/8730c6a2-6e05-48a2-ba07-6eb0b178a04b/status
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:71 | [54d82661] --> GET /api/v1/tasks/176f9bd6-0d86-4cd8-aba1-bf268d0aec3e/status
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:91 | [42a60ac8] <-- 200 (2.18ms)
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:91 | [eaea1d2d] <-- 200 (3.03ms)
+2026-02-12 22:24:51 | INFO     | app.core.request_logger:request_logging_middleware:91 | [54d82661] <-- 200 (3.06ms)
+2026-02-12 22:27:49 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:27:49 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:27:49 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:27:54 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:27:54 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:27:54 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:27:54 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:27:54 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:27:54 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:27:54 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:27:54 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:27:54 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:32:43 | INFO     | app.core.request_logger:request_logging_middleware:71 | [35ec37bf] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:32:47 | ERROR    | app.core.request_logger:request_logging_middleware:111 | [35ec37bf] <-- ERROR: OperationalError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。 (4113.39ms)
+2026-02-12 22:32:50 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:32:50 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:32:50 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:33:03 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:33:03 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:33:03 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:33:14 | INFO     | app.core.request_logger:request_logging_middleware:71 | [326e894d] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:33:18 | ERROR    | app.core.request_logger:request_logging_middleware:111 | [326e894d] <-- ERROR: OperationalError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。 (4111.20ms)
+2026-02-12 22:34:26 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:34:26 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:34:26 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:34:28 | INFO     | app.core.request_logger:request_logging_middleware:71 | [850139c4] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:34:33 | ERROR    | app.core.request_logger:request_logging_middleware:111 | [850139c4] <-- ERROR: OperationalError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。 (4074.68ms)
+2026-02-12 22:35:01 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:35:01 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:35:06 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:35:06 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:35:06 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:35:06 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:35:06 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:35:06 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:36:22 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:36:22 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:36:22 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:36:24 | INFO     | app.core.request_logger:request_logging_middleware:71 | [5d4fc340] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:36:28 | ERROR    | app.core.request_logger:request_logging_middleware:111 | [5d4fc340] <-- ERROR: OperationalError: [WinError 10061] 由于目标计算机积极拒绝，无法连接。 (4143.65ms)
+2026-02-12 22:37:59 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:37:59 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:38:06 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:38:10 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:38:10 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:38:10 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:38:10 | INFO     | app.core.request_logger:request_logging_middleware:71 | [f6f115d7] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:38:14 | ERROR    | app.core.request_logger:request_logging_middleware:111 | [f6f115d7] <-- ERROR: OSError: [Errno 22] Invalid argument (4109.62ms)
+2026-02-12 22:39:02 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:39:02 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:39:02 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:39:04 | INFO     | app.core.request_logger:request_logging_middleware:71 | [0d03ae85] --> POST /api/v1/executions/ui/run/async
+2026-02-12 22:39:08 | ERROR    | app.core.request_logger:request_logging_middleware:111 | [0d03ae85] <-- ERROR: OSError: [Errno 22] Invalid argument (4079.60ms)
+2026-02-12 22:40:47 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:40:51 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:40:51 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:40:51 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:40:51 | INFO     | app.core.logging:setup_logging:54 | 日志系统初始化完成
+2026-02-12 22:40:51 | INFO     | app.main:lifespan:24 | 🐦 重明 v2.0.0 启动中...
+2026-02-12 22:40:51 | INFO     | app.main:lifespan:25 | 📡 API 文档: http://localhost:8000/docs
+2026-02-12 22:41:18 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:48:59 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...
+2026-02-12 22:48:59 | INFO     | app.main:lifespan:30 | 🔥 重明关闭中...

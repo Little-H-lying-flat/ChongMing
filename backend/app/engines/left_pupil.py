@@ -72,6 +72,7 @@ class LeftPupilEngine:
         Returns:
             APIResult: 执行结果
         """
+        logger.info(f"LeftPupil Executing: {api_ir}")
         import time
         start_time = time.time()
         
@@ -127,7 +128,7 @@ class LeftPupilEngine:
             
             success = len(assertions_failed) == 0
             
-            return APIResult(
+            res = APIResult(
                 success=success,
                 status_code=response.status_code,
                 headers=dict(response.headers),
@@ -137,6 +138,7 @@ class LeftPupilEngine:
                 assertions_failed=assertions_failed,
                 extracted_values=extracted,
             )
+            return res
             
         except Exception as e:
             logger.error(f"API 执行失败: {e}")
