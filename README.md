@@ -5,7 +5,7 @@
 <h1 align="center">重明 (ChongMing)</h1>
 
 <p align="center">
-  <strong>🔮 神经-凤凰架构 AI 自动化测试平台</strong>
+  <strong>🔮 企业级 AI 原生质量工程平台 (Enterprise AI-Native Quality Platform)</strong>
 </p>
 
 <p align="center">
@@ -13,28 +13,30 @@
   <a href="#架构概览">架构概览</a> •
   <a href="#快速开始">快速开始</a> •
   <a href="#模块说明">模块说明</a> •
-  <a href="#文档">文档</a> •
-  <a href="#贡献指南">贡献指南</a>
+  <a href="#文档">文档</a>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="License"/>
-  <img src="https://img.shields.io/badge/python-3.11+-yellow" alt="Python"/>
-  <img src="https://img.shields.io/badge/node-20+-green" alt="Node"/>
+  <img src="https://img.shields.io/badge/python-3.12-yellow" alt="Python"/>
+  <img src="https://img.shields.io/badge/react-18-blue" alt="React"/>
+  <img src="https://img.shields.io/badge/status-stable-success" alt="Status"/>
 </p>
 
 ---
 
 ## 📖 项目简介
 
-**重明** 是一个基于大语言模型 (LLM) 的智能自动化测试平台，采用独创的 **"神经-凤凰"双脑架构** 和 **"三态生命周期"** 理念，实现从需求文档到可执行测试脚本的全流程自动化。
+**重明** 是下一代智能自动化测试与质量工程平台，采用独创的 **"神经-凤凰" (Neural-Phoenix)** 双脑架构。它不仅仅是一个测试工具，更是一个能"看懂"界面、"理解"业务、"自我进化"的 AI 质量专家。
 
-### 项目名称由来
+区别于传统自动化工具，重明具备：
+- **👁️ 视觉感知**：不依赖 DOM 定位，像人类一样通过视觉识别 UI 元素 (OmniParser)。
+- **🧠 认知推理**：从需求文档 (PRD) 直接生成测试用例，理解业务逻辑。
+- **🔥 自我修复**：脚本执行失败时自动分析根因并尝试自愈。
+- **⚖️ 全维保障**：覆盖 UI、API、性能 (Turbo) 及视觉回归 (VRT) 测试。
 
-> "重明"取自《山海经》中的神鸟，形似鸡，鸣声如凤，能逐虎豹，折邪除魔。
-> 
-> 寓意本平台如神鸟般拥有**双重视觉洞察力**（UI + API 双瞳），通过 AI 智能**发现和消除**软件缺陷。
+> "重明"取自《山海经》神鸟，双目重瞳，能逐妖邪。寓意平台以双重洞察力（代码+视觉）消除软件缺陷。
 
 ---
 
@@ -63,7 +65,30 @@
 - **缺陷分析**：AI 根因分析 + Milvus 相似缺陷检索
 - **自愈中心**：定位器自愈、数据自愈
 - **VRT**：AI 驱动的视觉回归测试
+### 🧠 神经设计层 (Neural Design)
+- **PRD 解析**：直接上传 Markdown/PDF 需求文档，AI 自动提取测试点。
+- **场景生成**：利用 `LangGraph` 编排生成的业务场景覆盖率高达 90%+。
+- **Critic 评审**：内置 Critic Agent 对生成用例进行自动评审与优化。
+### 👁️ 双瞳引擎 (Double Pupil)
+- **右瞳 (UI / Visual-First)**：
+  - 基于 **OmniParser** 的纯视觉定位，彻底解决 DOM 变动导致的脚本脆性问题。
+  - **Smart Wait**：结合视觉相似度 (SSIM) 与网络状态的双因子智能等待。
+- **左瞳 (API / Spec-Driven)**：
+  - 自动解析 Swagger/OpenAPI 生成测试脚本。
+  - **RAG 增强**：结合向量知识库理解 API 间的依赖关系。
 
+### 🔥 凤凰涅槃层 (Phoenix Nirvana)
+- **轨迹编译**：将自然语言/手动操作轨迹实时编译为标准 Pytest 脚本。
+- **Git 集成**：生成的脚本自动提交至 Git 仓库，纳入版本管理。
+- **视觉回归 (VRT)**：AI 驱动的视觉对比，自动剔除广告/时间等动态噪点。
+
+### 🚀 涡轮引擎 (Turbo)
+- **分布式压测**：基于 Locust 的大规模并发测试，支持动态扩容。
+- **数据合成**：AI 根据 Schema 自动生成海量高保真测试数据。
+
+### 🛡️ 智能运维 (Smart Ops)
+- **缺陷分析**：利用 Milvus 向量检索相似历史缺陷，AI 自动判定根因。
+- **模型治理**：动态路由 AI 模型 (如切换 Qwen-Max/GPT-4)，即时调整 Prompt。
 ---
 
 ## 🏗️ 架构概览
@@ -88,279 +113,112 @@
 本项目采用严格的 **API -> Services -> Engines** 分层架构，确保职责单一和代码解耦。
 
 ```mermaid
-classDiagram
-    %% Layers
-    class API_Layer {
-        +Endpoints
-    }
-    class Service_Layer {
-        +TestCaseService
-        +PhoenixService
-    }
-    class Engine_Layer {
-        +Dispatcher
-        +RightPupilEngine
-        +LeftPupilEngine
-        +UiRunner
-        +OmniClient
-    }
-    class Schema_Layer {
-        +TCIR
-        +ExecutionMode
-        +AUIIR
-        +APIIR
-    }
-    class Core_Layer {
-        +Config
-        +DB
-    }
-
-    %% Relationships
-    API_Layer --> Service_Layer : Calls (Business Logic)
-    API_Layer --> Engine_Layer : Calls (Execution via Tasks)
+graph TD
+    User[用户/PRD] --> Neural[🧠 神经设计层]
+    Neural --> |生成| Cases[测试用例]
     
-    Service_Layer --> Core_Layer : Uses
-    Engine_Layer --> Core_Layer : Uses
+    subgraph Execution [双瞳执行引擎]
+        Cases --> RightPupil[👁️ 右瞳 (UI/视觉)]
+        Cases --> LeftPupil[👁️ 左瞳 (API)]
+        RightPupil --> |视觉感知| Omni[OmniParser]
+        LeftPupil --> |语义理解| RAG[RAG 知识库]
+    end
     
-    %% Implicit Dependency Breaker
-    Service_Layer ..> Schema_Layer : Uses Types
-    Engine_Layer ..> Schema_Layer : Uses Types
-    API_Layer ..> Schema_Layer : Uses Types
-
-    %% Internal Engine Structure
-    Dispatcher --> RightPupilEngine : Routes UI Steps
-    Dispatcher --> LeftPupilEngine : Routes API Steps
-    RightPupilEngine --> UiRunner : Delegates Execution
-    RightPupilEngine --> OmniClient : Uses Vision
+    subgraph Nirvana [🔥 凤凰涅槃层]
+        RightPupil --> Trace[执行轨迹]
+        Trace --> Compiler[编译器]
+        Compiler --> Script[Pytest 脚本]
+        Script --> Git[Git 仓库]
+    end
+    
+    subgraph Ops [🛡️ 智能运维]
+        Script --> Result[执行结果]
+        Result --> Defect[缺陷分析 (Milvus)]
+        Result --> VRT[视觉回归]
+    end
+    
+    subgraph Turbo [🚀 涡轮引擎]
+        Cases --> LoadTest[性能压测 (Locust)]
+    end
 ```
-
-#### 层级职责 (Layer Responsibilities)
-
-| 层级 | 职责描述 |
-| :--- | :--- |
-| **API Layer** | **仅处理 HTTP 请求/响应**。负责参数解析、验证和响应格式化，**严禁**包含任何业务逻辑。 |
-| **Service Layer** | **业务逻辑核心**。负责用户数据管理、数据库事务 (CRUD)、权限校验和领域业务规则。 |
-| **Engine Layer** | **执行与智能核心**。负责浏览器自动化 (Playwright)、视觉处理 (OmniParser)、LLM 编排和任务执行。 |
-| **Schema Layer** | **数据契约**。存放所有跨层级共享的 DTO (Data Transfer Objects)、Enums 和中间表示 (IR)，用于打破循环依赖。 |
-
-#### 开发守则 (Development Guidelines)
-
-> [!IMPORTANT]
-> 违反以下规则的 PR 将被拒绝合并。
-
-1.  **单向依赖原则**：
-    -   `Service` 可以调用 `Engine` (通常是通过 Task 或 Interface)。
-    -   **严禁** `Engine` 反向导入 `Service`。如果需要共享数据结构，请移至 `app/schemas`。
-2.  **执行逻辑归位**：
-    -   所有涉及 "运行"、"执行"、"自动化" 的逻辑 (如 Runner, Parser, Client) 必须放入 `app/engines/`。
-    -   禁止将执行逻辑放入 `app/services/`。
 
 ---
 
 ## 🚀 快速开始
 
 ### 前置要求
+- Docker & Docker Compose (v2.0+)
+- Nvidia GPU (推荐，用于 OmniParser 视觉模型)
+- CPU 模式亦可运行 (速度较慢)
 
-- Docker & Docker Compose
-- Python 3.11+
-- Node.js 20+
-- 阿里云 DashScope API Key (通义千问)
-
-### 1. 克隆仓库
+### 1. 启动服务
+重明提供了一键部署脚本，包含数据库、向量库及所有微服务。
 
 ```bash
+# 克隆仓库
 git clone https://github.com/Little-H-lying-flat/ChongMing.git
 cd ChongMing
-```
 
-### 2. 配置环境变量
-
-```bash
+# 配置环境变量 (必须设置 API Key)
 cp deploy/.env.example deploy/.env
+# 编辑 deploy/.env 填入 QWEN_API_KEY 等信息
 
-# 编辑 .env 文件，填入 QWEN_API_KEY
-vim deploy/.env
-```
-
-### 3. 启动服务
-
-```bash
-# 启动所有服务
+# 启动 (生产模式)
 docker-compose -f deploy/docker-compose.yml up -d
-
-# 查看日志
-docker-compose -f deploy/docker-compose.yml logs -f api-gateway
 ```
 
-### 4. 访问平台
+### 2. 访问服务
 
-| 服务 | 地址 |
-|------|------|
-| 前端 UI | http://localhost:3000 |
-| API 文档 | http://localhost:8000/docs |
-| Flower 监控 | http://localhost:5555 |
-| Grafana | http://localhost:3001 |
-
----
-
-## 📦 模块说明
-
-| 模块 | 描述 | 技术栈 |
-|------|------|--------|
-| 神经设计层 | PRD 解析、用例生成 | LangChain, Qwen |
-| 右瞳引擎 | UI 测试执行 | Playwright, OmniParser |
-| 左瞳引擎 | API 测试执行 | httpx, RAG |
-| 涡轮引擎 | 性能测试 | Locust |
-| 凤凰涅槃层 | 脚本编译 | Jinja2, GitPython |
-| 缺陷分析 | 根因分析 | LLM, Milvus |
-| 自愈中心 | 自动修复 | AI Fallback |
-| VRT | 视觉回归 | Pixelmatch |
-| 任务调度 | 异步执行 | Celery, Redis |
-| Agent 编排 | 工作流 | LangGraph |
-
----
-
-## 📁 项目结构
-
-```
-ChongMing/
-├── docs/                          # 文档
-│   ├── designs/                   # 设计文档 (20份)
-│   ├── issues/                    # 开发任务 (97个)
-│   ├── 开发规范文档.md
-│   ├── 测试策略文档.md
-│   └── 接口对接文档.md
-├── deploy/                        # 部署配置
-│   ├── docker-compose.yml
-│   ├── kubernetes/
-│   ├── openapi.yaml
-│   └── nginx/
-├── backend/                       # 后端 (FastAPI)
-│   ├── app/
-│   │   ├── api/                   # API 端点
-│   │   ├── services/              # 业务逻辑
-│   │   ├── models/                # 数据模型
-│   │   └── tasks/                 # Celery 任务
-│   └── tests/
-├── frontend/                      # 前端 (React)
-│   └── src/
-├── 重明架构白皮书.txt              # 架构设计
-├── 重明技术规格书.txt              # 技术规范
-└── 重明_详细设计说明书_*.txt       # 模块设计
-```
-
----
-
-## 📚 文档
-
-### 设计文档
-- [架构白皮书](./重明架构白皮书.txt) - 神经-凤凰架构详解
-- [技术规格书](./重明技术规格书.txt) - 技术栈与规范
-
-### 开发文档
-- [开发规范](./docs/开发规范文档.md) - 代码风格、Git 规范
-- [测试策略](./docs/测试策略文档.md) - 测试金字塔、覆盖率要求
-- [接口对接](./docs/接口对接文档.md) - API 端点详细说明
-
-### 部署文档
-- [部署指南](./deploy/README.md) - Docker/K8s 部署
-- [API 规范](./deploy/openapi.yaml) - OpenAPI 3.0
+| 服务 | 地址 | 默认账号 |
+|------|------|----------|
+| **前端控制台** | http://localhost:3000 | admin / admin |
+| **API 文档** | http://localhost:8000/docs | - |
+| **Flower (监控)** | http://localhost:5555 | admin / admin123 |
+| **Grafana** | http://localhost:3001 | admin / admin123 |
+| **MinIO (S3)** | http://localhost:9001 | minioadmin / minioadmin |
 
 ---
 
 ## 🔧 技术栈
 
-### 后端
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Python | 3.11+ | 主语言 |
-| FastAPI | 0.109+ | Web 框架 |
-| SQLAlchemy | 2.0+ | ORM |
-| Celery | 5.3+ | 任务队列 |
-| LangChain | 0.1+ | LLM 框架 |
-| LangGraph | 0.0.5+ | Agent 编排 |
-| Playwright | 1.40+ | 浏览器自动化 |
-| Locust | 2.20+ | 性能测试 |
+### Backend (Python 3.12)
+- **Framework**: FastAPI, Celery, LangChain, LangGraph
+- **Test Engines**: Playwright (UI), Locust (Load), Pytest
+- **AI/ML**: OmniParser (Vision), Qwen-VL (Multimodal), OpenAI SDK
+- **Database**: PostgreSQL (Data), Redis (Cache), ChromaDB & Milvus (Vector)
 
-### 前端
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| React | 18+ | UI 框架 |
-| Vite | 5+ | 构建工具 |
-| TailwindCSS | 3+ | 样式 |
-| Zustand | 4+ | 状态管理 |
-| Monaco Editor | 0.45+ | 代码编辑器 |
-
-### 基础设施
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| PostgreSQL | 15+ | 主数据库 |
-| Redis | 7+ | 缓存/消息队列 |
-| ChromaDB | latest | 知识向量库 |
-| Milvus | 2.3+ | 缺陷向量库 |
-| Nginx | alpine | 反向代理 |
+### Frontend (React 18)
+- **Core**: Vite, TypeScript, Zustand
+- **UI**: TailwindCSS, ShadcnUI, Monaco Editor
+- **Viz**: Recharts, React-Flow
 
 ---
 
-## 🗓️ 开发路线图
+## � 模块目录
 
-### Phase 0: 基础设施 (Week 1-2)
-- [x] 设计文档完成
-- [ ] API 网关脚手架
-- [ ] Celery 任务调度
-
-### Phase 1: 左瞳点亮 (Week 3-4)
-- [ ] API 测试引擎
-- [ ] 数据工厂
-- [ ] 环境管理
-
-### Phase 2: 右瞳点亮 (Week 5-8)
-- [ ] UI 测试引擎
-- [ ] 智能等待机制
-- [ ] 自愈中心
-
-### Phase 3: 神经设计 (Week 9-11)
-- [ ] PRD 解析器
-- [ ] 用例生成器
-- [ ] 缺陷分析器
-
-### Phase 4+: 完整能力
-- [ ] 凤凰涅槃层
-- [ ] VRT 视觉回归
-- [ ] 涡轮引擎
-- [ ] Agent 编排
-
----
-
-## 🤝 贡献指南
-
-我们欢迎所有形式的贡献！
-
-1. Fork 本仓库
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat(scope): add amazing feature'`)
-4. 推送分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
-
-请阅读 [开发规范文档](./docs/开发规范文档.md) 了解代码风格和 Git 规范。
+```bash
+backend/
+├── app/
+│   ├── api/             # RESTful 接口
+│   ├── core/            # 核心配置 (AI Client, DB)
+│   ├── engines/         # 执行引擎
+│   │   ├── right_pupil/ # UI 视觉引擎
+│   │   ├── left_pupil/  # API 引擎
+│   │   └── turbo/       # 性能引擎
+│   ├── services/        # 业务逻辑
+│   │   ├── neural_design/ # PRD 解析
+│   │   ├── phoenix/       # 脚本编译与 Git
+│   │   └── smart_ops/     # 缺陷分析与治理
+│   └── tasks/           # Celery 异步任务
+├── tests/               # 单元与集成测试
+└── pyproject.toml       # 依赖管理
+```
 
 ---
 
 ## 📄 开源协议
 
-本项目采用 [GNU AGPL v3](LICENSE) 协议开源。
+MIT License @ ChongMing Team
 
 ---
-
-## 🙏 致谢
-
-- [LangChain](https://github.com/langchain-ai/langchain) - LLM 应用框架
-- [Playwright](https://playwright.dev/) - 浏览器自动化
-- [FastAPI](https://fastapi.tiangolo.com/) - 高性能 Web 框架
-- [OmniParser](https://github.com/microsoft/OmniParser) - 视觉识别
-
----
-
-<p align="center">
-  Made with ❤️ by ChongMing Team
-</p>
+<p align="center">Made with ❤️ for Quality Engineering</p>

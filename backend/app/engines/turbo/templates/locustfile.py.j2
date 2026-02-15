@@ -1,0 +1,83 @@
+from locust import HttpUser, task, between, events
+import csv
+import random
+import os
+import json
+import logging
+
+# Setup Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("TurboLocust")
+
+class TurboUser(HttpUser):
+    wait_time = between(1, 3)
+    host = "{{ target_host }}"
+    
+    def on_start(self):
+        """Initialization: Load data and login if needed"""
+        self.data = []
+        self.data_index = 0
+        self.token = None
+        
+        # 1. Load Data
+        data_path = "{{ data_file_path }}"
+        if os.path.exists(data_path):
+            with open(data_path, 'r', encoding='utf-8') as f:
+                self.data = list(csv.DictReader(f))
+            logger.info(f"Loaded {len(self.data)} rows of test data")
+        
+        # 2. Login / Auth (TODO: Implement Authentication Chain)
+        # For now, we assume token is provided or handled in tasks
+        
+    def get_next_data(self):
+        """Get next data row (Round Robin)"""
+        if not self.data:
+            return {}
+        row = self.data[self.data_index % len(self.data)]
+        self.data_index += 1
+        return row
+
+    {% for step in steps %}
+    @task({{ step.weight }})
+    def task_{{ loop.index }}(self):
+        """Task for {{ step.method }} {{ step.url }}"""
+        # 1. Get Data
+        data = self.get_next_data()
+        
+        # 2. Prepare Variables
+        # Simple variable substitution for now {var} -> data[var]
+        url = "{{ step.url }}"
+        for key, val in data.items():
+            # Avoid Jinja2/f-string conflict with braces
+            placeholder = "${" + key + "}"
+            url = url.replace(placeholder, str(val))
+            
+        # 3. Headers
+        headers = {{ step.headers | tojson }}
+        # Inject Auth Token if available
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+
+        # 4. Body
+        {% if step.body %}
+        body = {{ step.body | tojson }}
+        # TODO: Deep variable substitution in body
+        {% else %}
+        body = None
+        {% endif %}
+
+        # 5. Execute
+        with self.client.request(
+            method="{{ step.method }}",
+            url=url,
+            headers=headers,
+            json=body if headers.get("Content-Type") == "application/json" else None,
+            data=body if headers.get("Content-Type") != "application/json" else None,
+            name="{{ step.name or step.url }}",
+            catch_response=True
+        ) as response:
+            if response.status_code >= 400:
+                response.failure(f"Status {response.status_code}")
+            else:
+                response.success()
+    {% endfor %}

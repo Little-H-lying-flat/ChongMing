@@ -280,13 +280,15 @@ class ApiRunner:
         """提取 JsonPath 值"""
         # 优先使用 jsonpath-ng
         try:
-            from jsonpath_ng import parse
             jsonpath_expr = parse(path)
             matches = jsonpath_expr.find(data)
             if matches:
                 return matches[0].value
-            return None
+            # If no matches found by jsonpath-ng, fall through to simple implementation
+            # This allows supporting ad-hoc syntax like $.0.id which jsonpath-ng rejects/ignores
         except ImportError:
+            pass
+        except Exception:
             pass
         except Exception:
             pass

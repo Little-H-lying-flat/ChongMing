@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 from app.core.ai_client import AIClientManager, get_ai_manager, Message
 from app.core.ai_models import AIModule
 from app.services.left_pupil.rag_retriever import RagRetriever
+from app.services.left_pupil.knowledge_retriever import KnowledgeRetriever
 from app.services.neural_design.models import (
     DesignRequest, DraftTestCase, RefinedTestCase, RefinedTestStep,
     RefinedRequestSpec, RefinedAssertionSpec
@@ -34,9 +35,10 @@ class DesignService:
     2. generate_test_case: 场景 -> 生成测试用例 (Draft -> Refined)
     """
     
-    def __init__(self, ai_manager: Optional[AIClientManager] = None, retriever: Optional[RagRetriever] = None):
+    def __init__(self, ai_manager: Optional[AIClientManager] = None, retriever: Optional[RagRetriever] = None, knowledge_retriever: Optional[KnowledgeRetriever] = None):
         self.ai = ai_manager or get_ai_manager()
         self.retriever = retriever or RagRetriever()
+        self.knowledge_retriever = knowledge_retriever or KnowledgeRetriever()
         
     async def analyze_requirement(self, request: DesignRequest) -> List[Dict[str, Any]]:
         """
@@ -97,10 +99,17 @@ class DesignService:
         if not api_context_str:
             api_context_str = "未检索到具体 API 定义，请基于 RESTful 通用规范生成。"
 
-        # 2. Draft Generation with Semantic Retry
+        # 2. Retrieve Knowledge (Business Rules / Domain Context)
+        knowledge_context = await self.knowledge_retriever.retrieve(query, project_id)
+        knowledge_str = "\n".join([f"- {k.content}" for k in knowledge_context])
+        if not knowledge_str:
+            knowledge_str = "无额外业务规则知识。"
+
+        # 3. Draft Generation with Semantic Retry
         user_content = TC_GENERATION_USER_TEMPLATE.format(
             scenario_description=json.dumps(scenario, ensure_ascii=False),
-            available_apis=api_context_str
+            available_apis=api_context_str,
+            domain_knowledge=knowledge_str
         )
         
         messages = [
@@ -148,6 +157,7 @@ class DesignService:
             return refined_case
         except Exception as e:
             logger.error(f"测试用例转换失败: {e}")
+            logger.error(f"Draft Data: {json.dumps(draft_data, ensure_ascii=False)}")
             raise ValueError("生成的测试用例格式不正确，无法转换为标准 API-IR") from e
 
     async def _invoke_with_retry(self, messages: List[Message], module: AIModule, max_retries: int = 2) -> Dict[str, Any]:
@@ -200,9 +210,17 @@ class DesignService:
                 body=step.get("input_data"),
             )
             
+            expected_outcome = step.get("expected_outcome")
+            if isinstance(expected_outcome, (dict, list)):
+                expected_outcome = json.dumps(expected_outcome, ensure_ascii=False)
+            elif expected_outcome is None:
+                expected_outcome = ""
+            else:
+                expected_outcome = str(expected_outcome)
+
             assertion_spec = RefinedAssertionSpec(
                 status_code=200, 
-                contains=step.get("expected_outcome")
+                contains=expected_outcome
             )
             
             refined_step = RefinedTestStep(

@@ -40,7 +40,7 @@ dependencies = [
     "langchain>=0.1.0",
     "langchain-openai>=0.0.5",
     "langgraph>=0.0.25",
-    "chromadb>=0.4.24",
+
     
     # === Browser Automation ===
     "playwright>=1.41.0",
@@ -48,6 +48,8 @@ dependencies = [
     # === Image Processing ===
     "pillow>=10.2.0",
     "imagehash>=4.3.1",
+    "scikit-image>=0.22.0",
+    "numpy>=1.26.0",
     
     # === Utilities ===
     "pydantic>=2.6.0",
@@ -57,9 +59,19 @@ dependencies = [
     "tenacity>=8.2.3",
     "aiofiles>=23.2.1",
     "cryptography>=42.0.0",
+    "deepdiff>=6.7.1",
     
     # === Data Factory ===
     "faker>=22.0.0",
+    "simpleeval>=1.0",
+
+    # === Turbo Engine (Performance) ===
+    "locust>=2.20.0",
+    "jinja2>=3.1.0",
+    "langchain>=0.1.0",
+    "langchain-openai>=0.0.5",
+    "pymilvus>=2.3.0",
+    "GitPython>=3.1.0",
 ]
 
 [project.optional-dependencies]
@@ -71,6 +83,7 @@ dev = [
     "ruff>=0.2.0",
     "mypy>=1.8.0",
     "pre-commit>=3.6.0",
+    "import-linter>=2.0",
 ]
 omniparser = [
     "torch>=2.0.0",

@@ -23,6 +23,15 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info(f"🐦 重明 v{settings.VERSION} 启动中...")
     logger.info(f"📡 API 文档: http://localhost:{settings.PORT}/docs")
+
+    # 初始化 AI Client Manager (Dependency Injection)
+    # 解决 Core <-> Services 循环依赖
+    from app.core.ai_client import init_ai_manager
+    from app.services.smart_ops.ai_config_provider_impl import AIConfigProviderImpl
+    
+    init_ai_manager(AIConfigProviderImpl())
+    logger.info("🧠 AI Client Manager initialized with Service Provider")
+
     
     yield
     

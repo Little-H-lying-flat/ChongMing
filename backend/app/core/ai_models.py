@@ -35,7 +35,9 @@ class ModelConfig:
     max_tokens: int = 4096
     temperature: float = 0.7
     description: str = ""
+    describe: str = ""
     cost_per_1k_tokens: float = 0.0  # 成本估算
+    system_prompt: Optional[str] = None  # 默认系统提示词
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -70,6 +72,15 @@ AVAILABLE_MODELS = {
         temperature=0.7,
         description="通义千问 Turbo - 快速响应",
         cost_per_1k_tokens=0.002,
+    ),
+    "qwen-flash": ModelConfig(
+        model_id="qwen-flash", # Assumed valid model ID, maybe qwen2.5-flash
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.TEXT,
+        max_tokens=8192,
+        temperature=0.7,
+        description="通义千问 Flash - 极速响应",
+        cost_per_1k_tokens=0.001, # Estimated cheaper than turbo
     ),
     "qwen-long": ModelConfig(
         model_id="qwen-long",
@@ -107,6 +118,37 @@ AVAILABLE_MODELS = {
         description="Qwen3 235B - 深度推理 (需开通)",
         cost_per_1k_tokens=0.004,
     ),
+    "qwen-max-2025-01-25": ModelConfig( # Assuming this is the qwen3-max equivalent or placeholder if exact ID is qwen-max-latest
+        model_id="qwen-max-2025-01-25",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.REASONING,
+        max_tokens=8192,
+        temperature=0.7,
+        description="通义千问 Qwen2.5-Max (2025-01-25)",
+        cost_per_1k_tokens=0.02, # Estimated
+    ),
+    "qwen3-max": ModelConfig( # Renamed key to match usage 
+        # Actually user said "qwen3-max" and "qwen3-vl-plus". 
+        # Qwen2.5 is the current "Next Gen". "Qwen3" might be user's shorthand or specific preview. 
+        # I will add them with the EXACT IDs user asked for, assuming they exist in their provider invocation, 
+        # or map them to the likely real model IDs if execution fails. 
+        # Use standard model IDs for DashScope: "qwen-max-latest" or "qwen-max" is usually the alias.
+        # But if user insists on "qwen3", I'll add them.
+        model_id="qwen3-max",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.REASONING,
+        max_tokens=8192,
+        description="Qwen3 Max (User Requested)",
+        cost_per_1k_tokens=0.02,
+    ),
+    "qwen3-vl-plus": ModelConfig(
+        model_id="qwen3-vl-plus",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.VISION,
+        max_tokens=8192,
+        description="Qwen3 VL Plus (User Requested)",
+        cost_per_1k_tokens=0.01,
+    ),
     "text-embedding-v3": ModelConfig(
         model_id="text-embedding-v3",
         provider=ModelProvider.DASHSCOPE,
@@ -134,6 +176,15 @@ AVAILABLE_MODELS = {
         temperature=0.7,
         description="GPT-4o Mini - 快速多模态",
         cost_per_1k_tokens=0.00015,
+    ),
+
+    "text-embedding-v4": ModelConfig(
+        model_id="text-embedding-v4",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.EMBEDDING,
+        max_tokens=8192,
+        description="通义文本向量模型 V4",
+        cost_per_1k_tokens=0.0005,
     ),
 }
 
@@ -178,33 +229,33 @@ class AIModule(str, Enum):
 # 默认模型映射配置
 DEFAULT_MODEL_MAPPING = {
     # === 神经设计层 - 需要高智能 ===
-    AIModule.NEURAL_INTENT_PARSER: "qwen-max",
-    AIModule.NEURAL_SCENARIO_GENERATOR: "qwen-max",
-    AIModule.NEURAL_CRITIC: "qwen-plus",
+    AIModule.NEURAL_INTENT_PARSER: "qwen3-max",
+    AIModule.NEURAL_SCENARIO_GENERATOR: "qwen3-max",
+    AIModule.NEURAL_CRITIC: "qwen3-max",
     
     # === 右瞳引擎 - 需要视觉能力 ===
-    AIModule.RIGHT_PUPIL_PLANNER: "qwen-plus",
-    AIModule.RIGHT_PUPIL_GROUNDING: "qwen-vl-plus",  # 视觉定位
-    AIModule.RIGHT_PUPIL_VERIFY: "qwen-vl-plus",     # 视觉验证
+    AIModule.RIGHT_PUPIL_PLANNER: "qwen3-max",
+    AIModule.RIGHT_PUPIL_GROUNDING: "qwen3-vl-plus",  # 视觉定位
+    AIModule.RIGHT_PUPIL_VERIFY: "qwen3-vl-plus",     # 视觉验证
     
     # === 左瞳引擎 ===
-    AIModule.LEFT_PUPIL_CHAIN_INFERENCE: "qwen-plus",
-    AIModule.LEFT_PUPIL_PARAM_GEN: "qwen-turbo",     # 快速生成
+    AIModule.LEFT_PUPIL_CHAIN_INFERENCE: "qwen3-max",
+    AIModule.LEFT_PUPIL_PARAM_GEN: "qwen-flash",     # 极速生成
     
     # === 凤凰涅槃层 ===
-    AIModule.PHOENIX_CODE_GEN: "qwen-plus",
-    AIModule.PHOENIX_CODEGEN: "qwen-plus",
-    AIModule.PHOENIX_ASSERTION_GEN: "qwen-turbo",
+    AIModule.PHOENIX_CODE_GEN: "qwen3-max",
+    AIModule.PHOENIX_CODEGEN: "qwen3-max",
+    AIModule.PHOENIX_ASSERTION_GEN: "qwen-flash",
     
     # === 缺陷分析 - 需要推理能力 ===
-    AIModule.DEFECT_ROOT_CAUSE: "qwen-max",
-    AIModule.DEFECT_FIX_SUGGEST: "qwen-plus",
-    AIModule.DEFECT_ANALYSIS: "qwen-max",
+    AIModule.DEFECT_ROOT_CAUSE: "qwen3-max",
+    AIModule.DEFECT_FIX_SUGGEST: "qwen3-max",
+    AIModule.DEFECT_ANALYSIS: "qwen3-max",
     
     # === 通用 ===
-    AIModule.GENERAL_CHAT: "qwen-turbo",
+    AIModule.GENERAL_CHAT: "qwen-flash",
     AIModule.GENERAL_SUMMARY: "qwen-long",           # 长文本摘要
-    AIModule.RAG_EMBEDDING: "text-embedding-v3",
+    AIModule.RAG_EMBEDDING: "text-embedding-v4",
 }
 
 

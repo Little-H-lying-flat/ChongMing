@@ -334,14 +334,27 @@ class Asserter:
                 "bool": bool,
                 "list": list,
                 "dict": dict,
+                # 安全的类型检查函数（绕过 simpleeval 的 isinstance 限制）
+                "is_list": lambda x: type(x).__name__ == "list",
+                "is_dict": lambda x: type(x).__name__ == "dict",
+                "is_str": lambda x: type(x).__name__ == "str",
+                "is_int": lambda x: type(x).__name__ == "int",
             }
             
-            from simpleeval import SimpleEval
-            import ast
+            from simpleeval import EvalWithCompoundTypes
+            import re as _re
             
-            s = SimpleEval(names=names, functions=functions)
-            # 支持列表字面量 []
-            s.nodes[ast.List] = lambda node: [s._eval(x) for x in node.elts]
+            # 自动将 isinstance(x, list) 改写为 is_list(x)
+            _type_map = {"list": "is_list", "dict": "is_dict", "str": "is_str", "int": "is_int"}
+            def _rewrite_isinstance(expr):
+                def _replace(m):
+                    fn = _type_map.get(m.group(2))
+                    return f"{fn}({m.group(1)})" if fn else m.group(0)
+                return _re.sub(r"isinstance\(\s*(\w+)\s*,\s*(\w+)\s*\)", _replace, expr)
+            
+            expression = _rewrite_isinstance(expression)
+            
+            s = EvalWithCompoundTypes(names=names, functions=functions)
             
             passed = bool(s.eval(expression))
         except Exception as e:

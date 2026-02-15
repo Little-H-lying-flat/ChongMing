@@ -108,6 +108,9 @@ async def request_logging_middleware(request: Request, call_next: Callable):
         duration = (time.time() - start_time) * 1000
         
         # 错误日志
+        import traceback
+        import sys
+        print(traceback.format_exc(), file=sys.stderr)
         logger.error(
             f"[{request_id}] <-- ERROR: {type(e).__name__}: {str(e)} ({duration:.2f}ms)",
             extra={

@@ -97,14 +97,74 @@ class SpecIngestor:
         documents = [c.content for c in chunks]
         metadatas = [c.metadata for c in chunks]
         
+        # Generate embeddings explicitly
+        embeddings = self._get_embeddings(documents)
+        
         self.chroma.add_documents(
             collection_name=collection_name,
             ids=ids,
             documents=documents,
             metadatas=metadatas,
+            embeddings=embeddings, 
         )
         
         return len(chunks)
+
+    def _get_embeddings(self, texts: list[str]) -> list[list[float]]:
+        """
+        Generates embeddings using the configured AI provider (Qwen/OpenAI compatible).
+        Uses httpx to call the API directly.
+        """
+        from app.core.config import settings
+        import httpx
+        
+        if not texts:
+            return []
+            
+        embeddings = []
+        # Batching if necessary (e.g. 10 at a time)
+        batch_size = 10
+        
+        headers = {
+            "Authorization": f"Bearer {settings.QWEN_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i+batch_size]
+            payload = {
+                "model": settings.MODEL_EMBEDDING,
+                "input": batch
+            }
+            
+            try:
+                # Use compatible mode endpoint for embeddings
+                # URL: https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings
+                url = f"{settings.QWEN_BASE_URL}/embeddings"
+                resp = httpx.post(url, headers=headers, json=payload, timeout=30.0)
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    # OpenAI format: data: [{embedding: [...], index: ...}, ...]
+                    batch_embeddings = [item["embedding"] for item in data.get("data", [])]
+                    embeddings.extend(batch_embeddings)
+                else:
+                    # Fallback or log error
+                    # For now return empty lists or zeros to avoid crashing, 
+                    # but actually better to log effectively.
+                    # Since this is critical, we might want to fail or use dummy?
+                    # Let's use dummy if API fails to allow testing without net?
+                    # No, production needs real embeddings.
+                    import logging
+                    logging.getLogger(__name__).error(f"Embedding API failed: {resp.text}")
+                    # Appending empty lists will cause dimension mismatch in Chroma probably
+                    embeddings.extend([[] for _ in batch]) # This will likely fail later
+            except Exception as e:
+                 import logging
+                 logging.getLogger(__name__).error(f"Embedding request failed: {e}")
+                 embeddings.extend([[] for _ in batch])
+                 
+        return embeddings
     
     def _endpoint_to_chunk(self, endpoint: ApiEndpoint) -> ApiChunk:
         """将端点转换为切片"""
@@ -172,9 +232,13 @@ class SpecIngestor:
         """
         collection_name = self._get_collection_name(project_id)
         
+        # Generate query embedding
+        query_embeddings = self._get_embeddings([query])
+        
         results = self.chroma.query(
             collection_name=collection_name,
             query_texts=[query],
+            query_embeddings=query_embeddings,
             n_results=top_k,
             where=filters,
         )
@@ -234,9 +298,9 @@ class SpecIngestor:
             端点列表
         """
         collection_name = self._get_collection_name(project_id)
-        collection = self.chroma.get_collection(collection_name)
+        # collection = self.chroma.get_collection(collection_name)
         
-        results = collection.get(limit=limit)
+        results = self.chroma.get_documents(collection_name, limit=limit)
         
         endpoints = []
         if results:

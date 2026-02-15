@@ -3,6 +3,14 @@ from unittest.mock import MagicMock, AsyncMock
 from app.services.left_pupil.spec_ingestor import SpecIngestor
 from app.services.left_pupil.rag_retriever import RagRetriever
 
+try:
+    from app.core.chroma_client import ChromaClient
+    _chroma = ChromaClient.get_instance()
+    # Check if we can connect to Chroma Server
+    HAS_CHROMADB = _chroma.heartbeat()
+except Exception:
+    HAS_CHROMADB = False
+
 @pytest.fixture
 def test_project_id():
     return "test_proj_integration"
@@ -16,8 +24,14 @@ def retriever(ingestor):
     r = RagRetriever(ingestor=ingestor)
     # Mock LLM expansion to return just a simple expansion
     r._expand_intent = AsyncMock(return_value=["users", "get users"])
+    
+    # Mock embedding generation to avoid API calls and key issues during test
+    # Return dummy 1536-dim vectors (standard for text-embedding-v3)
+    ingestor._get_embeddings = MagicMock(return_value=[[0.1] * 1536] * 2) 
+    
     return r
 
+@pytest.mark.skipif(not HAS_CHROMADB, reason="ChromaDB not available")
 @pytest.mark.asyncio
 async def test_full_rag_flow(ingestor, retriever, test_project_id):
     # 1. Ingest

@@ -17,7 +17,7 @@ from app.services.left_pupil.api_runner import ApiRunner, ApiIRStep, RequestSpec
 from app.models.api_ir import ApiIR, ApiIRChain, create_api_ir
 
 
-router = APIRouter()
+router = APIRouter(tags=["Flow 4: Left Pupil (API Automation)"])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -26,30 +26,30 @@ router = APIRouter()
 
 class RequestSpecModel(BaseModel):
     """请求规格"""
-    method: str = Field(default="GET", description="HTTP 方法")
-    url: str = Field(..., description="请求 URL (支持 ${var} 变量)")
-    headers: Dict[str, str] = Field(default_factory=dict, description="请求头")
-    body: Optional[Dict[str, Any]] = Field(default=None, description="请求体")
-    query_params: Dict[str, str] = Field(default_factory=dict, description="查询参数")
-    timeout_ms: int = Field(default=30000, description="超时时间(毫秒)")
+    method: str = Field("GET", description="HTTP 方法", example="GET")
+    url: str = Field(..., description="请求 URL (支持 ${var} 变量)", example="https://api.example.com/users/${user_id}")
+    headers: Dict[str, str] = Field(default_factory=dict, description="请求头", example={"Authorization": "Bearer ${token}"})
+    body: Optional[Dict[str, Any]] = Field(None, description="请求体 (JSON)", example={"name": "test_user"})
+    query_params: Dict[str, str] = Field(default_factory=dict, description="查询参数", example={"page": "1"})
+    timeout_ms: int = Field(30000, description="超时时间(毫秒)", example=5000)
 
 
 class AssertionModel(BaseModel):
     """断言配置"""
-    status_code: Optional[int] = Field(default=None, description="期望状态码")
-    json_assertions: Dict[str, Any] = Field(default_factory=dict, description="JsonPath 断言")
-    contains: Optional[str] = Field(default=None, description="包含文本")
-    not_contains: Optional[str] = Field(default=None, description="不包含文本")
-    expression: Optional[str] = Field(default=None, description="自定义表达式")
+    status_code: Optional[int] = Field(None, description="期望状态码", example=200)
+    json_assertions: Dict[str, Any] = Field(default_factory=dict, description="JsonPath 断言 (路径 -> 期望值)", example={"$.code": 0})
+    contains: Optional[str] = Field(None, description="响应体包含文本", example="Success")
+    not_contains: Optional[str] = Field(None, description="响应体不包含文本", example="Error")
+    expression: Optional[str] = Field(None, description="自定义 Python 表达式 (response.json()['id'] > 0)", example="len(response.json()['items']) > 0")
 
 
 class ApiIRStepModel(BaseModel):
     """API-IR 步骤"""
-    id: str = Field(..., description="步骤 ID")
-    name: str = Field(default="", description="步骤名称")
-    request: RequestSpecModel
-    extraction: Dict[str, str] = Field(default_factory=dict, description="变量提取规则")
-    assertion: Optional[AssertionModel] = Field(default=None, description="断言配置")
+    id: str = Field(..., description="步骤 ID (唯一)", example="STEP_001")
+    name: str = Field("", description="步骤名称", example="获取用户信息")
+    request: RequestSpecModel = Field(..., description="请求详情")
+    extraction: Dict[str, str] = Field(default_factory=dict, description="变量提取规则 (变量名 -> JsonPath)", example={"user_token": "$.data.token"})
+    assertion: Optional[AssertionModel] = Field(None, description="断言配置")
     
     class Config:
         json_schema_extra = {
@@ -68,41 +68,41 @@ class ApiIRStepModel(BaseModel):
 
 class ExecuteStepRequest(BaseModel):
     """执行单步请求"""
-    base_url: str = Field(..., description="API 基础 URL")
-    step: ApiIRStepModel
-    context: Dict[str, Any] = Field(default_factory=dict, description="初始上下文变量")
-    default_headers: Dict[str, str] = Field(default_factory=dict, description="默认请求头")
+    base_url: str = Field(..., description="API 基础 URL", example="https://api.example.com")
+    step: ApiIRStepModel = Field(..., description="API-IR 步骤定义")
+    context: Dict[str, Any] = Field(default_factory=dict, description="初始上下文变量", example={"env": "dev"})
+    default_headers: Dict[str, str] = Field(default_factory=dict, description="默认请求头 (如 Auth Token)", example={"X-Request-ID": "123"})
 
 
 class ExecuteChainRequest(BaseModel):
     """执行链式请求"""
     base_url: str = Field(..., description="API 基础 URL")
-    steps: List[ApiIRStepModel]
+    steps: List[ApiIRStepModel] = Field(..., description="步骤列表")
     context: Dict[str, Any] = Field(default_factory=dict, description="初始上下文变量")
     default_headers: Dict[str, str] = Field(default_factory=dict, description="默认请求头")
-    stop_on_failure: bool = Field(default=True, description="失败时停止")
+    stop_on_failure: bool = Field(True, description="遇到失败是否停止")
 
 
 class StepResultResponse(BaseModel):
     """步骤执行结果"""
-    step_id: str
-    status: str  # passed, failed, error
-    status_code: int = 0
-    duration_ms: float = 0.0
-    extracted_values: Dict[str, Any] = Field(default_factory=dict)
-    assertion_passed: bool = True
-    assertion_details: Optional[Dict] = None
-    error: Optional[str] = None
+    step_id: str = Field(..., description="步骤 ID")
+    status: str = Field(..., description="执行状态 (passed/failed/error)")
+    status_code: int = Field(0, description="实际 HTTP 状态码")
+    duration_ms: float = Field(0.0, description="耗时")
+    extracted_values: Dict[str, Any] = Field(default_factory=dict, description="提取的变量值")
+    assertion_passed: bool = Field(True, description="断言是否全部通过")
+    assertion_details: Optional[Dict] = Field(None, description="断言详情报告")
+    error: Optional[str] = Field(None, description="错误信息")
 
 
 class ChainResultResponse(BaseModel):
     """链式执行结果"""
-    success: bool
-    total_steps: int
-    passed_steps: int
-    failed_steps: int
-    results: List[StepResultResponse]
-    final_context: Dict[str, Any]
+    success: bool = Field(..., description="总体是否成功")
+    total_steps: int = Field(..., description="总步骤数")
+    passed_steps: int = Field(..., description="通过步骤数")
+    failed_steps: int = Field(..., description="失败步骤数")
+    results: List[StepResultResponse] = Field(..., description="详细步骤结果")
+    final_context: Dict[str, Any] = Field(..., description="最终上下文状态")
 
 
 class SwaggerParseRequest(BaseModel):
@@ -155,16 +155,20 @@ class AssertResponse(BaseModel):
 @router.post(
     "/execute",
     response_model=StepResultResponse,
-    summary="执行单个 API 步骤",
-    description="执行单个 API-IR 步骤，支持变量注入和提取",
+    summary="执行单步 (Execute Step)",
+    description="""
+    **Flow 4 核心接口**: 执行单个 API 测试步骤。
+    
+    - **功能**:
+        1. 变量注入: 将 `${var}` 替换为上下文中的值。
+        2. HTTP 请求: 使用 `httpx` 发送请求。
+        3. 变量提取: 解析响应并提取新变量。
+        4. 断言验证: 验证响应是否符合预期。
+    """
 )
 async def execute_step(request: ExecuteStepRequest):
     """
     执行单个 API 测试步骤
-    
-    - 支持变量模板注入 (${var})
-    - 支持 JsonPath 变量提取
-    - 支持多种断言类型
     """
     try:
         # 初始化
@@ -219,16 +223,19 @@ async def execute_step(request: ExecuteStepRequest):
 @router.post(
     "/execute-chain",
     response_model=ChainResultResponse,
-    summary="执行链式 API 步骤",
-    description="按顺序执行多个 API-IR 步骤，支持变量传递",
+    summary="执行链路 (Execute Chain)",
+    description="""
+    **Flow 4 核心接口**: 按顺序执行一组 API 测试步骤 (链路)。
+    
+    - **特性**:
+        - **上下文共享**: 步骤 1 提取的变量可被步骤 2 使用。
+        - **条件停止**: 支持 `stop_on_failure`。
+        - **最终状态**: 返回链路执行报告和最终上下文。
+    """
 )
 async def execute_chain(request: ExecuteChainRequest):
     """
     执行链式 API 测试
-    
-    - 步骤按顺序执行
-    - 变量自动在步骤间传递
-    - 可配置失败时停止
     """
     try:
         memory = ContextMemory()
@@ -303,15 +310,17 @@ async def execute_chain(request: ExecuteChainRequest):
 @router.post(
     "/parse-swagger",
     response_model=SwaggerParseResponse,
-    summary="解析 Swagger 文档",
-    description="解析 OpenAPI 3.0/Swagger 2.0 文档",
+    summary="解析协议 (Parse Swagger)",
+    description="""
+    **导入工具**: 解析 OpenAPI/Swagger 文档并提取端点信息。
+    
+    - **支持**: OpenAPI 3.0+, Swagger 2.0。
+    - **用途**: 将 swagger.json 转换为内部 API-IR 结构的前置步骤。
+    """
 )
 async def parse_swagger(request: SwaggerParseRequest):
     """
     解析 Swagger/OpenAPI 文档
-    
-    - 支持 URL 和内容两种方式
-    - 支持 OpenAPI 3.0/3.1 和 Swagger 2.0
     """
     try:
         parser = SwaggerParser()
@@ -368,14 +377,12 @@ async def parse_swagger(request: SwaggerParseRequest):
 @router.post(
     "/assert",
     response_model=AssertResponse,
-    summary="执行断言验证",
-    description="对响应数据执行断言验证",
+    summary="断言验证 (Run Assertions)",
+    description="独立运行断言逻辑，用于调试或验证响应数据。",
 )
 async def run_assertions(request: AssertRequest):
     """
     执行响应断言
-    
-    - 支持状态码、JsonPath、包含、正则、表达式等断言
     """
     try:
         asserter = Asserter()
@@ -417,8 +424,8 @@ async def run_assertions(request: AssertRequest):
 
 @router.post(
     "/generate-ir",
-    summary="生成 API-IR",
-    description="根据参数生成 API-IR 配置",
+    summary="生成 IR 模板 (Generate IR)",
+    description="快速生成 API-IR JSON 结构模板。",
 )
 async def generate_ir(
     method: str = "GET",
@@ -431,8 +438,6 @@ async def generate_ir(
 ):
     """
     生成 API-IR 配置
-    
-    用于快速创建测试步骤配置
     """
     api_ir = create_api_ir(
         method=method,
@@ -449,8 +454,8 @@ async def generate_ir(
 
 @router.get(
     "/health",
-    summary="健康检查",
-    description="检查左瞳引擎服务状态",
+    summary="健康检查 (Health Check)",
+    description="检查引擎依赖组件状态。",
 )
 async def health_check():
     """左瞳引擎健康检查"""

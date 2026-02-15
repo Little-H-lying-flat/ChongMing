@@ -304,7 +304,7 @@ services:
   # OmniParser (视觉识别)
   omniparser:
     build:
-      context: ../omniparser
+      context: ../backend/omniparser
       dockerfile: Dockerfile
     image: chongming/omniparser:latest
     container_name: chongming-omniparser

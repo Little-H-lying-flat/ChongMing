@@ -20,6 +20,7 @@ from app.models.base import Base
 
 
 # 创建异步引擎
+print(f"DEBUG: DATABASE_URL={settings.DATABASE_URL}")
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,

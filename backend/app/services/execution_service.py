@@ -106,3 +106,100 @@ class ExecutionService:
             stmt = select(ExecutionStep).where(ExecutionStep.execution_id == execution_id)
             result = await session.execute(stmt)
             return result.scalars().all()
+
+    @staticmethod
+    async def run_ui_task(prompt: str, url: str) -> List[dict]:
+        """
+        执行 UI 自动化任务 (Right Pupil) - 同步 Debug 模式
+
+        封装 RightPupilEngine，避免 API 层直接依赖 engines。
+        """
+        from app.engines.right_pupil import RightPupilEngine
+        engine = RightPupilEngine()
+        return await engine.run_task(prompt, url)
+
+    @staticmethod
+    async def get_execution_status_dict(execution_id: str) -> Optional[Dict[str, Any]]:
+        """
+        获取执行状态的纯字典表示
+
+        封装 DB model 访问，避免 API 层直接依赖 models。
+        """
+        execution = await ExecutionService.get_execution(execution_id)
+        if not execution:
+            return None
+
+        is_terminal = execution.status in [ExecutionStatus.PASSED, ExecutionStatus.FAILED]
+        return {
+            "execution_id": execution.id,
+            "status": execution.status.value,
+            "progress": 100.0 if is_terminal else 0.0,
+            "passed": execution.passed_cases,
+            "failed": execution.failed_cases,
+            "skipped": execution.skipped_cases,
+            "running": 0,
+            "pending": 0,
+            "start_time": execution.start_time.isoformat() if execution.start_time else "",
+            "elapsed_seconds": execution.duration_ms / 1000.0 if execution.duration_ms else 0.0,
+        }
+
+    @staticmethod
+    async def get_execution_result_dict(execution_id: str) -> Optional[Dict[str, Any]]:
+        """
+        获取执行结果的纯字典表示
+
+        封装 DB model 访问，避免 API 层直接依赖 models。
+        """
+        execution = await ExecutionService.get_execution(execution_id)
+        if not execution:
+            return None
+
+        steps = await ExecutionService.get_execution_steps(execution_id)
+        case_results = []
+        for step in steps:
+            case_results.append({
+                "tc_id": step.tc_id,
+                "status": step.status.value,
+                "duration_ms": step.duration_ms,
+                "steps": step.step_results.get("steps", []) if step.step_results else [],
+                "error": step.error_message,
+            })
+
+        return {
+            "execution_id": execution.id,
+            "status": execution.status.value,
+            "summary": {
+                "total": execution.total_cases,
+                "passed": execution.passed_cases,
+                "failed": execution.failed_cases,
+                "skipped": execution.skipped_cases,
+            },
+            "cases": case_results,
+            "duration_seconds": execution.duration_ms / 1000.0 if execution.duration_ms else 0.0,
+            "report_url": execution.report_url,
+        }
+
+    @staticmethod
+    async def list_executions_dicts(limit: int = 20) -> List[Dict[str, Any]]:
+        """
+        获取执行列表的纯字典列表
+
+        封装 DB model 访问，避免 API 层直接依赖 models。
+        """
+        executions = await ExecutionService.list_executions(limit=limit)
+        result = []
+        for exec_record in executions:
+            is_terminal = exec_record.status in [ExecutionStatus.PASSED, ExecutionStatus.FAILED]
+            result.append({
+                "execution_id": exec_record.id,
+                "status": exec_record.status.value,
+                "progress": 100.0 if is_terminal else 0.0,
+                "passed": exec_record.passed_cases,
+                "failed": exec_record.failed_cases,
+                "skipped": exec_record.skipped_cases,
+                "running": 0,
+                "pending": 0,
+                "start_time": exec_record.start_time.isoformat() if exec_record.start_time else "",
+                "elapsed_seconds": exec_record.duration_ms / 1000.0 if exec_record.duration_ms else 0.0,
+            })
+        return result

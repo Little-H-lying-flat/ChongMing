@@ -6,7 +6,6 @@ API-IR 执行器
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 import re
 import time
@@ -14,63 +13,7 @@ import time
 import httpx
 from loguru import logger
 
-
-class AuthType(str, Enum):
-    """认证类型"""
-    NONE = "none"
-    BEARER = "bearer"
-    BASIC = "basic"
-    API_KEY = "api_key"
-
-
-@dataclass
-class AuthConfig:
-    """认证配置"""
-    auth_type: AuthType = AuthType.NONE
-    token: Optional[str] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
-    api_key_name: Optional[str] = None
-    api_key_value: Optional[str] = None
-    api_key_location: str = "header"  # header, query
-
-
-@dataclass
-class APIIR:
-    """API 中间表示 (Intermediate Representation)"""
-    method: str
-    url: str
-    headers: Dict[str, str] = field(default_factory=dict)
-    query_params: Dict[str, Any] = field(default_factory=dict)
-    path_params: Dict[str, Any] = field(default_factory=dict)
-    body: Optional[Any] = None
-    content_type: str = "application/json"
-    timeout: float = 30.0
-    assertions: List[Dict] = field(default_factory=list)
-    extract: Dict[str, str] = field(default_factory=dict)
-
-
-@dataclass
-class APIResponse:
-    """API 响应"""
-    status_code: int
-    headers: Dict[str, str]
-    body: Any
-    raw_body: bytes
-    duration_ms: float
-    request_url: str
-    request_method: str
-
-
-@dataclass
-class ExecutionResult:
-    """执行结果"""
-    success: bool
-    response: Optional[APIResponse]
-    assertions_passed: List[str]
-    assertions_failed: List[str]
-    extracted_values: Dict[str, Any]
-    error: Optional[str] = None
+from app.schemas.api_ir import APIIR, APIResponse, AuthConfig, AuthType, ExecutionResult
 
 
 class APIExecutor:

@@ -105,10 +105,11 @@ def execute_test_cases(
             db_status = status_map.get(result.status, ExecutionStatus.ERROR)
             
             # Persist Step Result
+            import dataclasses
             await _safe_create_step(
                 tc_id, 
                 db_status, 
-                {"steps": [s.dict() for s in result.step_results]}, # Serialize steps
+                {"steps": [dataclasses.asdict(s) for s in result.step_results]}, # Serialize steps
                 result.total_duration_ms, 
                 None # Error already handled above if exception
             )

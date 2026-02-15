@@ -28,7 +28,7 @@ class OmniClient:
     
     def __init__(self, base_url: str = "", client: Optional[httpx.AsyncClient] = None):
         self.base_url = (base_url or settings.OMNIPARSER_URL).rstrip("/")
-        self.timeout = 30.0
+        self.timeout = 300.0 # Increased for CPU inference / initial download
         self._client = client
         self._internal_client: Optional[httpx.AsyncClient] = None
         
@@ -94,6 +94,8 @@ class OmniClient:
                     ))
                     
             logger.info(f"OmniParser 成功识别 {len(elements)} 个元素")
+            if len(elements) > 0:
+                logger.info(f"First 3 elements: {elements[:3]}") # Force INFO logging
             return elements
                 
         except httpx.RequestError as e:

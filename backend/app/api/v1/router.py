@@ -17,6 +17,8 @@ from app.api.v1.endpoints import (
     environments,
     data_factory,
     left_pupil,
+    turbo,
+    smart_ops,
 )
 
 api_router = APIRouter()
@@ -89,4 +91,18 @@ api_router.include_router(
     left_pupil.router,
     prefix="/left-pupil",
     tags=["左瞳引擎"]
+)
+
+# 涡轮引擎 (性能测试)
+api_router.include_router(
+    turbo.router,
+    prefix="/turbo",
+    tags=["涡轮引擎"]
+)
+
+# 智能运维层 (AI Model Governance)
+api_router.include_router(
+    smart_ops.router,
+    prefix="/smart-ops",
+    tags=["智能运维"]
 )

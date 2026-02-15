@@ -1,0 +1,61 @@
+[importlinter]
+root_packages =
+    app
+
+include_external_packages = False
+
+
+# ═══════════════════════════════════════════════════════════════
+# Contract 1: Core & Models 层独立性 (Bottom Layer)
+# 禁止 Core/Models 反向依赖 Services/Agents/Engines
+# ═══════════════════════════════════════════════════════════════
+[importlinter:contract:core-models-independence]
+name = Core and Models must not import services, agents, or engines
+type = forbidden
+source_modules =
+    app.core
+    app.models
+forbidden_modules =
+    app.services
+    app.agents
+    app.engines
+    app.api
+    app.tasks
+allow_indirect_imports = True
+
+
+# ═══════════════════════════════════════════════════════════════
+# Contract 2: Services Layer
+# Services 可以调用 Core/Models
+# Services 不应调用 API/Tasks (避免循环)
+# ═══════════════════════════════════════════════════════════════
+[importlinter:contract:services-layer]
+name = Services must not import api or tasks
+type = forbidden
+source_modules =
+    app.services
+forbidden_modules =
+    app.api
+    app.tasks
+allow_indirect_imports = True
+
+
+# ═══════════════════════════════════════════════════════════════
+# Contract 3: API & Tasks Layer (Top Layer)
+# 可以调用 Services, Agents, Engines
+# 不应直接调用 Models (应通过 Service), 不应调用底层 Core (尽量通过 Service?)
+# 用户规则: "api and tasks 只能调用 services, agents, engines"
+# 隐含: API -> Models 是禁止的 (应通过 Service)
+# ═══════════════════════════════════════════════════════════════
+[importlinter:contract:api-tasks-layer]
+name = API and Tasks must not import models directly
+type = forbidden
+source_modules =
+    app.api
+    app.tasks
+forbidden_modules =
+    app.models
+allow_indirect_imports = True
+ignore_imports =
+    app.api.v1.endpoints.left_pupil -> app.models.api_ir
+

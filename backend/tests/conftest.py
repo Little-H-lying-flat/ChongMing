@@ -95,6 +95,16 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     # 覆盖依赖
     app.dependency_overrides[get_db] = override_get_db
     
+    # 同时替换 async_session_maker，让服务层直接使用的 session 也指向测试数据库
+    import app.core.database as db_module
+    original_session_maker = db_module.async_session_maker
+    db_module.async_session_maker = test_session_maker
+    
+    # AIConfigService 也在 import 时绑定了 async_session_maker，需要同步替换
+    import app.services.smart_ops.ai_config_service as ai_cfg_module
+    original_ai_cfg_session_maker = ai_cfg_module.async_session_maker
+    ai_cfg_module.async_session_maker = test_session_maker
+    
     # 创建异步客户端
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -102,6 +112,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     
     # 清理覆盖
     app.dependency_overrides.clear()
+    db_module.async_session_maker = original_session_maker
+    ai_cfg_module.async_session_maker = original_ai_cfg_session_maker
+
+
+# async_client 别名，供使用该名称的测试使用
+async_client = client
 
 
 @pytest.fixture

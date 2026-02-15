@@ -66,6 +66,9 @@ TC_GENERATION_USER_TEMPLATE = """
 
 ### 可用 API
 {available_apis}
+
+### 领域知识/业务规则
+{domain_knowledge}
 """
 
 # --- Critic ---

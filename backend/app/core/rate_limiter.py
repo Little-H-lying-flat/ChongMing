@@ -42,6 +42,7 @@ class RateLimiter:
                     encoding="utf-8",
                     decode_responses=True,
                 )
+                await self._redis.ping() # Test connection
             except Exception as e:
                 logger.warning(f"Redis 连接失败，限流功能禁用: {e}")
                 self._redis = False

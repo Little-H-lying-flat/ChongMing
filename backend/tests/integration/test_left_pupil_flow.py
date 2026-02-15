@@ -201,7 +201,7 @@ class TestApiRunnerFlow:
             extraction={"first_post_id": "$.0.id"},
             assertion={
                 "status_code": 200,
-                "expression": "isinstance(response, list) and len(response) > 0",
+                "expression": "is_list(response) and len(response) > 0",
             },
         )
         
@@ -414,7 +414,7 @@ class TestEndToEndFlow:
             name="获取用户列表",
             request=RequestSpec(method="GET", url="/users"),
             extraction={"first_user_id": "$.0.id", "first_user_name": "$.0.name"},
-            assertion={"status_code": 200, "expression": "isinstance(response, list) and len(response) > 0"},
+            assertion={"status_code": 200, "expression": "is_list(response) and len(response) > 0"},
         )
         
         result1 = await runner.execute(step1)

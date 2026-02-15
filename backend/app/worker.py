@@ -72,6 +72,9 @@ celery.conf.update(
     accept_content=["json"],
     event_serializer="json",
     
+    # === Local Testing ===
+    task_always_eager=settings.CELERY_TASK_ALWAYS_EAGER,
+    
     # === 时区 ===
     timezone="Asia/Shanghai",
     enable_utc=True,
