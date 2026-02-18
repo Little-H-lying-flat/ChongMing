@@ -107,17 +107,24 @@ async def update_module_config(request: UpdateAIConfigRequest):
     summary="配置供应商密钥 (Update Provider Key)",
     description="**安全接口**: 更新 AI 供应商 (OpenAI, Azure) 的 API Key 和 Base URL。",
 )
-async def update_provider_config(
-    provider: str = Field(..., description="供应商名称", example="openai"),
-    api_key: str = Field(..., description="API Key (将加密存储)"),
-    base_url: Optional[str] = Field(None, description="Base URL (可选)"),
-):
+class ProviderConfigSchema(BaseModel):
+    provider: str = Field(..., description="供应商名称", example="openai")
+    api_key: str = Field(..., description="API Key (将加密存储)")
+    base_url: Optional[str] = Field(None, description="Base URL (可选)")
+
+
+@router.post(
+    "/provider",
+    summary="配置供应商密钥 (Update Provider Key)",
+    description="**安全接口**: 更新 AI 供应商 (OpenAI, Azure) 的 API Key 和 Base URL。",
+)
+async def update_provider_config(config: ProviderConfigSchema):
     """
     Update API Key for a provider
 
     NOTE: In a real prod app, encrypt api_key before storing!
     """
-    return await AIConfigService.update_provider_config_db(provider, api_key, base_url)
+    return await AIConfigService.update_provider_config_db(config.provider, config.api_key, config.base_url)
 
 
 @router.post(

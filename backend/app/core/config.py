@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     MILVUS_PORT: str = "19530"
 
     # === OmniParser ===
-    OMNIPARSER_URL: str = "http://localhost:8002"
+    OMNIPARSER_URL: str = "http://localhost:7861"
     MOCK_OMNIPARSER: bool = False
     
     # === Git Integration ===
@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     GIT_USER_EMAIL: str = "bot@chongming.ai"
     
     # === CORS ===
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
     
     # === 日志 ===
     LOG_LEVEL: str = "INFO"

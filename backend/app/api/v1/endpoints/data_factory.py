@@ -30,7 +30,7 @@ class FieldDefinition(BaseModel):
 class GenerateRequest(BaseModel):
     """生成数据请求"""
     schema_name: str = Field(..., min_length=1, max_length=100)
-    schema: dict[str, str | FieldDefinition]
+    data_schema: dict[str, str | FieldDefinition] = Field(..., alias="schema")
     count: int = Field(default=1, ge=1, le=1000)
     ttl_seconds: Optional[int] = Field(default=None, ge=60)
     execution_id: Optional[str] = None
@@ -65,7 +65,7 @@ async def generate_data(
     
     # 转换 schema 格式
     schema = {}
-    for field_name, field_def in request.schema.items():
+    for field_name, field_def in request.data_schema.items():
         if isinstance(field_def, str):
             schema[field_name] = field_def
         else:

@@ -118,8 +118,8 @@ graph TD
     Neural --> |生成| Cases[测试用例]
     
     subgraph Execution [双瞳执行引擎]
-        Cases --> RightPupil[👁️ 右瞳 (UI/视觉)]
-        Cases --> LeftPupil[👁️ 左瞳 (API)]
+       Cases --> RightPupil[👁️ 右瞳 (UI/视觉)]
+        Cas es --> LeftPupil[👁️ 左瞳 (API)]
         RightPupil --> |视觉感知| Omni[OmniParser]
         LeftPupil --> |语义理解| RAG[RAG 知识库]
     end
@@ -165,8 +165,26 @@ cp deploy/.env.example deploy/.env
 
 # 启动 (生产模式)
 docker-compose -f deploy/docker-compose.yml up -d
-```
 
+Navigate to frontend: cd frontend
+Start dev server: npm run dev
+Open browser: http://localhost:3000/executions     
+```
+前端启动命令 请在 d:\project\ChongMing\frontend 目录下运行：
+
+powershell
+npm run dev
+后端启动命令 请在 d:\project\ChongMing\backend 目录下运行（确保已激活虚拟环境）：
+
+powershell
+cd backend
+# 如果未激活虚拟环境:
+.\.venv-py312\Scripts\Activate.ps1
+# 启动服务:
+python -m uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload --loop asyncio
+
+python run.py --reload
 ### 2. 访问服务
 
 | 服务 | 地址 | 默认账号 |
@@ -188,7 +206,7 @@ docker-compose -f deploy/docker-compose.yml up -d
 - **Database**: PostgreSQL (Data), Redis (Cache), ChromaDB & Milvus (Vector)
 
 ### Frontend (React 18)
-- **Core**: Vite, TypeScript, Zustand
+- **Core**: Next.js, TypeScript, React Query
 - **UI**: TailwindCSS, ShadcnUI, Monaco Editor
 - **Viz**: Recharts, React-Flow
 

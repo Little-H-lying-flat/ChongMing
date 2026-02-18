@@ -5,6 +5,14 @@
     uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 """
 
+import sys
+import asyncio
+
+# === Windows AsyncIO Fix (MUST BE FIRST) ===
+# Fixes NotImplementedError in Playwright/Subprocess on Windows
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -14,6 +22,11 @@ from loguru import logger
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.api.v1.router import api_router
+from app.worker import celery  # Ensure Celery app is loaded
+
+# nest_asyncio removed to prevent conflict with ProactorLoop
+# from app.worker import celery  # Ensure Celery app is loaded
+
 
 
 @asynccontextmanager
@@ -21,6 +34,11 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # Startup
     setup_logging()
+    
+    # Initialize DB (Create tables if not exist)
+    from app.core.database import init_db
+    await init_db()
+    
     logger.info(f"🐦 重明 v{settings.VERSION} 启动中...")
     logger.info(f"📡 API 文档: http://localhost:{settings.PORT}/docs")
 

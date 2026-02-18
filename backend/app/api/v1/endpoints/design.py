@@ -12,6 +12,8 @@ from app.services.neural_design.service import DesignService
 from app.services.neural_design.models import DesignRequest, RefinedTestCase
 from app.core.ai_client import get_ai_manager
 from app.services.left_pupil.rag_retriever import RagRetriever
+from app.core.logging import logger
+import traceback
 
 router = APIRouter(tags=["Flow 1: Neural Design (需求解析)"])
 
@@ -45,6 +47,8 @@ async def analyze_prd(
         scenarios = await service.analyze_requirement(request)
         return scenarios
     except Exception as e:
+        logger.error(f"Design Analysis Failed: {e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Requirement analysis failed: {str(e)}")
 
 @router.post(

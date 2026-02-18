@@ -34,6 +34,8 @@ class APIIR:
     body: Optional[Any] = None
     content_type: str = "application/json"
     timeout: float = 30.0
+    expected_status_code: Optional[int] = None
+    json_assertions: Dict[str, Any] = field(default_factory=dict)
     assertions: List[Dict] = field(default_factory=list)
     extract: Dict[str, str] = field(default_factory=dict)
     # Turbo Engine extensions (Optional)

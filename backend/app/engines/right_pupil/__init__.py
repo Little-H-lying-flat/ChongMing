@@ -7,9 +7,11 @@ Right Pupil Engine (The Orchestrator)
 
 import asyncio
 import logging
+import re
 from typing import List, Dict, Any, Optional
 import httpx
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+from playwright_stealth import Stealth
 
 from app.engines.vision.omni_client import OmniClient
 from app.engines.vision.smart_waiter import SmartWaiter
@@ -36,19 +38,30 @@ class RightPupilEngine:
         self.data_synthesizer = DataSynthesizer()
         self.max_steps = 10
         self.waiter: Optional[SmartWaiter] = None
-        
+
+
     async def start_session(self, headless: bool = True):
         """Start a browser session"""
         if hasattr(self, 'browser') and self.browser:
             return
 
         self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(headless=headless)
+        # 注入防检测参数
+        self.browser = await self.playwright.chromium.launch(
+            headless=headless,
+            args=['--disable-blink-features=AutomationControlled']
+        )
         self.context = await self.browser.new_context(
             viewport={"width": 1280, "height": 720},
-            record_video_dir="local_runtime/traces/videos"
+            record_video_dir="local_runtime/traces/videos",
+            # 伪装 User-Agent
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
         )
         self.page = await self.context.new_page()
+        
+        # 应用潜行魔法
+        await Stealth().apply_stealth_async(self.page)
+        logger.info("🥷 Stealth Mode Activated")
         
         # Initialize Runner with the new page
         self.runner = UiRunner(self.page, self.dom_service)
@@ -57,15 +70,51 @@ class RightPupilEngine:
 
     async def stop_session(self):
         """Stop the browser session"""
-        if hasattr(self, 'context') and self.context:
-            await self.context.close()
-        if hasattr(self, 'browser') and self.browser:
-            await self.browser.close()
-        if hasattr(self, 'playwright') and self.playwright:
-            await self.playwright.stop()
+        try:
+            if hasattr(self, 'context') and self.context:
+                await self.context.close()
+            if hasattr(self, 'browser') and self.browser:
+                await self.browser.close()
+            if hasattr(self, 'playwright') and self.playwright:
+                await self.playwright.stop()
+        except Exception as e:
+            logger.error(f"Error stopping RightPupil session: {e}")
+        finally:
+            self.context = None
+            self.browser = None
+            self.playwright = None
+            self.runner = None
+            logger.info("RightPupil Session Stopped")
+
+    # ═══════════════════════════════════════════
+    # Task-Aware Action Correction (Layer 1)
+    # ═══════════════════════════════════════════
+    _INPUT_KEYWORDS = re.compile(r'输入|填写|键入|type|搜索框中|在.*框.*中.*输入|在.*中.*填', re.IGNORECASE)
+    _TEXT_EXTRACT = re.compile(r"['‘’“”\"](.+?)['‘’“”\"]")  # 提取引号内的文本
+
+    def _correct_action_type(self, action, step_description: str):
+        """
+        任务感知动作修正：
+        如果步骤描述包含"输入/填写"等关键词，但 AI 返回了 click，则修正为 type。
+        同时从描述中提取要输入的文本填入 params.text。
+        """
+        if not action or not step_description:
+            return action
         
-        self.runner = None
-        logger.info("RightPupil Session Stopped")
+        if action.action_type == "click" and self._INPUT_KEYWORDS.search(step_description):
+            logger.warning(
+                f"🔧 Action correction: click → type (description contains input keywords: '{step_description[:60]}')"
+            )
+            action.action_type = "type"
+            
+            # 如果 params 中没有 text，尝试从描述中提取引号内容
+            if not action.params.get("text"):
+                match = self._TEXT_EXTRACT.search(step_description)
+                if match:
+                    action.params["text"] = match.group(1)
+                    logger.info(f"   Extracted text from description: '{match.group(1)}'")
+        
+        return action
 
     async def execute(self, action: AUIIR) -> Any:
         """
@@ -74,32 +123,27 @@ class RightPupilEngine:
         if not hasattr(self, 'runner') or not self.runner:
             raise RuntimeError("Session not started. Call start_session() first.")
 
-        # For strict execution from Dispatcher, we might not have the full SoM loop 
-        # unless the Dispatcher handles it. 
-        # The Dispatcher sends an AUIIR. 
-        # If strategy is 'visual', we need the ID map. 
-        # However, the simple Dispatcher logic (level 1) typically sends explicit selectors or point coordinates 
-        # derived from a previous planning phase, OR it expects the engine to handle it.
-        
-        # In this Refactor, we assume the AUIIR passed from Dispatcher is "executable" 
-        # (i.e. has selector or coordinates, or strategy='dom').
-        # If strategy='visual', we would need to run the sensing loop here.
-        
-        # For now, we implement a simple execution wrapper.
-        
         try:
-            # We pass empty id_map for now, assuming Dispatcher sends self-contained actions
-            # or we fetch fresh DOM/Visual state if needed (Scope creep? Keep it simple).
             success = await self.runner.execute(action, id_map={})
             
             strategy_name = "unknown"
             if action.target:
                 strategy_name = action.target.strategy
+            
+            # 截取执行后的页面快照
+            screenshot_b64 = None
+            if hasattr(self, 'page') and self.page:
+                try:
+                    import base64
+                    screenshot_bytes = await self.page.screenshot(type="png", full_page=True)
+                    screenshot_b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+                except Exception as e:
+                    logger.warning(f"截图失败: {e}")
                 
             res = type('Result', (object,), {
                 "success": success,
                 "strategy_used": type('Strategy', (object,), {"value": strategy_name})(),
-                "screenshot_after": None, # TODO: Capture if needed
+                "screenshot_after": screenshot_b64,
                 "error": None if success else "Execution failed"
             })()
             return res
@@ -111,6 +155,149 @@ class RightPupilEngine:
                 "screenshot_after": None,
                 "error": str(e)
             })()
+
+    async def execute_step(self, description: str, url: str = None) -> Dict[str, Any]:
+        """
+        单步 AI 执行 — Dispatcher 调用入口
+        
+        将自然语言描述交给 AI Agent 的一次 Sense→Plan→Act 循环:
+        1. (可选) 导航到 URL
+        2. Smart Wait → 截图 → OmniParser → SoM
+        3. VisualPlanner 根据 description 规划动作
+        4. UiRunner 执行
+        5. 截图 → 返回结果
+        """
+        import base64
+        
+        if not hasattr(self, 'page') or not self.page:
+            raise RuntimeError("Session not started. Call start_session() first.")
+        
+        result = {
+            "success": False,
+            "action_taken": None,
+            "target_description": None,
+            "screenshot_before": None,
+            "screenshot_after": None,
+            "page_url": None,
+            "page_title": None,
+            "strategy": "ai_vision",
+            "error": None,
+        }
+        
+        try:
+            # Step 0: 导航 (如果有 URL)
+            if url:
+                logger.info(f"🌐 [execute_step] 导航: {url}")
+                await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                if self.waiter:
+                    await self.waiter.wait_until_stable()
+                
+                # 纯导航步骤直接返回成功
+                screenshot_bytes = await self.page.screenshot(type="png")
+                result["success"] = True
+                result["action_taken"] = "navigate"
+                result["target_description"] = url
+                result["screenshot_after"] = base64.b64encode(screenshot_bytes).decode("utf-8")
+                result["page_url"] = self.page.url
+                result["page_title"] = await self.page.title()
+                return result
+            
+            # Step 1: Smart Wait
+            if self.waiter:
+                await self.waiter.wait_until_stable()
+            
+            # Step 2: 截图 (Before)
+            screenshot_bytes = await self.page.screenshot(type="png")
+            screenshot_before_b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+            result["screenshot_before"] = screenshot_before_b64
+            result["page_url"] = self.page.url
+            result["page_title"] = await self.page.title()
+            
+            # Step 3 & 4: Perception & Planning (Visual First, DOM Fallback)
+            id_map = {}
+            action = None
+            
+            try:
+                # 3.1 Try OmniParser -> SoM
+                elements = await self.omni_client.parse_screenshot(screenshot_before_b64)
+                loop = asyncio.get_running_loop()
+                annotated_b64, id_map = await loop.run_in_executor(
+                    None, self.som_renderer.draw_som, screenshot_before_b64, elements
+                )
+                som_text_lines = []
+                for k, v in id_map.items():
+                    bbox = v.get('bbox', [0, 0, 0, 0])
+                    w = int(bbox[2] - bbox[0])
+                    h = int(bbox[3] - bbox[1])
+                    som_text_lines.append(f"ID {k}: [{w}x{h}] {v.get('label')} {v.get('content', '')}")
+                som_text = "\n".join(som_text_lines)
+                
+                # 4.1 Visual Planning
+                logger.info(f"🧠 [execute_step] 视觉规划: {description}")
+                action = await self.planner.plan_next_step(
+                    description, annotated_b64, som_text, []
+                )
+                
+                # 4.2 Task-aware action correction
+                if action:
+                    action = self._correct_action_type(action, description)
+
+            except Exception as e:
+                logger.warning(f"⚠️ 视觉感知/规划失败: {e}，切换到 DOM Fallback 模式")
+                
+                # 3.2 DOM Perception
+                id_map = {} # Clear ID map as we are in DOM mode
+                dom = await self.dom_service.get_simplified_dom(self.page)
+                
+                # 4.2 DOM Planning
+                logger.info(f"🧠 [execute_step] DOM 兜底规划: {description}")
+                action = await self.planner.plan_fallback_step(
+                    description, dom, screenshot_before_b64
+                )
+                # Fallback mode uses original screenshot
+                annotated_b64 = screenshot_before_b64
+            
+            if not action or action.action_type == "done":
+                result["success"] = True
+                result["action_taken"] = "done"
+                result["target_description"] = "目标已达成"
+                result["screenshot_after"] = screenshot_before_b64
+                return result
+            
+            # Step 5: 执行
+            logger.info(f"🖱️ [execute_step] 执行: {action.action_type} → {action.target}")
+            success = await self.runner.execute(action, id_map)
+            
+            # Step 6: 执行后截图
+            if self.waiter:
+                await self.waiter.wait_until_stable()
+            screenshot_after_bytes = await self.page.screenshot(type="png")
+            screenshot_after_b64 = base64.b64encode(screenshot_after_bytes).decode("utf-8")
+            
+            result["success"] = success
+            result["action_taken"] = action.action_type
+            result["target_description"] = str(action.target) if action.target else description
+            result["screenshot_after"] = screenshot_after_b64
+            result["page_url"] = self.page.url
+            result["page_title"] = await self.page.title()
+            
+            if not success:
+                result["error"] = f"动作 {action.action_type} 执行失败"
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ [execute_step] 错误: {e}")
+            # 尝试捕获错误截图
+            try:
+                err_bytes = await self.page.screenshot(type="png")
+                result["screenshot_after"] = base64.b64encode(err_bytes).decode("utf-8")
+                result["page_url"] = self.page.url
+            except Exception:
+                pass
+            result["error"] = str(e)
+            return result
+
 
     async def run_task(self, prompt: str, url: str) -> List[Dict[str, Any]]:
         """
@@ -170,11 +357,20 @@ class RightPupilEngine:
                     logger.error(f"Failed to save debug screenshot: {e}")
                 
                 # ... (Construct SoM Text) ...
-                som_text_lines = [f"ID {k}: {v.get('label')} {v.get('content', '')}" for k, v in id_map.items()]
+                som_text_lines = []
+                for k, v in id_map.items():
+                    bbox = v.get('bbox', [0, 0, 0, 0])
+                    w = int(bbox[2] - bbox[0])
+                    h = int(bbox[3] - bbox[1])
+                    som_text_lines.append(f"ID {k}: [{w}x{h}] {v.get('label')} {v.get('content', '')}")
                 som_text = "\n".join(som_text_lines)
                 
                 # 2. Planning
                 action = await self.planner.plan_next_step(prompt, annotated_base64, som_text, history)
+                
+                # 2.1 Task-aware action correction
+                if action and action.action_type != "done":
+                    action = self._correct_action_type(action, prompt)
                 
                 if not action:
                     break

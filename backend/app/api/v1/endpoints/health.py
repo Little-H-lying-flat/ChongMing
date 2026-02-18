@@ -12,6 +12,11 @@ from app.core.config import settings
 
 router = APIRouter()
 
+# ─── Simple TTL Cache ───
+import time as _time
+_health_cache: dict = {"data": None, "ts": 0}
+_CACHE_TTL = 5  # seconds
+
 
 class HealthResponse(BaseModel):
     """健康检查响应"""
@@ -26,56 +31,91 @@ async def health_check(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    健康检查
+    健康检查（并行 + 缓存）
     
-    返回系统状态和版本信息
+    - DB / Celery / OmniParser 三项检查并行执行
+    - 结果缓存 5 秒，避免频繁重查
     """
-    from sqlalchemy import text
     import asyncio
-    
-    services = {
+
+    # ─── 缓存命中 ───
+    now = _time.monotonic()
+    if _health_cache["data"] and (now - _health_cache["ts"]) < _CACHE_TTL:
+        return _health_cache["data"]
+
+    services: dict = {
         "api": "ok",
         "database": "unknown",
         "redis": "unknown",
         "celery": "unknown",
     }
-    overall_status = "healthy"
-    
-    # 1. 检查数据库 (Timeout 1s)
-    try:
-        async with asyncio.timeout(1.0):
-            await db.execute(text("SELECT 1"))
-        services["database"] = "ok"
-    except Exception as e:
-        services["database"] = "down"
-        overall_status = "degraded"
-        # logger.error(f"Health Check DB Failed: {e}")
 
-    # 2. 检查 Celery / Redis (通过 Celery Inspect)
-    try:
-        from app.worker import celery
-        # Inspect is sync, but we should wrap it or allow it short timeout
-        # Using a simple check if we can get stats
-        # Note: inspect() broadcasts to workers, might be slow. 
-        # Better: ping Redis directly if possible, or just check celery app connection.
-        
-        # Simple Broker Connection Check
-        async with asyncio.timeout(1.0):
-             with celery.connection_or_acquire() as conn:
-                 conn.ensure_connection(max_retries=1)
-        services["celery"] = "ok"
-        services["redis"] = "ok" # Assuming Redis is broker
-    except Exception as e:
-        services["celery"] = "down"
-        services["redis"] = "unknown"
-        overall_status = "degraded"
+    # ─── 单项检查函数 ───
+    async def check_db():
+        try:
+            from sqlalchemy import text
+            async with asyncio.timeout(2.0):
+                await db.execute(text("SELECT 1"))
+            services["database"] = "ok"
+        except Exception:
+            services["database"] = "down"
 
-    return HealthResponse(
-        status=overall_status,
+    async def check_celery():
+        try:
+            def _sync_check():
+                """
+                直接用 redis-py ping，比 Kombu ensure_connection 快 100x。
+                Kombu 需要 AMQP 协议协商 (4s+)，但我们只需知道 Redis 是否可达。
+                """
+                import redis
+                from app.core.config import settings as _s
+                # 解析 broker URL: redis://localhost:6379/0
+                r = redis.from_url(_s.CELERY_BROKER_URL, socket_timeout=1.0, socket_connect_timeout=1.0)
+                r.ping()  # ~5ms
+                r.close()
+            await asyncio.wait_for(asyncio.to_thread(_sync_check), timeout=2.0)
+            services["celery"] = "ok"
+            services["redis"] = "ok"
+        except Exception:
+            services["celery"] = "down"
+            services["redis"] = "unknown"
+
+    async def check_omniparser():
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                response = await client.get(f"{settings.OMNIPARSER_URL}/health")
+                if response.status_code == 200:
+                    services["omniparser"] = "ok"
+                else:
+                    services["omniparser"] = "loading"
+        except Exception:
+            services["omniparser"] = "down"
+
+    # ─── 并行执行所有检查 ───
+    await asyncio.gather(
+        check_db(),
+        check_celery(),
+        check_omniparser(),
+        return_exceptions=True
+    )
+
+    overall = "healthy" if all(
+        v == "ok" for k, v in services.items() if k != "redis"
+    ) else "degraded"
+
+    response = HealthResponse(
+        status=overall,
         version=settings.VERSION,
         timestamp=datetime.now().isoformat(),
         services=services
     )
+
+    # ─── 更新缓存 ───
+    _health_cache["data"] = response
+    _health_cache["ts"] = _time.monotonic()
+
+    return response
 
 
 @router.get("/ping")

@@ -80,6 +80,10 @@ class ExecutionService:
                 start_time=datetime.utcnow(), # Approximate
                 end_time=datetime.utcnow()    # Approximate
             )
+            # Debug Log for Persistence Verification
+            from loguru import logger
+            logger.info(f"💾 Saving Step Result for {tc_id}: Details Keys={[s.get('details', {}).keys() for s in result_data.get('steps', [])]}")
+            
             session.add(step)
             await session.commit()
 
@@ -144,11 +148,12 @@ class ExecutionService:
         }
 
     @staticmethod
-    async def get_execution_result_dict(execution_id: str) -> Optional[Dict[str, Any]]:
+    async def get_execution_result_dict(execution_id: str, strip_screenshots: bool = True) -> Optional[Dict[str, Any]]:
         """
         获取执行结果的纯字典表示
 
         封装 DB model 访问，避免 API 层直接依赖 models。
+        strip_screenshots=True 时，将 base64 截图替换为 URL 引用以减小响应体积。
         """
         execution = await ExecutionService.get_execution(execution_id)
         if not execution:
@@ -156,12 +161,20 @@ class ExecutionService:
 
         steps = await ExecutionService.get_execution_steps(execution_id)
         case_results = []
-        for step in steps:
+        for case_idx, step in enumerate(steps):
+            step_list = step.step_results.get("steps", []) if step.step_results else []
+            
+            if strip_screenshots:
+                step_list = ExecutionService._strip_screenshots(
+                    execution_id, case_idx, step_list
+                )
+            
             case_results.append({
                 "tc_id": step.tc_id,
                 "status": step.status.value,
                 "duration_ms": step.duration_ms,
-                "steps": step.step_results.get("steps", []) if step.step_results else [],
+                "steps": step_list,
+                "variable_trace": step.step_results.get("variable_trace", []) if step.step_results else [],
                 "error": step.error_message,
             })
 
@@ -178,6 +191,25 @@ class ExecutionService:
             "duration_seconds": execution.duration_ms / 1000.0 if execution.duration_ms else 0.0,
             "report_url": execution.report_url,
         }
+
+    @staticmethod
+    def _strip_screenshots(execution_id: str, case_idx: int, step_list: list) -> list:
+        """
+        将步骤中的 base64 截图替换为按需加载的 URL。
+        保持数据结构不变，仅替换 screenshot_before / screenshot_after 的值。
+        """
+        for step_idx, step_data in enumerate(step_list):
+            details = step_data.get("details", {})
+            if not details:
+                continue
+            
+            for field in ("screenshot_before", "screenshot_after"):
+                val = details.get(field)
+                if val and (val.startswith("data:image") or len(str(val)) > 1000):
+                    img_type = field.replace("screenshot_", "")  # "before" or "after"
+                    details[field] = f"/api/v1/executions/{execution_id}/screenshot/{case_idx}/{step_idx}/{img_type}"
+        
+        return step_list
 
     @staticmethod
     async def list_executions_dicts(limit: int = 20) -> List[Dict[str, Any]]:

@@ -65,45 +65,57 @@ class OmniClient:
         if "," in image_base64:
             image_base64 = image_base64.split(",", 1)[1]
             
-        try:
-            client = await self.get_client()
-            response = await client.post(
-                f"{self.base_url}/parse",
-                json={"base64_image": image_base64},
-            )
-            response.raise_for_status()
-            data = response.json()
-            
-            # 假设 OmniParser 返回格式:
-            # {"layout": [{"id": 0, "box_2d": [x1, y1, x2, y2], "label": "button"}, ...]}
-            elements_data = data.get("layout", [])
-            
-            elements = []
-            for idx, item in enumerate(elements_data):
-                # 处理可能的不同返回结构，确保兼容
-                box = item.get("box_2d") or item.get("bbox")
-                label = item.get("label") or item.get("text") or "element"
-                content = item.get("content")
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                client = await self.get_client()
+                response = await client.post(
+                    f"{self.base_url}/parse",
+                    json={"base64_image": image_base64},
+                )
+                response.raise_for_status()
+                data = response.json()
                 
-                if box:
-                    elements.append(OmniElement(
-                        id=idx,
-                        label=label,
-                        box_2d=box,
-                        content=content
-                    ))
+                # 假设 OmniParser 返回格式:
+                # {"layout": [{"id": 0, "box_2d": [x1, y1, x2, y2], "label": "button"}, ...]}
+                elements_data = data.get("layout", [])
+                
+                elements = []
+                for idx, item in enumerate(elements_data):
+                    # 处理可能的不同返回结构，确保兼容
+                    box = item.get("box_2d") or item.get("bbox")
+                    label = item.get("label") or item.get("text") or "element"
+                    content = item.get("content")
                     
-            logger.info(f"OmniParser 成功识别 {len(elements)} 个元素")
-            if len(elements) > 0:
-                logger.info(f"First 3 elements: {elements[:3]}") # Force INFO logging
-            return elements
-                
-        except httpx.RequestError as e:
-            logger.error(f"OmniParser 连接失败: {e}")
-            raise RuntimeError(f"OmniParser 服务无法连接: {self.base_url}") from e
-        except Exception as e:
-            logger.error(f"OmniParser 解析错误: {e}")
-            raise RuntimeError(f"OmniParser 解析失败: {str(e)}") from e
+                    if box:
+                        elements.append(OmniElement(
+                            id=idx,
+                            label=label,
+                            box_2d=box,
+                            content=content
+                        ))
+                        
+                logger.info(f"OmniParser 成功识别 {len(elements)} 个元素")
+                if len(elements) > 0:
+                    logger.info(f"First 3 elements: {elements[:3]}") # Force INFO logging
+                return elements
+                    
+            except httpx.HTTPStatusError as e:
+                # 5xx 服务端错误 → 重试
+                if e.response.status_code >= 500 and attempt < max_retries:
+                    wait = 2 ** (attempt + 1)  # 2s, 4s
+                    logger.warning(f"OmniParser 返回 {e.response.status_code}, 第 {attempt+1}/{max_retries} 次重试, 等待 {wait}s...")
+                    import asyncio
+                    await asyncio.sleep(wait)
+                    continue
+                logger.error(f"OmniParser HTTP 错误 {e.response.status_code}: {e}")
+                raise RuntimeError(f"OmniParser 解析失败: {str(e)}") from e
+            except httpx.RequestError as e:
+                logger.error(f"OmniParser 连接失败: {e}")
+                raise RuntimeError(f"OmniParser 服务无法连接: {self.base_url}") from e
+            except Exception as e:
+                logger.error(f"OmniParser 解析错误: {e}")
+                raise RuntimeError(f"OmniParser 解析失败: {str(e)}") from e
 
     async def close(self):
         """关闭内部客户端"""

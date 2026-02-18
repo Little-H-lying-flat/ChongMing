@@ -47,6 +47,7 @@ class AIResponse:
     model: str
     usage: Dict[str, int]
     finish_reason: str
+    reasoning_content: Optional[str] = None # 深度思考内容 (Qwen 3.5+ / R1)
 
 
 class BaseAIClient(ABC):
@@ -95,12 +96,21 @@ class DashScopeClient(BaseAIClient):
         """发送聊天请求"""
         formatted_messages = self._format_messages(messages, model_config)
         
+        # 支持 extra_body (如 enable_thinking)
+        extra_body = kwargs.get("extra_body", {})
+        
         response = await self.client.chat.completions.create(
             model=model_config.model_id,
             messages=formatted_messages,
             max_tokens=kwargs.get("max_tokens", model_config.max_tokens),
             temperature=kwargs.get("temperature", model_config.temperature),
+            extra_body=extra_body,
         )
+        
+        # 提取 reasoning_content (如果存在)
+        reasoning_content = None
+        if hasattr(response.choices[0], "message") and hasattr(response.choices[0].message, "reasoning_content"):
+             reasoning_content = response.choices[0].message.reasoning_content
         
         return AIResponse(
             content=response.choices[0].message.content,
@@ -111,6 +121,7 @@ class DashScopeClient(BaseAIClient):
                 "total_tokens": response.usage.total_tokens,
             },
             finish_reason=response.choices[0].finish_reason,
+            reasoning_content=reasoning_content,
         )
     
     async def chat_stream(
@@ -122,11 +133,15 @@ class DashScopeClient(BaseAIClient):
         """流式聊天"""
         formatted_messages = self._format_messages(messages, model_config)
         
+        # 支持 extra_body (如 enable_thinking)
+        extra_body = kwargs.get("extra_body", {})
+        
         stream = await self.client.chat.completions.create(
             model=model_config.model_id,
             messages=formatted_messages,
             max_tokens=kwargs.get("max_tokens", model_config.max_tokens),
             temperature=kwargs.get("temperature", model_config.temperature),
+            extra_body=extra_body,
             stream=True,
         )
         

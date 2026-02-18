@@ -30,7 +30,9 @@ class StepResult:
     duration_ms: float
     screenshot: Optional[str] = None
     error: Optional[str] = None
+    error: Optional[str] = None
     details: Optional[dict] = None
+    description: Optional[str] = None
 
 @dataclass
 class ExecutionResult:
@@ -40,8 +42,11 @@ class ExecutionResult:
     status: str  # passed, failed, skipped, error
     step_results: List[StepResult]
     total_duration_ms: float
+    step_results: List[StepResult]
+    total_duration_ms: float
     trace_id: str
     error: Optional[str] = None
+    variable_trace: List[dict] = None  # New: Variable Extraction Audit Log
 
 # API Related Schemas (Moved from left_pupil.py)
 

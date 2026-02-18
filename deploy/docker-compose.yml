@@ -32,8 +32,8 @@ services:
   # API 网关
   api-gateway:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.api
+      context: ../backend
+      dockerfile: Dockerfile
     image: chongming/api-gateway:${VERSION:-latest}
     container_name: chongming-api
     restart: unless-stopped
@@ -48,7 +48,7 @@ services:
       - CHROMADB_PORT=8001
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
-      - OMNIPARSER_URL=http://omniparser:7861
+      - OMNIPARSER_URL=http://omniparser_v2:8002
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -73,7 +73,7 @@ services:
   # 前端 UI
   frontend:
     build:
-      context: ./frontend
+      context: ../frontend
       dockerfile: Dockerfile
     image: chongming/frontend:${VERSION:-latest}
     container_name: chongming-ui
@@ -90,15 +90,16 @@ services:
   # UI 测试 Worker
   worker-ui:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
+      context: ../backend
+      dockerfile: Dockerfile
     image: chongming/worker:${VERSION:-latest}
     container_name: chongming-worker-ui
     restart: unless-stopped
-    command: celery -A app.celery worker -Q ui_queue -n worker-ui@%h --concurrency=4
+    command: celery -A app.worker:celery worker -Q ui_queue -n worker-ui@%h --concurrency=4
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OMNIPARSER_URL=http://omniparser_v2:8002
       - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
     volumes:
       - recordings:/app/recordings
@@ -112,15 +113,16 @@ services:
   # API 测试 Worker
   worker-api:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
+      context: ../backend
+      dockerfile: Dockerfile
     image: chongming/worker:${VERSION:-latest}
     container_name: chongming-worker-api
     restart: unless-stopped
-    command: celery -A app.celery worker -Q api_queue -n worker-api@%h --concurrency=8
+    command: celery -A app.worker:celery worker -Q api_queue -n worker-api@%h --concurrency=8
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OMNIPARSER_URL=http://omniparser_v2:8002
     depends_on:
       - redis
       - api-gateway
@@ -130,15 +132,16 @@ services:
   # 性能测试 Worker (Turbo)
   worker-turbo:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.turbo
+      context: ../backend
+      dockerfile: Dockerfile
     image: chongming/worker-turbo:${VERSION:-latest}
     container_name: chongming-worker-turbo
     restart: unless-stopped
-    command: celery -A app.celery worker -Q turbo_queue -n worker-turbo@%h --concurrency=2
+    command: celery -A app.worker:celery worker -Q turbo_queue -n worker-turbo@%h --concurrency=2
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OMNIPARSER_URL=http://omniparser_v2:8002
     depends_on:
       - redis
     networks:
@@ -147,15 +150,16 @@ services:
   # 设计生成 Worker
   worker-design:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
+      context: ../backend
+      dockerfile: Dockerfile
     image: chongming/worker:${VERSION:-latest}
     container_name: chongming-worker-design
     restart: unless-stopped
-    command: celery -A app.celery worker -Q design_queue -n worker-design@%h --concurrency=4
+    command: celery -A app.worker:celery worker -Q design_queue -n worker-design@%h --concurrency=4
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - OMNIPARSER_URL=http://omniparser_v2:8002
       - QWEN_API_KEY=${QWEN_API_KEY}
     depends_on:
       - redis
@@ -166,12 +170,12 @@ services:
   # Celery Beat 定时任务
   celery-beat:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
+      context: ../backend
+      dockerfile: Dockerfile
     image: chongming/worker:${VERSION:-latest}
     container_name: chongming-celery-beat
     restart: unless-stopped
-    command: celery -A app.celery beat --loglevel=info
+    command: celery -A app.worker:celery beat --loglevel=info
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
     depends_on:
@@ -309,13 +313,22 @@ services:
     image: chongming/omniparser:latest
     container_name: chongming-omniparser
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 223.5.5.5
     ports:
-      - "7861:7861"
+      - "7861:8002"
     volumes:
       - omniparser_models:/app/weights
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    shm_size: '4gb'
     deploy:
       resources:
+        limits:
+          memory: 8G
         reservations:
+          memory: 4G
           devices:
             - driver: nvidia
               count: 1

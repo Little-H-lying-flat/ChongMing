@@ -15,65 +15,101 @@ from app.schemas.aui_ir import VisualActionIR
 
 logger = logging.getLogger(__name__)
 
-# 视觉规划提示词
-VISUAL_PLAN_PROMPT = """
-你是一个 UI 自动化代理。你的目标是根据当前屏幕截图和任务描述，规划下一步操作。
+# ═══════════════════════════════════════════════════════
+# 视觉规划提示词 (Visual Planning Prompt)
+# ═══════════════════════════════════════════════════════
+VISUAL_PLAN_PROMPT = """\
+你是一个精准的 UI 自动化代理（Visual UI Automation Agent）。
+你收到一张经过 Set-of-Mark (SoM) 标注的屏幕截图和一个任务目标，需要规划下一步操作。
 
-### 任务
+━━━━━━━━━━ 任务 ━━━━━━━━━━
 {task_description}
 
-### 上下文
+━━━━━━━━━━ 历史操作 ━━━━━━━━━━
 {history}
 
-### 屏幕信息
-截图已使用 Set-of-Mark (SoM) 标记。
-元素列表 (ID -> 描述):
+━━━━━━━━━━ 当前屏幕 ━━━━━━━━━━
+截图中每个可交互元素已用红色矩形框标记，左上角标注了元素 ID。
+元素列表（格式: ID N: [宽x高] 类型 内容）:
 {som_text}
 
-### 指令
-1. 观察截图中的标记元素。
-2. 结合任务目标，选择正确的元素进行操作。
-3. 如果操作是点击/输入，优先使用 screenshot 中的 ID。
-4. 返回符合 VisualActionIR 格式的 JSON。
+━━━━━━━━━━ 核心规则 ━━━━━━━━━━
 
-### 输出格式 (JSON)
+■ 元素选择规则（按操作类型）:
+  • type（输入文本）→ 必须选择 input/textarea/搜索框等【可编辑区域】
+    ✗ 禁止选择: 图标(icon)、按钮(button)、标签(label)、放大镜、发送按钮
+    ✓ 正确选择: 文本输入框（通常是长条形、有边框或背景色的可编辑区域）
+  • click（点击）→ 选择按钮、链接、菜单项、Tab、复选框等可点击元素
+  • scroll（滚动）→ 不需要 target，仅设置 params 中的 x/y 偏移量
+  • wait（等待）→ 不需要 target，仅设置 params.seconds
+  • navigate（跳转）→ 不需要 target，仅设置 params.url
+
+■ 元素歧义消解:
+  当多个元素看起来相关时（如搜索图标 vs 搜索输入框）:
+  1. 阅读任务描述中的动词: "输入"→选输入框，"点击"→选按钮
+  2. 利用尺寸 [宽x高] 判断: 宽度远大于高度(如 [400x30])→输入框，
+     近似正方形(如 [30x30])→图标/按钮
+  3. 如果标签含有 "icon/图标/button/按钮"，且当前操作是 type，则跳过该元素
+
+■ 任务完成判断:
+  如果截图显示任务已经完成（目标状态已达成），返回 action_type 为 "done"。
+
+━━━━━━━━━━ 输出格式（严格 JSON） ━━━━━━━━━━
+仅返回一个 JSON 对象，不要包含多余文字或代码块标记:
 {{
-    "action_type": "click" | "type" | "scroll" | "wait" | "navigate",
+    "action_type": "click | type | scroll | wait | navigate | done",
     "target": {{
         "strategy": "visual",
-        "value": "元素ID",
-        "description": "元素描述"
+        "value": "<元素 ID 数字>",
+        "description": "<元素的简短描述>"
     }},
-    "params": {{ "text": "输入内容" (如果需要) }},
-    "expected_visual_change": "操作后的预期变化"
+    "params": {{
+        "text": "<输入内容，仅 type 操作需要>",
+        "url": "<跳转地址，仅 navigate 操作需要>",
+        "seconds": <等待秒数，仅 wait 操作需要>,
+        "x": <水平滚动量，仅 scroll 操作需要>,
+        "y": <垂直滚动量，仅 scroll 操作需要>
+    }},
+    "expected_visual_change": "<操作后页面应出现的变化>"
 }}
+
+注意:
+- target.value 必须是元素列表中存在的 ID 数字（字符串格式）
+- params 中只包含当前操作所需的字段，其余省略
+- scroll/wait/navigate/done 操作的 target 可以为 null
 """
 
-# DOM 兜底规划提示词
-DOM_FALLBACK_PROMPT = """
-视觉识别失败，正在尝试使用 DOM 结构进行恢复。
+# ═══════════════════════════════════════════════════════
+# DOM 兜底规划提示词 (DOM Fallback Prompt)
+# ═══════════════════════════════════════════════════════
+DOM_FALLBACK_PROMPT = """\
+视觉识别已失败，现在使用 DOM 结构作为备选方案来完成任务。
 
-### 任务
+━━━━━━━━━━ 任务 ━━━━━━━━━━
 {task_description}
 
-### DOM 结构 (简化版)
+━━━━━━━━━━ DOM 结构 ━━━━━━━━━━
 {dom_tree}
 
-### 指令
-1. 分析 DOM 树，找到能完成当前步骤的最佳元素。
-2. 生成一个基于 CSS Selector 的操作指令。
-3. 策略 (strategy) 必须设为 "dom"。
+━━━━━━━━━━ 选择规则 ━━━━━━━━━━
+1. 分析 DOM 树，找到能完成当前步骤的最佳元素
+2. 策略 (strategy) 必须设为 "dom"
+3. value 使用稳定的 CSS 选择器:
+   优先级: [data-testid] > [id] > [name] > [aria-label] > 组合选择器
+   ✗ 避免: nth-child、过长的层级路径
+4. 输入类操作（type）必须选择 input/textarea 元素
 
-### 输出格式 (JSON)
+━━━━━━━━━━ 输出格式（严格 JSON） ━━━━━━━━━━
+仅返回一个 JSON 对象:
 {{
-    "action_type": "click" | "type" | "scroll" | "wait",
+    "action_type": "click | type | scroll | wait",
     "target": {{
         "strategy": "dom",
-        "value": "CSS选择器",
-        "description": "元素描述"
+        "value": "<CSS 选择器>",
+        "description": "<元素描述>"
     }},
-    "params": {{ ... }},
-    "expected_visual_change": "..."
+    "params": {{}},
+    "expected_visual_change": "<预期变化>"
 }}
 """
 
@@ -146,12 +182,27 @@ class VisualPlanner:
             return None
 
     def _parse_llm_response(self, response: str) -> Optional[VisualActionIR]:
-        """解析 LLM 返回的 JSON"""
+        """解析 LLM 返回的 JSON，容错处理各种输出格式"""
+        import re
         try:
-            # 清理代码块标记
-            cleaned = response.strip().replace("```json", "").replace("```", "")
-            data = json.loads(cleaned)
+            text = response.strip()
+            
+            # 1. 提取代码块中的 JSON（```json ... ``` 或 ``` ... ```）
+            code_block = re.search(r'```(?:json)?\s*\n?(.*?)\n?\s*```', text, re.DOTALL)
+            if code_block:
+                text = code_block.group(1).strip()
+            
+            # 2. 提取第一个 {...} JSON 对象（忽略前后多余文本）
+            brace_match = re.search(r'\{.*\}', text, re.DOTALL)
+            if brace_match:
+                text = brace_match.group(0)
+            
+            # 3. 移除可能的尾部逗号 (trailing comma)
+            text = re.sub(r',\s*([}\]])', r'\1', text)
+            
+            data = json.loads(text)
             return VisualActionIR(**data)
         except (json.JSONDecodeError, ValidationError) as e:
-            logger.error(f"Failed to parse Action IR: {e}, Response: {response}")
+            logger.error(f"Failed to parse Action IR: {e}, Response: {response[:500]}")
             return None
+

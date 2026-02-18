@@ -137,9 +137,128 @@ class UiRunner:
             elif action.action_type == "hover":
                 await self.page.mouse.move(x, y)
             elif action.action_type == "type":
-                await self.page.mouse.click(x, y) # 先聚焦
                 text = action.params.get("text", "")
-                await self.page.keyboard.type(text)
+                
+                # ═══════════════════════════════════════════
+                # Smart Input Focus (Layer 2) — JS-First
+                # ═══════════════════════════════════════════
+                # CRITICAL: Do NOT mouse.click on icon coordinates — this can
+                # trigger navigation (e.g. Bing search icon) and destroy context.
+                # Instead, use JS to find and focus the nearest input element directly.
+                
+                focus_result = await self.page.evaluate("""
+                    ({x, y}) => {
+                        // 1. Check what's at (x, y)
+                        const el = document.elementFromPoint(x, y);
+                        
+                        // 2. Helper: is this element editable?
+                        function isEditable(e) {
+                            if (!e) return false;
+                            const tag = e.tagName.toLowerCase();
+                            return (
+                                tag === 'input' && !['hidden','submit','button','checkbox','radio','image'].includes(e.type) ||
+                                tag === 'textarea' ||
+                                e.contentEditable === 'true' ||
+                                e.getAttribute('role') === 'textbox' ||
+                                e.getAttribute('role') === 'searchbox' ||
+                                e.getAttribute('role') === 'combobox'
+                            );
+                        }
+                        
+                        // 3. If element at point is editable, focus it directly
+                        if (isEditable(el)) {
+                            el.focus();
+                            el.click();
+                            const r = el.getBoundingClientRect();
+                            return {
+                                success: true,
+                                tag: el.tagName.toLowerCase(),
+                                relocated: false,
+                                x: r.left + r.width / 2,
+                                y: r.top + r.height / 2
+                            };
+                        }
+                        
+                        // 4. Walk up the DOM tree — maybe the input wraps the icon
+                        let parent = el ? el.parentElement : null;
+                        for (let i = 0; i < 5 && parent; i++) {
+                            if (isEditable(parent)) {
+                                parent.focus();
+                                parent.click();
+                                const r = parent.getBoundingClientRect();
+                                return {
+                                    success: true,
+                                    tag: parent.tagName.toLowerCase(),
+                                    relocated: true,
+                                    x: r.left + r.width / 2,
+                                    y: r.top + r.height / 2
+                                };
+                            }
+                            parent = parent.parentElement;
+                        }
+                        
+                        // 5. Search nearby for the nearest editable element
+                        const candidates = document.querySelectorAll(
+                            'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="image"]), ' +
+                            'textarea, [contenteditable="true"], [role="textbox"], [role="searchbox"], [role="combobox"]'
+                        );
+                        
+                        let nearest = null;
+                        let minDist = Infinity;
+                        
+                        for (const c of candidates) {
+                            const r = c.getBoundingClientRect();
+                            if (r.width === 0 || r.height === 0) continue;
+                            const cx = r.left + r.width / 2;
+                            const cy = r.top + r.height / 2;
+                            const dist = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2);
+                            if (dist < 400 && dist < minDist) {
+                                minDist = dist;
+                                nearest = c;
+                            }
+                        }
+                        
+                        if (nearest) {
+                            nearest.focus();
+                            nearest.click();
+                            const r = nearest.getBoundingClientRect();
+                            return {
+                                success: true,
+                                tag: nearest.tagName.toLowerCase(),
+                                relocated: true,
+                                x: r.left + r.width / 2,
+                                y: r.top + r.height / 2
+                            };
+                        }
+                        
+                        return { success: false };
+                    }
+                """, {"x": x, "y": y})
+                
+                if focus_result and focus_result.get("success"):
+                    tag = focus_result.get("tag", "?")
+                    if focus_result.get("relocated"):
+                        fx, fy = focus_result["x"], focus_result["y"]
+                        logger.warning(f"🎯 JS direct focus: ({x},{y}) → <{tag}> at ({fx},{fy})")
+                        trace_entry["relocated_to"] = {"x": fx, "y": fy}
+                    else:
+                        logger.info(f"✅ JS direct focus on <{tag}> at ({x},{y})")
+                    
+                    # Small delay for focus events to settle
+                    await asyncio.sleep(0.2)
+                    
+                    # Select all existing text and clear
+                    await self.page.keyboard.press("Control+a")
+                    await asyncio.sleep(0.1)
+                    
+                    # Type the text
+                    await self.page.keyboard.type(text, delay=50)
+                else:
+                    # Absolute fallback: click original coords + type (risky but last resort)
+                    logger.warning(f"⚠️ JS focus failed, falling back to mouse.click({x},{y}) + type")
+                    await self.page.mouse.click(x, y)
+                    await asyncio.sleep(0.3)
+                    await self.page.keyboard.type(text, delay=50)
 
         # B. DOM Strategy (传统 Selector)
         elif strategy == "dom":
@@ -182,3 +301,79 @@ class UiRunner:
 
         else:
             raise NotImplementedError(f"Strategy {strategy} not supported yet")
+
+    # ═══════════════════════════════════════════
+    # Smart Input Relocation (Layer 2)
+    # ═══════════════════════════════════════════
+    async def _find_input_at_or_near(self, x: float, y: float, radius: int = 200) -> Optional[Dict]:
+        """
+        检查 (x, y) 处的元素是否为输入框。
+        如果不是，在附近 radius 像素范围内搜索最近的 input/textarea。
+        
+        Returns:
+            {"x": float, "y": float, "tag": str, "relocated": bool} or None
+        """
+        try:
+            result = await self.page.evaluate("""
+                ({x, y, radius}) => {
+                    const el = document.elementFromPoint(x, y);
+                    if (!el) return null;
+                    
+                    // Check if current element is editable
+                    const tag = el.tagName.toLowerCase();
+                    const isEditable = (
+                        tag === 'input' || 
+                        tag === 'textarea' || 
+                        el.contentEditable === 'true' ||
+                        el.getAttribute('role') === 'textbox' ||
+                        el.getAttribute('role') === 'searchbox'
+                    );
+                    
+                    if (isEditable) {
+                        const rect = el.getBoundingClientRect();
+                        return {
+                            x: rect.left + rect.width / 2,
+                            y: rect.top + rect.height / 2,
+                            tag: tag,
+                            relocated: false
+                        };
+                    }
+                    
+                    // Not editable — search nearby for input/textarea
+                    const candidates = document.querySelectorAll(
+                        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]), ' +
+                        'textarea, ' +
+                        '[contenteditable="true"], ' +
+                        '[role="textbox"], ' +
+                        '[role="searchbox"]'
+                    );
+                    
+                    let nearest = null;
+                    let minDist = Infinity;
+                    
+                    for (const c of candidates) {
+                        const r = c.getBoundingClientRect();
+                        if (r.width === 0 || r.height === 0) continue;
+                        
+                        const cx = r.left + r.width / 2;
+                        const cy = r.top + r.height / 2;
+                        const dist = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2);
+                        
+                        if (dist < radius && dist < minDist) {
+                            minDist = dist;
+                            nearest = {
+                                x: cx,
+                                y: cy,
+                                tag: c.tagName.toLowerCase(),
+                                relocated: true
+                            };
+                        }
+                    }
+                    
+                    return nearest;
+                }
+            """, {"x": x, "y": y, "radius": radius})
+            return result
+        except Exception as e:
+            logger.error(f"Smart input relocation failed: {e}")
+            return None

@@ -52,10 +52,20 @@ class DesignService:
         """
         logger.info(f"开始分析需求: Project={request.project_id}")
         
+        # 0. 构建动态约束 (Prompt Injection)
+        constraint = ""
+        if request.target_type == "API":
+            constraint = "绝对指令：你只能生成基于 HTTP 协议的 API 测试步骤，严禁包含任何浏览器 DOM 操作或 UI 点击动作。"
+        elif request.target_type == "UI":
+            constraint = "绝对指令：你只能生成基于浏览器交互的 UI 自动化步骤，严禁包含底层的 HTTP 接口调用。"
+        elif request.target_type == "MIXED":
+            constraint = "你是一个全栈质量工程师，请根据需求自由组合前后端步骤 (API + UI)。"
+        
         # 使用 System/User Role 分离防止 Prompt Injection
         user_content = PRD_ANALYSIS_USER_TEMPLATE.format(
             requirement_text=request.requirement_text,
-            context=request.context or "无额外上下文"
+            context=request.context or "无额外上下文",
+            constraint=constraint
         )
         
         messages = [
@@ -72,6 +82,12 @@ class DesignService:
             data = self._parse_json(response.content)
             
             scenarios = data.get("scenarios", [])
+            
+            # Enrich with IDs
+            for s in scenarios:
+                if "scenario_id" not in s:
+                    s["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
+            
             logger.info(f"需求分析完成，提取了 {len(scenarios)} 个场景")
             return scenarios
             
@@ -89,7 +105,9 @@ class DesignService:
         logger.info(f"开始生成测试用例: {scenario_name}")
         
         # 1. Retrieve Context
-        query = f"{scenario.get('description', '')} {' '.join(scenario.get('test_points', []))}"
+        # Flatten steps descriptions for query
+        steps_desc = " ".join([s.get("description", "") for s in scenario.get("steps", [])])
+        query = f"{scenario.get('description', '')} {steps_desc}"
         relevant_apis = await self.retriever.retrieve(query, project_id)
         
         api_context_str = "\n".join([
@@ -218,17 +236,24 @@ class DesignService:
             else:
                 expected_outcome = str(expected_outcome)
 
-            assertion_spec = RefinedAssertionSpec(
-                status_code=200, 
-                contains=expected_outcome
-            )
+            # Extract Assertions
+            # Extract Assertions
+            expected_status = step.get("expected_status_code")
+            if expected_status is None:
+                # Fallback: Try to parse from description or default to 200
+                expected_status = 200
+            
+            json_asserts = step.get("json_assertions") or {}
             
             refined_step = RefinedTestStep(
                 id=step.get("step_id") or uuid.uuid4().hex[:8],
                 name=step.get("intent") or "Step",
+                step_type=step.get("step_type", "API"),
                 description=step.get("description", ""),
                 request=req_spec,
-                assertion=assertion_spec
+                expected_status_code=int(expected_status),
+                json_assertions=json_asserts,
+                extract=step.get("extract", {})
             )
             refined_steps.append(refined_step)
             

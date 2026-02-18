@@ -149,6 +149,32 @@ AVAILABLE_MODELS = {
         description="Qwen3 VL Plus (User Requested)",
         cost_per_1k_tokens=0.01,
     ),
+    "qwen2.5-max": ModelConfig(
+        model_id="qwen-max-2025-01-25",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.REASONING,
+        max_tokens=8192,
+        description="Qwen2.5 Max (2025-01-25)",
+        cost_per_1k_tokens=0.02,
+    ),
+    "qwen2.5-plus": ModelConfig(
+        model_id="qwen-plus-2025-01-25",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.REASONING,
+        max_tokens=8192,
+        description="Qwen2.5 Plus (2025-01-25)",
+        cost_per_1k_tokens=0.004,
+    ),
+    # User specifically asked for this ID
+    "qwen3.5-plus": ModelConfig( 
+        model_id="qwen3.5-plus", 
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.REASONING, # It supports everything
+        max_tokens=8192,
+        description="Qwen3.5 Plus - 原生视觉语言系列，混合架构，深度思考",
+        describe="Qwen3.5原生视觉语言系列Plus模型，基于混合架构设计，融合了线性注意力机制与稀疏混合专家模型，实现了更高的推理效率。在多项任务评测中，3.5系列均展现出与当前顶尖前沿模型相媲美的卓越性能，模型效果在纯文本与多模态方面相较3系列均实现飞跃式进步。(qwen3.5-plus-2026-02-15)",
+        cost_per_1k_tokens=0.004, 
+    ),
     "text-embedding-v3": ModelConfig(
         model_id="text-embedding-v3",
         provider=ModelProvider.DASHSCOPE,
@@ -229,28 +255,28 @@ class AIModule(str, Enum):
 # 默认模型映射配置
 DEFAULT_MODEL_MAPPING = {
     # === 神经设计层 - 需要高智能 ===
-    AIModule.NEURAL_INTENT_PARSER: "qwen3-max",
-    AIModule.NEURAL_SCENARIO_GENERATOR: "qwen3-max",
-    AIModule.NEURAL_CRITIC: "qwen3-max",
+    AIModule.NEURAL_INTENT_PARSER: "qwen3.5-plus",
+    AIModule.NEURAL_SCENARIO_GENERATOR: "qwen3.5-plus",
+    AIModule.NEURAL_CRITIC: "qwen3.5-plus",
     
     # === 右瞳引擎 - 需要视觉能力 ===
-    AIModule.RIGHT_PUPIL_PLANNER: "qwen3-max",
-    AIModule.RIGHT_PUPIL_GROUNDING: "qwen3-vl-plus",  # 视觉定位
-    AIModule.RIGHT_PUPIL_VERIFY: "qwen3-vl-plus",     # 视觉验证
+    AIModule.RIGHT_PUPIL_PLANNER: "qwen3.5-plus",
+    AIModule.RIGHT_PUPIL_GROUNDING: "qwen3.5-plus",  # 视觉定位
+    AIModule.RIGHT_PUPIL_VERIFY: "qwen3.5-plus",     # 视觉验证
     
     # === 左瞳引擎 ===
-    AIModule.LEFT_PUPIL_CHAIN_INFERENCE: "qwen3-max",
+    AIModule.LEFT_PUPIL_CHAIN_INFERENCE: "qwen3.5-plus",
     AIModule.LEFT_PUPIL_PARAM_GEN: "qwen-flash",     # 极速生成
     
     # === 凤凰涅槃层 ===
-    AIModule.PHOENIX_CODE_GEN: "qwen3-max",
-    AIModule.PHOENIX_CODEGEN: "qwen3-max",
+    AIModule.PHOENIX_CODE_GEN: "qwen3.5-plus",
+    AIModule.PHOENIX_CODEGEN: "qwen3.5-plus",
     AIModule.PHOENIX_ASSERTION_GEN: "qwen-flash",
     
     # === 缺陷分析 - 需要推理能力 ===
-    AIModule.DEFECT_ROOT_CAUSE: "qwen3-max",
-    AIModule.DEFECT_FIX_SUGGEST: "qwen3-max",
-    AIModule.DEFECT_ANALYSIS: "qwen3-max",
+    AIModule.DEFECT_ROOT_CAUSE: "qwen3.5-plus",
+    AIModule.DEFECT_FIX_SUGGEST: "qwen3.5-plus",
+    AIModule.DEFECT_ANALYSIS: "qwen3.5-plus",
     
     # === 通用 ===
     AIModule.GENERAL_CHAT: "qwen-flash",
