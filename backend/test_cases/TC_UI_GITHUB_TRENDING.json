@@ -1,0 +1,28 @@
+{
+    "id": "TC_UI_GITHUB_TRENDING",
+    "name": "GitHub Trending List",
+    "mode": "UI",
+    "steps": [
+        {
+            "type": "UI",
+            "action": "navigate",
+            "params": {
+                "url": "https://github.com/trending"
+            }
+        },
+        {
+            "type": "UI",
+            "action": "wait",
+            "params": {
+                "seconds": 3
+            }
+        },
+        {
+            "type": "UI",
+            "action": "screenshot",
+            "params": {
+                "name": "github_trending"
+            }
+        }
+    ]
+}

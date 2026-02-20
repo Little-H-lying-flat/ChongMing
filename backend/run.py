@@ -44,7 +44,7 @@ def start_services():
             "postgres", "redis", "chromadb", "milvus", "minio", "etcd", "omniparser"
         ]
         
-        cmd = ["docker-compose", "-f", str(compose_file), "up", "-d"] + infra_services
+        cmd = ["docker-compose", "-p", "chongming", "-f", str(compose_file), "up", "-d"] + infra_services
         
         print(f"👉 Running: {' '.join(cmd)}")
         subprocess.run(cmd, check=True, cwd=str(project_root))

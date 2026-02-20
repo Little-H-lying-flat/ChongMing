@@ -77,6 +77,7 @@ class RagRetriever:
             expanded = await self._expand_intent(intent)
             queries.extend(expanded)
         
+        all_results = []
         for query in queries[:5]:  # 限制查询数量
             # Directly call synchronous method to avoid nest_asyncio/thread-pool conflicts on Windows
             results = self.ingestor.search(

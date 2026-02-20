@@ -1,0 +1,3 @@
+Sending request to http://localhost:7861/parse with image size 173944 bytes...
+Status Code: 500
+Response (truncated): {"detail":"CUDA error: no kernel image is available for execution on the device\nSearch for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.\nCompile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.\n"}

@@ -40,7 +40,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://chongming:${DB_PASSWORD:-chongming123}@postgres:5432/chongming
+      - DATABASE_URL=postgresql+asyncpg://chongming:${DB_PASSWORD:-chongming123}@postgres:5432/chongming
       - REDIS_URL=redis://redis:6379/0
       - QWEN_API_KEY=${QWEN_API_KEY}
       - QWEN_BASE_URL=${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
@@ -48,11 +48,13 @@ services:
       - CHROMADB_PORT=8001
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
-      - OMNIPARSER_URL=http://omniparser_v2:8002
+      - OMNIPARSER_URL=http://omniparser:8002
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
+      - ../backend:/app
       - test_assets:/app/test_assets
       - recordings:/app/recordings
       - reports:/app/reports
@@ -79,7 +81,7 @@ services:
     container_name: chongming-ui
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "3000:3000"
     depends_on:
       - api-gateway
     networks:
@@ -99,9 +101,10 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OMNIPARSER_URL=http://omniparser_v2:8002
+      - OMNIPARSER_URL=http://omniparser:8002
       - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
     volumes:
+      - ../backend:/app
       - recordings:/app/recordings
       - /dev/shm:/dev/shm # Playwright 共享内存
     depends_on:
@@ -122,7 +125,7 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OMNIPARSER_URL=http://omniparser_v2:8002
+      - OMNIPARSER_URL=http://omniparser:8002
     depends_on:
       - redis
       - api-gateway
@@ -141,7 +144,7 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OMNIPARSER_URL=http://omniparser_v2:8002
+      - OMNIPARSER_URL=http://omniparser:8002
     depends_on:
       - redis
     networks:
@@ -159,7 +162,7 @@ services:
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OMNIPARSER_URL=http://omniparser_v2:8002
+      - OMNIPARSER_URL=http://omniparser:8002
       - QWEN_API_KEY=${QWEN_API_KEY}
     depends_on:
       - redis
@@ -213,7 +216,7 @@ services:
       - POSTGRES_DB=chongming
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./deploy/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - chongming-net
     healthcheck:
@@ -284,7 +287,7 @@ services:
       - ETCD_AUTO_COMPACTION_MODE=revision
       - ETCD_AUTO_COMPACTION_RETENTION=1000
       - ETCD_QUOTA_BACKEND_BYTES=4294967296
-    command: etcd --advertise-client-urls=http://127.0.0.1:2379 --listen-client-urls http://0.0.0.0:2379
+    command: etcd --advertise-client-urls=http://etcd:2379 --listen-client-urls http://0.0.0.0:2379
     volumes:
       - ./volumes/etcd:/etcd
     networks:
@@ -322,6 +325,8 @@ services:
       - omniparser_models:/app/weights
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_LAUNCH_BLOCKING=1
+      - TORCH_USE_CUDA_DSA=1
     shm_size: '4gb'
     deploy:
       resources:
@@ -339,7 +344,7 @@ services:
   # ========== Locust 性能测试 ==========
 
   locust-master:
-    image: locustio/locust:2.20
+    image: locustio/locust:latest
     container_name: chongming-locust-master
     restart: unless-stopped
     ports:
@@ -351,7 +356,7 @@ services:
       - chongming-net
 
   locust-worker:
-    image: locustio/locust:2.20
+    image: locustio/locust:latest
     # container_name removed to support replicas
     restart: unless-stopped
     command: -f /locust/locustfile.py --worker --master-host=locust-master
@@ -374,7 +379,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.retention.time=15d'
@@ -392,8 +397,8 @@ services:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
     volumes:
-      - ./deploy/grafana/provisioning:/etc/grafana/provisioning
-      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
     networks:
@@ -405,11 +410,11 @@ services:
     container_name: chongming-nginx
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     volumes:
-      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./deploy/nginx/ssl:/etc/nginx/ssl
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
     depends_on:
       - api-gateway
       - frontend

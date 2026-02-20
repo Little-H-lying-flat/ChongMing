@@ -220,6 +220,17 @@ class RightPupilEngine:
             try:
                 # 3.1 Try OmniParser -> SoM
                 elements = await self.omni_client.parse_screenshot(screenshot_before_b64)
+                
+                # GRACEFUL DEGRADATION: Check for Element Not Found
+                if not elements:
+                    warning_msg = "AI Vision Agent could not locate the requested target in the current viewport."
+                    logger.warning(f"⚠️ 视觉感知/规划警告: {warning_msg}")
+                    result["warnings"] = [{
+                        "type": "VISION_ELEMENT_NOT_FOUND",
+                        "message": warning_msg,
+                        "details": {"description": description }
+                    }]
+                    # Fallback continues below...
                 loop = asyncio.get_running_loop()
                 annotated_b64, id_map = await loop.run_in_executor(
                     None, self.som_renderer.draw_som, screenshot_before_b64, elements

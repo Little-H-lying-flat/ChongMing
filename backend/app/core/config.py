@@ -27,6 +27,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     
+    # === Custom Gemini ===
+    MODEL_CUSTOM_GEMINI: str = "gemini-3-pro-high"
+
     # === 基础配置 ===
     VERSION: str = "2.0.0"
     DEBUG: bool = True
@@ -55,12 +58,17 @@ class Settings(BaseSettings):
     # === AI/LLM (阿里云 DashScope) ===
     QWEN_API_KEY: str = "sk-fecda1b83bfe4208892248adffc7cc38"
     QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+    # === Gemini (Custom OpenAI Provider) ===
+    GEMINI_API_KEY: str = "sk-fecda1b83bfe4208892248adffc7cc38"
+    GEMINI_BASE_URL: str = "http://127.0.0.1:8045/v1"
     
     # 模型配置 - 按功能模块分组
-    # 神经设计层 (高智能任务)
-    MODEL_NEURAL_INTENT: str = "qwen-max"
-    MODEL_NEURAL_SCENARIO: str = "qwen-max"
-    MODEL_NEURAL_CRITIC: str = "qwen-plus"
+    # 模型配置 - 按功能模块分组
+    # 神经设计层 (高智能任务) - Updated to use Qwen 3 Max as requested
+    MODEL_NEURAL_INTENT: str = "qwen3-max"
+    MODEL_NEURAL_SCENARIO: str = "qwen3-max"
+    MODEL_NEURAL_CRITIC: str = "qwen3-max"
     
     # 右瞳引擎 (视觉任务)
     MODEL_RIGHT_PUPIL_PLANNER: str = "qwen-plus"

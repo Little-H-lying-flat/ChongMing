@@ -14,7 +14,8 @@ from app.core.ai_models import AIModule
 from app.services.left_pupil.rag_retriever import RagRetriever
 from app.services.left_pupil.knowledge_retriever import KnowledgeRetriever
 from app.services.neural_design.models import (
-    DesignRequest, DraftTestCase, RefinedTestCase, RefinedTestStep,
+    DesignRequest, DraftTestCase, RefinedTestCase, 
+    RefinedApiStep, RefinedUiStep,
     RefinedRequestSpec, RefinedAssertionSpec
 )
 from app.core.prompts.neural_design import (
@@ -37,8 +38,20 @@ class DesignService:
     
     def __init__(self, ai_manager: Optional[AIClientManager] = None, retriever: Optional[RagRetriever] = None, knowledge_retriever: Optional[KnowledgeRetriever] = None):
         self.ai = ai_manager or get_ai_manager()
-        self.retriever = retriever or RagRetriever()
-        self.knowledge_retriever = knowledge_retriever or KnowledgeRetriever()
+        self._retriever = retriever
+        self._knowledge_retriever = knowledge_retriever
+
+    @property
+    def retriever(self) -> RagRetriever:
+        if not self._retriever:
+            self._retriever = RagRetriever()
+        return self._retriever
+
+    @property
+    def knowledge_retriever(self) -> KnowledgeRetriever:
+        if not self._knowledge_retriever:
+            self._knowledge_retriever = KnowledgeRetriever()
+        return self._knowledge_retriever
         
     async def analyze_requirement(self, request: DesignRequest) -> List[Dict[str, Any]]:
         """
@@ -222,39 +235,43 @@ class DesignService:
             
         refined_steps = []
         for step in steps_data:
-            req_spec = RefinedRequestSpec(
-                method=step.get("method", "GET").upper(),
-                url=step.get("url_path", "/"),
-                body=step.get("input_data"),
-            )
+            step_type = step.get("step_type", "API").upper()
+            step_id = step.get("step_id") or uuid.uuid4().hex[:8]
             
-            expected_outcome = step.get("expected_outcome")
-            if isinstance(expected_outcome, (dict, list)):
-                expected_outcome = json.dumps(expected_outcome, ensure_ascii=False)
-            elif expected_outcome is None:
-                expected_outcome = ""
+            if step_type == "UI":
+                # UI Step Conversion
+                refined_step = RefinedUiStep(
+                    id=step_id,
+                    name=step.get("intent") or "UI Step",
+                    step_type="UI",
+                    description=step.get("description", ""),
+                    action=step.get("action", "unknown"),
+                    target=step.get("target", "unknown"),
+                    value=step.get("value"),
+                    dependencies=step.get("dependencies", [])
+                )
             else:
-                expected_outcome = str(expected_outcome)
-
-            # Extract Assertions
-            # Extract Assertions
-            expected_status = step.get("expected_status_code")
-            if expected_status is None:
-                # Fallback: Try to parse from description or default to 200
-                expected_status = 200
+                # API Step Conversion
+                req_spec = RefinedRequestSpec(
+                    method=step.get("method", "GET").upper(),
+                    url=step.get("url_path", "/"),
+                    body=step.get("input_data"),
+                )
+                
+                expected_status = step.get("expected_status_code", 200)
+                json_asserts = step.get("json_assertions") or {}
+                
+                refined_step = RefinedApiStep(
+                    id=step_id,
+                    name=step.get("intent") or "API Step",
+                    step_type="API",
+                    description=step.get("description", ""),
+                    request=req_spec,
+                    expected_status_code=int(expected_status),
+                    json_assertions=json_asserts,
+                    extract=step.get("extract", {})
+                )
             
-            json_asserts = step.get("json_assertions") or {}
-            
-            refined_step = RefinedTestStep(
-                id=step.get("step_id") or uuid.uuid4().hex[:8],
-                name=step.get("intent") or "Step",
-                step_type=step.get("step_type", "API"),
-                description=step.get("description", ""),
-                request=req_spec,
-                expected_status_code=int(expected_status),
-                json_assertions=json_asserts,
-                extract=step.get("extract", {})
-            )
             refined_steps.append(refined_step)
             
         return RefinedTestCase(

@@ -1,0 +1,1853 @@
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 12.4.1
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+Downloading weights from microsoft/OmniParser-v2.0 to weights...
+ - Skipping icon_detect/train_args.yaml (already exists)
+ - Skipping icon_detect/model.pt (already exists)
+ - Skipping icon_detect/model.yaml (already exists)
+ - Skipping icon_caption/config.json (already exists)
+ - Skipping icon_caption/generation_config.json (already exists)
+ - Skipping icon_caption/model.safetensors (already exists)
+icon_caption_florence directory already exists.
+Weights download complete.
+PaddleOCR not found, skipping initialization.
+Loading OmniParser models...
+Creating new Ultralytics Settings v0.0.6 file âœ?
+View Ultralytics Settings with 'yolo settings' or at '/root/.config/Ultralytics/settings.json'
+Update Settings with 'yolo settings key=value', i.e. 'yolo settings runs_dir=path/to/dir'. For help see https://docs.ultralytics.com/quickstart/#ultralytics-settings.
+A new version of the following files was downloaded from https://huggingface.co/microsoft/Florence-2-base-ft:
+- configuration_florence2.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+A new version of the following files was downloaded from https://huggingface.co/microsoft/Florence-2-large:
+- processing_florence2.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+A new version of the following files was downloaded from https://huggingface.co/microsoft/Florence-2-large:
+- configuration_florence2.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+/usr/local/lib/python3.10/dist-packages/torch/cuda/__init__.py:371: UserWarning: Found GPU0 NVIDIA GeForce RTX 5060 Laptop GPU which is of compute capability (CC) 12.0.
+The following list shows the CCs this version of PyTorch was built for and the hardware CCs it supports:
+- 5.0 which supports hardware CC >=5.0,<6.0 except {5.3}
+- 6.0 which supports hardware CC >=6.0,<7.0 except {6.2}
+- 7.0 which supports hardware CC >=7.0,<8.0 except {7.2}
+- 7.5 which supports hardware CC >=7.5,<8.0
+- 8.0 which supports hardware CC >=8.0,<9.0 except {8.7}
+Local processor config not found, loading from microsoft/Florence-2-large...
+- 8.6 which supports hardware CC >=8.6,<9.0 except {8.7}
+- 9.0 which supports hardware CC >=9.0,<10.0
+Please follow the instructions at https://pytorch.org/get-started/locally/ to install a PyTorch release that supports one of these CUDA versions: 12.8, 13.0
+  _warn_unsupported_code(d, device_cc, code_ccs)
+/usr/local/lib/python3.10/dist-packages/torch/cuda/__init__.py:489: UserWarning: 
+NVIDIA GeForce RTX 5060 Laptop GPU with CUDA capability sm_120 is not compatible with the current PyTorch installation.
+The current PyTorch install supports CUDA capabilities sm_50 sm_60 sm_70 sm_75 sm_80 sm_86 sm_90.
+If you want to use the NVIDIA GeForce RTX 5060 Laptop GPU GPU with PyTorch, please check the instructions at https://pytorch.org/get-started/locally/
+System.Management.Automation.RemoteException
+  queued_call()
+A new version of the following files was downloaded from https://huggingface.co/microsoft/Florence-2-base-ft:
+- modeling_florence2.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8002 (Press CTRL+C to quit)
+Using CPU. Note: This module is much faster with a GPU.
+CUDA operational: NVIDIA GeForce RTX 5060 Laptop GPU
+Loading Florence-2 in float16 on GPU...
+Models loaded successfully.
+INFO:     172.28.0.1:52734 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47584 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53912 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43892 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46876 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45134 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42052 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49888 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39424 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48132 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40308 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43322 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42978 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58270 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53046 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41340 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53490 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48448 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50004 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 596.7ms
+Speed: 4.2ms preprocess, 596.7ms inference, 3.5ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00015282630920410156
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:50832 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53924 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 484.4ms
+Speed: 1.5ms preprocess, 484.4ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.058547973632812e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:53930 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37084 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51352 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 542.2ms
+Speed: 1.8ms preprocess, 542.2ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00010466575622558594
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:51360 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52070 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43594 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 562.1ms
+Speed: 1.6ms preprocess, 562.1ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.320808410644531e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:43600 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43228 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35374 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 535.0ms
+Speed: 3.5ms preprocess, 535.0ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.0001327991485595703
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:35384 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35258 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36504 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48008 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34736 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55226 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43054 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57196 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33688 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55866 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40672 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53080 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36492 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50094 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45084 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55128 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35662 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55728 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49332 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58634 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48956 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33338 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40428 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54530 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34400 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45070 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 525.5ms
+Speed: 2.8ms preprocess, 525.5ms inference, 1.2ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00023221969604492188
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:57568 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57570 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51620 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 608.6ms
+Speed: 1.8ms preprocess, 608.6ms inference, 1.2ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.0001571178436279297
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:51632 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35066 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43004 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 489.8ms
+Speed: 2.9ms preprocess, 489.8ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.605552673339844e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:43008 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52366 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35754 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 496.5ms
+Speed: 1.6ms preprocess, 496.5ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00012755393981933594
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:35764 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47612 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 508.1ms
+Speed: 1.7ms preprocess, 508.1ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00011420249938964844
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:47628 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33420 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40140 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33220 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 531.5ms
+Speed: 2.2ms preprocess, 531.5ms inference, 0.9ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00013327598571777344
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:33230 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58838 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45354 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35646 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41628 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 495.8ms
+Speed: 2.8ms preprocess, 495.8ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00010943412780761719
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:41644 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48076 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36174 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59942 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 507.5ms
+Speed: 1.4ms preprocess, 507.5ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.081031799316406e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:59950 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54426 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45154 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 478.1ms
+Speed: 2.6ms preprocess, 478.1ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.034706115722656e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:45162 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37668 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40784 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 502.3ms
+Speed: 1.7ms preprocess, 502.3ms inference, 0.9ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00010752677917480469
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:40876 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40892 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54954 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 503.2ms
+Speed: 2.4ms preprocess, 503.2ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 6.961822509765625e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:54956 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49020 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56442 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38496 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43550 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49892 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59574 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57806 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33646 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37176 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41918 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51992 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58470 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36418 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44396 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43942 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47640 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48090 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35164 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48660 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57592 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39974 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38692 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35554 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50130 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54082 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52992 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53752 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45258 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54832 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57820 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52772 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41582 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 497.8ms
+Speed: 4.0ms preprocess, 497.8ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.0001304149627685547
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:41598 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 522.6ms
+Speed: 2.6ms preprocess, 522.6ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.463859558105469e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:37512 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34172 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 573.6ms
+Speed: 2.0ms preprocess, 573.6ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.82012939453125e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:59044 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 495.3ms
+Speed: 1.9ms preprocess, 495.3ms inference, 0.5ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.225440979003906e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:40414 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 455.8ms
+Speed: 1.5ms preprocess, 455.8ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.724761962890625e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:39576 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 545.2ms
+Speed: 2.5ms preprocess, 545.2ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00014638900756835938
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:60482 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60498 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 477.5ms
+Speed: 1.7ms preprocess, 477.5ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.796287536621094e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:48648 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 509.9ms
+Speed: 2.1ms preprocess, 509.9ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.128715515136719e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:41438 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46368 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 467.4ms
+Speed: 1.5ms preprocess, 467.4ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 9.274482727050781e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:43226 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 503.9ms
+Speed: 1.4ms preprocess, 503.9ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.796287536621094e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:33350 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 606.9ms
+Speed: 3.4ms preprocess, 606.9ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 9.441375732421875e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:54722 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 533.9ms
+Speed: 2.4ms preprocess, 533.9ms inference, 0.9ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 9.465217590332031e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:54532 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54580 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 549.8ms
+Speed: 2.6ms preprocess, 549.8ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.511543273925781e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:57602 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 577.9ms
+Speed: 2.1ms preprocess, 577.9ms inference, 1.1ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.0001556873321533203
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:39512 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 557.3ms
+Speed: 2.3ms preprocess, 557.3ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.511543273925781e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:60336 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53694 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 524.9ms
+Speed: 1.8ms preprocess, 524.9ms inference, 1.0ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.058547973632812e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:53702 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 592.1ms
+Speed: 3.1ms preprocess, 592.1ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 9.608268737792969e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:56764 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56770 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56780 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 576.3ms
+Speed: 1.9ms preprocess, 576.3ms inference, 1.0ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 9.059906005859375e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:32840 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48016 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 540.0ms
+Speed: 1.7ms preprocess, 540.0ms inference, 0.3ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 9.274482727050781e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:38318 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38322 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59822 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46552 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57504 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58884 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33334 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54388 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36974 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38120 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37298 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53410 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60320 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35286 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58700 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42244 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60214 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36304 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53920 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45602 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60186 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56964 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52154 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56026 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46234 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45934 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40486 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50904 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48904 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41556 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40744 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33538 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36780 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50172 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35574 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36286 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56632 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42490 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35312 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42200 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44828 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41326 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59590 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35780 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44044 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57142 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51916 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51788 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33918 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41412 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57844 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38126 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48722 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46546 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45182 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43058 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54780 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47140 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50430 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50008 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51876 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34176 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37354 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35172 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56884 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51566 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33076 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50168 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49308 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45586 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59652 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44790 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33550 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44220 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40400 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46088 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49024 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49882 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58002 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51156 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38112 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47612 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47104 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46546 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33860 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57950 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54578 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54420 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51902 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42400 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38338 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52616 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33534 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45066 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44650 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46304 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54012 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57012 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34828 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56016 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46300 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51670 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50010 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58902 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40552 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36206 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39350 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39904 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50308 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57940 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33992 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54774 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43306 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60052 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36512 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36082 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60040 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52918 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56380 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51146 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50650 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42784 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44872 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34806 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51756 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52710 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46372 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42692 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51270 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36192 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48830 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42526 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35598 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49908 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59052 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54478 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49608 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49968 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44250 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40808 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47520 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53116 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35874 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54706 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59186 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40730 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36490 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53966 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51796 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58864 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36778 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39314 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38420 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41666 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56598 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44920 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48286 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54542 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45624 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57648 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47982 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44358 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40578 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57844 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37584 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:32864 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33720 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53212 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42112 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54040 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48352 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37578 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52478 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52968 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59748 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59126 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51020 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59644 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49800 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48562 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:32940 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56994 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50258 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38932 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50796 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59550 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48420 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50062 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33338 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39598 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50058 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45220 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36478 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50040 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36244 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60262 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51950 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57800 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47830 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55986 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42348 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46938 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37248 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35210 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49554 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36128 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41132 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58694 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37752 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58050 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59162 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50432 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60192 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33666 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43910 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57182 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48120 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44956 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60210 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48474 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48434 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55920 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34114 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52702 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58394 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40502 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58404 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36088 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45770 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57366 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35888 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38304 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58110 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60336 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42856 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39932 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57216 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45090 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43248 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60176 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57852 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46688 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59352 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49082 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55624 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34740 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34370 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40108 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50568 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36622 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36180 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41454 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48218 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39988 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42246 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48902 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43468 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49552 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46768 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39936 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47412 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59260 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52640 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36086 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55960 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34920 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55346 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44312 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51584 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44390 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36474 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59420 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36986 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40708 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58372 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38958 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51034 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40538 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50298 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38902 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51656 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52166 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41322 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50294 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45354 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45860 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34126 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57568 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52242 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35852 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46964 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33236 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38912 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46242 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52816 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33600 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44554 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59638 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49174 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43568 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41642 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55134 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42318 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52084 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37766 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47204 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34706 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40668 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46294 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40792 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59876 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40794 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44302 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41518 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38812 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53586 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42582 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54668 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45186 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40792 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40178 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53532 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57618 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39094 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33854 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33998 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36858 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49042 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51678 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41472 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58830 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57452 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57866 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41246 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35294 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36772 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37048 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48142 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54116 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36802 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57672 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56636 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45014 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56024 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46460 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45872 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51328 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34358 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43940 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53708 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38150 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57560 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43786 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52308 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53058 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45138 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54200 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53788 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55434 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53010 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35802 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36946 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55088 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 643.9ms
+Speed: 2.4ms preprocess, 643.9ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00014925003051757812
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:55090 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 576.6ms
+Speed: 1.9ms preprocess, 576.6ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.891654968261719e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:52162 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60436 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 467.7ms
+Speed: 1.9ms preprocess, 467.7ms inference, 1.3ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.0005555152893066406
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:35288 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35292 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 436.2ms
+Speed: 3.3ms preprocess, 436.2ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00014829635620117188
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:45846 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45856 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 476.4ms
+Speed: 1.5ms preprocess, 476.4ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.058547973632812e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:46860 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52562 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 472.6ms
+Speed: 1.8ms preprocess, 472.6ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.082389831542969e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:52576 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49114 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54644 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 440.0ms
+Speed: 1.9ms preprocess, 440.0ms inference, 0.3ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00011897087097167969
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:54658 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48202 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 533.5ms
+Speed: 1.5ms preprocess, 533.5ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 9.298324584960938e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:48214 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39136 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44580 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 512.1ms
+Speed: 2.5ms preprocess, 512.1ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.390975952148438e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:40962 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40976 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 483.0ms
+Speed: 1.5ms preprocess, 483.0ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.271766662597656e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:47320 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45378 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48376 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 570.6ms
+Speed: 2.7ms preprocess, 570.6ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.606910705566406e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:56344 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56348 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 511.5ms
+Speed: 1.5ms preprocess, 511.5ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.271766662597656e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:49008 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49024 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47354 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 489.7ms
+Speed: 2.5ms preprocess, 489.7ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.106231689453125e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:44398 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44400 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44992 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 486.3ms
+Speed: 1.6ms preprocess, 486.3ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.082389831542969e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:45006 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55460 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45440 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 486.1ms
+Speed: 1.7ms preprocess, 486.1ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.630752563476562e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:55320 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55336 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45582 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 492.9ms
+Speed: 1.9ms preprocess, 492.9ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00011730194091796875
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:47498 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45526 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52174 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 494.8ms
+Speed: 2.7ms preprocess, 494.8ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 6.67572021484375e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:52190 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55114 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57734 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 469.1ms
+Speed: 1.5ms preprocess, 469.1ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.559226989746094e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:57744 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39636 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38924 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42590 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34878 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 489.5ms
+Speed: 2.7ms preprocess, 489.5ms inference, 0.6ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.939338684082031e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:34892 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42136 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57736 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42304 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38238 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34422 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36060 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54938 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51134 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53188 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42420 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34128 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58702 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50634 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57354 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60318 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39294 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47018 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45162 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47792 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57888 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46482 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39776 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57248 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38766 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36058 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41226 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33084 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37068 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42176 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44288 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42744 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56534 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55906 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57376 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36990 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48958 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38502 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51846 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49414 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48074 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35744 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44626 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46908 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48946 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59656 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40286 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45734 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60084 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54484 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42990 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47004 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59212 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44886 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45330 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57340 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54498 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33140 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55478 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58532 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51416 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44224 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52434 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40910 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43218 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37550 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49240 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38962 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55444 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34030 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46198 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50342 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45840 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59060 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43260 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37886 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39546 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37184 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43862 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55282 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42836 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50300 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57466 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38870 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40192 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48218 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43794 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60692 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56278 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50312 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58902 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41804 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46628 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58078 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51432 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52866 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43198 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46428 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48114 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39492 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59008 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42680 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34530 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37044 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59758 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58626 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58456 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43618 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:32782 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45568 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52044 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36012 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56984 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36702 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40608 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38258 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48368 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39562 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58592 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53238 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36804 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36398 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35398 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52644 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34494 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35716 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58704 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46804 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40378 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48542 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52956 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52792 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35304 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57540 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:32970 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48490 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45324 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49866 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39900 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35892 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49972 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47016 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39082 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40778 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58208 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36826 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36816 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59220 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35716 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59590 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38596 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42240 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43532 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44914 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45718 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52344 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39660 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47952 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34128 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43954 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43470 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50848 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59214 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45726 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46978 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43984 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37124 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48888 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38226 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57454 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46088 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57922 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:34818 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60356 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38952 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59062 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38926 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33528 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48516 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60766 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49306 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54198 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44086 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38582 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57780 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44806 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45106 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52190 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44650 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50656 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56326 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41364 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53066 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54046 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51574 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46052 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50028 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40388 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54446 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54826 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33874 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59848 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57416 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54714 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:57932 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39416 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37628 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46682 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40458 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58202 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56610 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40456 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45048 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45104 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60186 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33296 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38790 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41772 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56056 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46304 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50314 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42246 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59116 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37078 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44544 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49866 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43474 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47594 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47582 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54896 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39798 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60714 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39384 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43552 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50730 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51134 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:32966 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46684 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:51458 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53472 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56830 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41006 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41890 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42172 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59904 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43648 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59016 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43740 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33508 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52906 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41426 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56510 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55130 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35742 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35542 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42078 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56966 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58840 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60644 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:49214 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37124 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42706 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59782 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36550 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60744 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58410 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59560 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58252 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58262 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46332 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55216 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60430 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42206 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37756 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33402 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53926 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 528.6ms
+Speed: 1.8ms preprocess, 528.6ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.940696716308594e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:49994 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50002 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56628 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 535.3ms
+Speed: 1.8ms preprocess, 535.3ms inference, 11.2ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 8.630752563476562e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:56644 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46034 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52372 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39476 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 532.3ms
+Speed: 2.9ms preprocess, 532.3ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.939338684082031e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:39490 - "POST /parse HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 524.5ms
+Speed: 2.0ms preprocess, 524.5ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 0.00011086463928222656
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:58240 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53072 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58332 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 (no detections), 485.2ms
+Speed: 2.9ms preprocess, 485.2ms inference, 0.7ms postprocess per image at shape (1, 3, 736, 1280)
+no ocr bbox!!!
+len(filtered_boxes): 0 -1
+time to get parsed content: 7.843971252441406e-05
+No elements found, returning original image without annotation.
+INFO:     172.28.0.1:58340 - "POST /parse HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59338 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:32844 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52522 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37908 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47444 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56158 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56772 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48564 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40970 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47684 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45462 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48318 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56102 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:55640 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54538 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:36926 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46434 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50106 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59286 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35448 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54438 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37990 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41328 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60658 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59576 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56336 - "GET /health HTTP/1.1" 200 OK
+Traceback (most recent call last):
+INFO:     172.28.0.1:54050 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:45860 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:58976 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43268 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:52790 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:43448 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:32828 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53394 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:40788 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:37378 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41534 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 11 icons, 528.8ms
+Speed: 2.7ms preprocess, 528.8ms inference, 8.3ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 17 16
+INFO:     172.28.0.1:59050 - "POST /parse HTTP/1.1" 500 Internal Server Error
+
+0: 736x1280 11 icons, 511.5ms
+Speed: 1.5ms preprocess, 511.5ms inference, 1.0ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 17 16
+INFO:     172.28.0.1:59074 - "POST /parse HTTP/1.1" 500 Internal Server Error
+
+0: 736x1280 11 icons, 524.7ms
+Speed: 1.5ms preprocess, 524.7ms inference, 0.9ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 17 16
+INFO:     172.28.0.1:39774 - "POST /parse HTTP/1.1" 500 Internal Server Error
+INFO:     172.28.0.1:46348 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:44336 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38630 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 11 icons, 529.7ms
+Speed: 2.5ms preprocess, 529.7ms inference, 1.0ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 17 16
+INFO:     172.28.0.1:38636 - "POST /parse HTTP/1.1" 500 Internal Server Error
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+0: 736x1280 11 icons, 506.6ms
+Speed: 1.5ms preprocess, 506.6ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+len(filtered_boxes): 17 16
+INFO:     172.28.0.1:47298 - "POST /parse HTTP/1.1" 500 Internal Server Error
+INFO:     172.28.0.1:47296 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 11 icons, 562.3ms
+Speed: 1.7ms preprocess, 562.3ms inference, 1.0ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 17 16
+INFO:     172.28.0.1:47312 - "POST /parse HTTP/1.1" 500 Internal Server Error
+INFO:     172.28.0.1:35002 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33426 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 10 icons, 540.2ms
+Speed: 2.8ms preprocess, 540.2ms inference, 1.2ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 16 -1
+INFO:     172.28.0.1:33438 - "POST /parse HTTP/1.1" 500 Internal Server Error
+INFO:     172.28.0.1:35334 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 10 icons, 467.1ms
+Speed: 1.6ms preprocess, 467.1ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 16 -1
+INFO:     172.28.0.1:35348 - "POST /parse HTTP/1.1" 500 Internal Server Error
+
+0: 736x1280 10 icons, 486.7ms
+Speed: 1.6ms preprocess, 486.7ms inference, 0.8ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 16 -1
+INFO:     172.28.0.1:43250 - "POST /parse HTTP/1.1" 500 Internal Server Error
+INFO:     172.28.0.1:43248 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:41004 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:50652 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:53626 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39702 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33200 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:56908 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46372 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:59142 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47336 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47146 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 10 icons, 496.7ms
+Speed: 1.9ms preprocess, 496.7ms inference, 1.0ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 16 -1
+INFO:     172.28.0.1:47154 - "POST /parse HTTP/1.1" 500 Internal Server Error
+
+0: 736x1280 10 icons, 523.9ms
+Speed: 1.8ms preprocess, 523.9ms inference, 1.1ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 16 -1
+INFO:     172.28.0.1:47162 - "POST /parse HTTP/1.1" 500 Internal Server Error
+INFO:     172.28.0.1:50644 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 10 icons, 508.9ms
+Speed: 1.7ms preprocess, 508.9ms inference, 0.9ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 16 -1
+INFO:     172.28.0.1:50658 - "POST /parse HTTP/1.1" 500 Internal Server Error
+INFO:     172.28.0.1:49940 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38956 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 11 icons, 495.8ms
+Speed: 2.8ms preprocess, 495.8ms inference, 1.0ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 17 16
+INFO:     172.28.0.1:38972 - "POST /parse HTTP/1.1" 500 Internal Server Error
+INFO:     172.28.0.1:39846 - "GET /health HTTP/1.1" 200 OK
+
+0: 736x1280 11 icons, 518.3ms
+Speed: 1.5ms preprocess, 518.3ms inference, 1.0ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 17 16
+INFO:     172.28.0.1:39858 - "POST /parse HTTP/1.1" 500 Internal Server Error
+
+0: 736x1280 11 icons, 477.7ms
+Speed: 1.8ms preprocess, 477.7ms inference, 0.9ms postprocess per image at shape (1, 3, 736, 1280)
+len(filtered_boxes): 17 16
+INFO:     172.28.0.1:58498 - "POST /parse HTTP/1.1" 500 Internal Server Error
+INFO:     172.28.0.1:58484 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38768 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46416 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42618 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:47296 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:39024 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:46202 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38402 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60706 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:60232 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:33388 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:42130 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35794 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35490 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:48128 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:35780 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:54130 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.28.0.1:38876 - "GET /health HTTP/1.1" 200 OK
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException
+Traceback (most recent call last):
+  File "/app/omniparser_server.py", line 71, in parse
+    dino_labled_img, label_coordinates, parsed_content_list = get_som_labeled_img(
+  File "/app/util/utils.py", line 505, in get_som_labeled_img
+    parsed_content_icon = get_parsed_content_icon(filtered_boxes, starting_idx, image_source, caption_model_processor, prompt=prompt,batch_size=batch_size)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+  File "/app/util/utils.py", line 163, in get_parsed_content_icon
+    generated_ids = model.generate(input_ids=inputs["input_ids"],pixel_values=inputs["pixel_values"],max_new_tokens=20,num_beams=1, do_sample=False)
+  File "/root/.cache/huggingface/modules/transformers_modules/microsoft/Florence-2-base-ft/f6c1a25888ffc1d945ee8a1a77ac833c7303d46e/modeling_florence2.py", line 2789, in generate
+    inputs_embeds = self.get_input_embeddings()(input_ids)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/sparse.py", line 189, in forward
+    return F.embedding(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/functional.py", line 2567, in embedding
+    return torch.embedding(weight, input, padding_idx, scale_grad_by_freq, sparse)
+torch.AcceleratorError: CUDA error: no kernel image is available for execution on the device
+Search for `cudaErrorNoKernelImageForDevice' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+System.Management.Automation.RemoteException

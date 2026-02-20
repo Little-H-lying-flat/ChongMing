@@ -1,17 +1,35 @@
 from typing import List, Optional
+import json
+from pathlib import Path
 from app.schemas.execution import TCIR, ExecutionMode
 from app.core.config import settings
 
 class TestCaseLoader:
     """
-    Mock Loader for Test Cases
-    (Replaces DB until implemented)
+    Test Case Loader
+    Loads test cases from JSON files in backend/test_cases/ or mocks.
     """
     
     @staticmethod
     def load(tc_id: str) -> Optional[TCIR]:
-        # Mock Data Logic
-        if tc_id.startswith("TC_UI_"):
+        # 1. Try loading from file
+        base_path = Path(__file__).parent.parent.parent.parent / "test_cases"
+        file_path = base_path / f"{tc_id}.json"
+        
+        if file_path.exists():
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    # Convert 'mode' string to Enum if needed
+                    if "mode" in data and isinstance(data["mode"], str):
+                        data["mode"] = ExecutionMode(data["mode"])
+                    return TCIR(**data)
+            except Exception as e:
+                print(f"Error loading test case {tc_id} from file: {e}")
+                return None
+
+        # 2. Hardcoded / Mock Data Logic (Fallback)
+        if tc_id.startswith("TC_UI_GOOGLE"):
              return TCIR(
                 id=tc_id,
                 name="Google Search Test",
@@ -28,8 +46,6 @@ class TestCaseLoader:
                         "target": {"strategy": "dom", "value": "textarea[title='Search']"},
                         "params": {"text": "Playwright Python"}
                     },
-                    # Just a simple check, we won't actually click search to keep it fast/safe?
-                    # Or we can just wait.
                     {
                          "type": "UI",
                          "action": "wait",

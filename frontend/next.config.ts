@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // Increase proxy timeout for long-running AI requests
+    proxyTimeout: 120000,
+  },
   async rewrites() {
     return [
       {

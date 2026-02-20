@@ -173,6 +173,87 @@ class DashScopeClient(BaseAIClient):
         return formatted
 
 
+
+class OpenAIClient(BaseAIClient):
+    """通用 OpenAI 客户端 (支持自定义 Base URL, 如 Gemini)"""
+    
+    def __init__(self, api_key: str, base_url: str):
+        self.client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+        )
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+    )
+    async def chat(
+        self,
+        messages: List[Message],
+        model_config: ModelConfig,
+        **kwargs,
+    ) -> AIResponse:
+        """发送聊天请求"""
+        formatted_messages = self._format_messages(messages, model_config)
+        extra_body = kwargs.get("extra_body", {})
+        
+        response = await self.client.chat.completions.create(
+            model=model_config.model_id,
+            messages=formatted_messages,
+            max_tokens=kwargs.get("max_tokens", model_config.max_tokens),
+            temperature=kwargs.get("temperature", model_config.temperature),
+            extra_body=extra_body,
+        )
+        
+        return AIResponse(
+            content=response.choices[0].message.content,
+            model=response.model,
+            usage={
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens,
+            },
+            finish_reason=response.choices[0].finish_reason,
+        )
+    
+    async def chat_stream(
+        self,
+        messages: List[Message],
+        model_config: ModelConfig,
+        **kwargs,
+    ) -> AsyncIterator[str]:
+        """流式聊天"""
+        formatted_messages = self._format_messages(messages, model_config)
+        extra_body = kwargs.get("extra_body", {})
+        
+        stream = await self.client.chat.completions.create(
+            model=model_config.model_id,
+            messages=formatted_messages,
+            max_tokens=kwargs.get("max_tokens", model_config.max_tokens),
+            temperature=kwargs.get("temperature", model_config.temperature),
+            extra_body=extra_body,
+            stream=True,
+        )
+        
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
+    def _format_messages(
+        self,
+        messages: List[Message],
+        model_config: ModelConfig,
+    ) -> List[dict]:
+        """格式化消息"""
+        formatted = []
+        for msg in messages:
+            formatted.append({
+                "role": msg.role,
+                "content": msg.content,
+            })
+        return formatted
+
+
 class AIClientManager:
     """
     AI 客户端管理器 - 统一入口
@@ -191,7 +272,15 @@ class AIClientManager:
         if settings.QWEN_API_KEY:
             self._clients[ModelProvider.DASHSCOPE] = DashScopeClient()
             logger.info("DashScope 客户端已初始化")
-        
+            
+        # Gemini (Custom OpenAI)
+        if hasattr(settings, "GEMINI_API_KEY") and settings.GEMINI_API_KEY:
+            self._clients[ModelProvider.GEMINI] = OpenAIClient(
+                api_key=settings.GEMINI_API_KEY,
+                base_url=settings.GEMINI_BASE_URL,
+            )
+            logger.info("Gemini 客户端已初始化")
+            
         # TODO: Add other providers
     
     def _get_client(self, provider: ModelProvider) -> BaseAIClient:
@@ -201,6 +290,14 @@ class AIClientManager:
             if provider == ModelProvider.DASHSCOPE:
                  self._clients[ModelProvider.DASHSCOPE] = DashScopeClient()
                  return self._clients[ModelProvider.DASHSCOPE]
+            
+            if provider == ModelProvider.GEMINI and hasattr(settings, "GEMINI_API_KEY"):
+                 self._clients[ModelProvider.GEMINI] = OpenAIClient(
+                     api_key=settings.GEMINI_API_KEY,
+                     base_url=settings.GEMINI_BASE_URL,
+                 )
+                 return self._clients[ModelProvider.GEMINI]
+
             raise ValueError(f"未配置 {provider.value} 客户端")
         return self._clients[provider]
     

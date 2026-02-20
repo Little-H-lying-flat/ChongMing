@@ -11,24 +11,24 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { useRef, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
-// Geeky Scrollbar Styles
 const scrollbarStyles = `
   .geek-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   .geek-scrollbar::-webkit-scrollbar-track {
-    background: #020617; 
+    background: transparent;
   }
   .geek-scrollbar::-webkit-scrollbar-thumb {
-    background: #1e293b; 
+    background: #334155;
     border-radius: 3px;
   }
   .geek-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: #334155; 
+    background: #475569;
   }
 `;
 
@@ -57,6 +57,12 @@ interface StepDetail {
     page_url?: string;
     page_title?: string;
     strategy?: string;
+    // Warnings
+    warnings?: {
+        type: string;
+        message: string;
+        details?: any;
+    }[];
 }
 
 interface StepResult {
@@ -98,6 +104,26 @@ interface ExecutionDrawerProps {
 export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerProps) {
     const [data, setData] = useState<ExecutionDetail | null>(null);
     const [loading, setLoading] = useState(false);
+    const toastedSteps = useRef<Set<string>>(new Set());
+
+    // Toast Trigger for Vision Failures
+    useEffect(() => {
+        if (!data) return;
+        data.cases.forEach(tc => {
+            tc.steps.forEach(step => {
+                const stepId = `${tc.tc_id}-${step.step_index}`;
+                const details = step.details as StepDetail;
+                if (details?.warnings?.some(w => w.type === 'VISION_ELEMENT_NOT_FOUND') && !toastedSteps.current.has(stepId)) {
+                    toast.warning("⚠️ 视觉感知未命中", {
+                        description: `当前页面截图中未找到目标元素 [${details.target_description || 'Unknown'}], 已终止或降级。`,
+                        duration: 5000,
+                        className: "bg-amber-950 border-amber-500 text-amber-200",
+                    });
+                    toastedSteps.current.add(stepId);
+                }
+            });
+        });
+    }, [data]);
 
     // Auto-open first failed step or first step
     const [openStepIndices, setOpenStepIndices] = useState<string[]>([]);
@@ -285,7 +311,8 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
                                                     {/* Timeline Dot */}
                                                     <div className={cn(
                                                         "absolute left-[14px] top-6 w-3 h-3 rounded-full border-2 z-10 transition-colors",
-                                                        step.success ? "bg-green-500 border-green-900" : "bg-red-500 border-red-900",
+                                                        details.warnings?.length ? "bg-amber-500 border-amber-900" :
+                                                            step.success ? "bg-green-500 border-green-900" : "bg-red-500 border-red-900",
                                                         "group-hover:scale-110"
                                                     )} />
 
@@ -340,6 +367,12 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
                                                                                     <div className="space-y-2">
                                                                                         <span className="text-xs text-slate-500 font-mono block text-center">Before Action</span>
                                                                                         <div className="rounded border border-slate-800 bg-slate-950 overflow-hidden relative group">
+                                                                                            {details.warnings?.some(w => w.type === 'VISION_ELEMENT_NOT_FOUND') && (
+                                                                                                <div className="absolute top-0 left-0 right-0 bg-red-900/90 text-red-100 p-2 text-[10px] font-mono border-b border-red-500 backdrop-blur-sm z-10 flex items-center gap-2">
+                                                                                                    <Activity className="w-3 h-3 animate-pulse" />
+                                                                                                    [!] AI Vision Agent could not locate the requested target in the current viewport.
+                                                                                                </div>
+                                                                                            )}
                                                                                             <img src={details.screenshot_before} alt="Before" loading="lazy" className="w-full h-auto object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                                                                                         </div>
                                                                                     </div>

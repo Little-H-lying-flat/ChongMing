@@ -20,8 +20,10 @@ PRD_ANALYSIS_SYSTEM_PROMPT = """
                 {
                     "step_type": "API/UI",
                     "description": "步骤描述",
-                    "method": "GET/POST (API Required)",
-                    "url": "full_url (API Required)",
+                    "method": "GET/POST (API Only)",
+                    "url": "full_url (API Only)",
+                    "action": "click/type/wait (UI Only)",
+                    "target": "Visual Element Name (UI Only)",
                     "body": "request_body_json (Optional)",
                     "expected_status_code": 200,
                     "json_assertions": {"key": "value"},
@@ -31,6 +33,19 @@ PRD_ANALYSIS_SYSTEM_PROMPT = """
         }
     ]
 }
+
+### ATOMIC ACTION RULES (FATAL):
+1. **NO COMPOUND ACTIONS**: Each step MUST contain ONLY ONE interaction.
+   - ❌ WRONG: "Input username and password then click login"
+   - ✅ RIGHT: Split into 3 steps: 
+     1. Action: type, Target: Username Input
+     2. Action: type, Target: Password Input
+     3. Action: click, Target: Login Button
+2. **VISUAL ANCHORING**: Verification MUST use specific visual elements.
+   - ❌ WRONG: "Verify login success"
+   - ✅ RIGHT: "Verify 'Products' title text appears" or "Verify Shopping Cart icon appears".
+3. **EXPLICIT WAIT**: After navigation or page transitions, you MUST generate a WAIT step.
+   - Example: After clicking Login, generate a step `{"action": "wait", "target": "Products list", "description": "Wait for page load"}`.
 
 ### FATAL RULE:
 EVERY API step MUST include an `expected_status_code` (usually 200 or 201) and specific `json_assertions` to verify the response body. 
@@ -43,6 +58,10 @@ Example Output:
 "expected_status_code": 500,
 "json_assertions": {"first_name": "孙悟空"}
 
+### UI SCENARIO RULE (FATAL):
+If the requirement implies a UI test (e.g., "login to website"), the FIRST step of the scenario MUST be a Navigation step.
+Description format: "Open [URL]" or "Navigate to [URL]".
+
 ### VARIABLE EXTRACTION & PASSING RULE (CRITICAL):
 When a multi-step scenario has DATA DEPENDENCIES between steps (e.g., step 2 needs an ID or token from step 1's response), you MUST:
 1. Add an `extract` field to the UPSTREAM step to capture values from its response.
@@ -50,7 +69,7 @@ When a multi-step scenario has DATA DEPENDENCIES between steps (e.g., step 2 nee
 3. If there is no data dependency, set `extract` to `{}`.
 4. **NAMING CONSISTENCY (FATAL)**: The key name in `extract` MUST be EXACTLY THE SAME as the `${var_name}` used in downstream steps. Example: if you use `${target_id}` in step 2's URL, then step 1 MUST extract `{"target_id": "..."}`, NOT `{"id": "..."}`.
 
-#### Few-Shot Example (Two-Step with Variable Passing):
+#### Few-Shot Example 1 (API Two-Step):
 Input: "先创建一个用户，再用返回的用户ID查询该用户详情"
 Output:
 {
@@ -81,6 +100,33 @@ Output:
         ]
     }]
 }
+
+#### Few-Shot Example 2 (UI Flow):
+Input: "登录 SauceDemo 网站并验证首页"
+Output:
+{
+    "scenarios": [{
+        "name": "SauceDemo 登录验证",
+        "description": "标准用户登录流程",
+        "priority": "P0",
+        "steps": [
+            {
+                "step_type": "UI",
+                "description": "Open https://www.saucedemo.com/",
+                "method": "NAVIGATE",
+                "url": "https://www.saucedemo.com/",
+                "extract": {}
+            },
+            {
+                "step_type": "UI",
+                "description": "输入用户名 standard_user 和密码 secret_sauce 并登录",
+                "method": "ACTION",
+                "url": "",
+                "extract": {}
+            }
+        ]
+    }]
+}
 """
 
 PRD_ANALYSIS_USER_TEMPLATE = """
@@ -98,23 +144,88 @@ PRD_ANALYSIS_USER_TEMPLATE = """
 
 TC_GENERATION_SYSTEM_PROMPT = """
 你是一个自动化测试用例生成专家。
-你的任务是基于测试场景描述和 API 定义，生成详细的 API 测试用例（API-IR 格式）。
+你的任务是基于测试场景描述和 API 定义，生成详细的 API 或 UI 测试用例。
 
 ### 任务要求
 1. 生成一个多步骤的测试用例 (`DraftTestCase`)。
-2. 每个步骤必须包含 `step_type`: "API" 或 "UI"。
-3. 每个步骤应包含：意图、方法/操作、URL/定位、请求体示例、预期结果。
-4. **FATAL RULE**: API 步骤必须包含 `expected_status_code` (e.g. 200, 403) 和 `json_assertions`。
-5. 确保测试用例逻辑连贯，步骤之间的数据依赖（如 Token）需要体现。
-6. **CRITICAL ASSERTION RULE**:
-Do NOT rely on separate assertion fields. You MUST append assertions to the END of the description string using this exact format:
-||ASSERT:STATUS=500||ASSERT:JSON={"data.first_name": "孙悟空"}||
-7. **VARIABLE EXTRACTION RULE (CRITICAL)**:
+2. 每个步骤必须明确 `step_type`: "API" 或 "UI"。
+3. **STRICT SCHEMA ENFORCEMENT**:
+   - **API Steps**: Must include `method`, `url_path`, `expected_status_code`, `json_assertions`.
+   - **UI Steps**: Must include `action`, `target`. Optional `value`.
+   - **DO NOT MIX FIELDS**: UI steps cannot have `method` or `json_assertions`.
+
+### ATOMIC ACTION RULES (FATAL):
+1. **NO COMPOUND ACTIONS**: Each step MUST contain ONLY ONE interaction.
+   - ❌ WRONG: "Input username and password then click login"
+   - ✅ RIGHT: Split into 3 steps: 
+     1. Action: type, Target: Username Input
+     2. Action: type, Target: Password Input
+     3. Action: click, Target: Login Button
+2. **VISUAL ANCHORING**: Verification MUST use specific visual elements.
+   - ❌ WRONG: "Verify login success"
+   - ✅ RIGHT: "Verify 'Products' title text appears" or "Verify Shopping Cart icon appears".
+3. **EXPLICIT WAIT**: After navigation or page transitions, you MUST generate a WAIT step.
+   - Example: After clicking Login, generate a step `{"action": "wait", "target": "Products list", "description": "Wait for page load"}`.
+
+### Variable & Dependency Rule:
 When steps have DATA DEPENDENCIES (e.g., step 2 needs an ID/token from step 1), you MUST:
-   - Add `extract` to the UPSTREAM step: `"extract": {"var_name": "json_path"}`
-   - Use `${var_name}` in the DOWNSTREAM step's `url_path`, `headers`, or `input_data`.
-   - If no dependency exists, set `"extract": {}`.
-   - **NAMING CONSISTENCY (FATAL)**: The key in `extract` MUST EXACTLY MATCH the `${var_name}` in downstream steps. If step 2 uses `${target_id}`, then step 1 must extract `{"target_id": "..."}`, NOT `{"id": "..."}`.
+- **API**: Add `extract` to the UPSTREAM step: `"extract": {"var_name": "json_path"}`
+- **UI**: UI steps usually do not return JSON, but if they extract text, use `"extract": {"var_name": "element_text"}` (Not commonly used yet).
+- Use `${var_name}` in the DOWNSTREAM step.
+
+### UI Step Rules (FATAL):
+1. **MANDATORY START**: The FIRST step of any UI test case MUST be `action: "goto"`!
+   - You MUST put the target URL in the `value` field.
+   - Example: `{"action": "goto", "value": "https://www.google.com", "target": "Browser Address Bar"}`
+2. **Strict Schema**:
+   - `action`: Only use "goto", "click", "type", "assert", "scroll", "hover", "wait".
+   - `target`: Describe the element visually (e.g., "Login Button", "Search Bar").
+   - `value`: Use for "type" (input text) or "goto" (URL).
+
+### Few-Shot Examples (Standard):
+1. **API Step**:
+   {
+       "step_id": "step1",
+       "intent": "Create User",
+       "step_type": "API",
+       "method": "POST",
+       "url_path": "/api/users",
+       "description": "Create a new user",
+       "input_data": {"username": "test"},
+       "expected_status_code": 201,
+       "json_assertions": {"id": 123},
+       "extract": {"user_id": "id"}
+   }
+
+2. **UI Test Flow (Start with GOTO)**:
+   [
+       {
+           "step_id": "step1",
+           "intent": "Open Page",
+           "step_type": "UI",
+           "action": "goto",
+           "target": "Browser Address Bar",
+           "value": "https://www.saucedemo.com/",
+           "description": "Navigate to the site"
+       },
+       {
+           "step_id": "step2",
+           "intent": "Login",
+           "step_type": "UI",
+           "action": "type",
+           "target": "Username Input",
+           "value": "standard_user",
+           "description": "Enter username"
+       },
+       {
+           "step_id": "step3",
+           "intent": "Submit",
+           "step_type": "UI",
+           "action": "click",
+           "target": "Login Button",
+           "description": "Click login"
+       }
+   ]
 
 ### 输出格式
 请严格遵守以下 JSON 格式输出，不要包含任何 Markdown 代码块标记：
@@ -124,28 +235,24 @@ When steps have DATA DEPENDENCIES (e.g., step 2 needs an ID/token from step 1), 
     "steps": [
         {
             "step_id": "step1",
-            "intent": "创建资源并提取ID",
+            "intent": "创建资源",
             "step_type": "API",
             "method": "POST",
             "url_path": "/api/users",
-            "description": "创建用户并提取返回的用户ID",
+            "description": "...",
             "input_data": {"name": "test"},
-            "expected_outcome": "...",
             "expected_status_code": 201,
             "json_assertions": {},
             "extract": {"user_id": "data.id"}
         },
         {
             "step_id": "step2",
-            "intent": "使用提取的ID查询资源",
-            "step_type": "API",
-            "method": "GET",
-            "url_path": "/api/users/${user_id}",
-            "description": "用提取的user_id查询用户详情",
-            "expected_outcome": "...",
-            "expected_status_code": 200,
-            "json_assertions": {"data.name": "test"},
-            "extract": {}
+            "intent": "UI登录",
+            "step_type": "UI",
+            "action": "type",
+            "target": "Username Input",
+            "value": "${user_id}",
+            "description": "输入刚才创建的用户ID"
         }
     ]
 }

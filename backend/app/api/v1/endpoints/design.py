@@ -6,6 +6,7 @@ Exposes Neural Design Service capabilities via REST API.
 
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.services.neural_design.service import DesignService
@@ -44,12 +45,45 @@ async def analyze_prd(
     service: DesignService = Depends(get_design_service)
 ):
     try:
-        scenarios = await service.analyze_requirement(request)
+        import asyncio
+        from app.core.config import settings
+        logger.info(f"Design Analysis Request [START]: Project={request.project_id}, Type={request.target_type}, Model={settings.MODEL_NEURAL_SCENARIO}")
+        
+        logger.info("准备调用大模型 API (via Service)...")
+        # Enforce 120s timeout to allow for long generation times (and retries)
+        scenarios = await asyncio.wait_for(service.analyze_requirement(request), timeout=120.0)
+        
+        logger.info(f"Design Analysis Request [SUCCESS]: Generated {len(scenarios)} scenarios.")
         return scenarios
+        
+    except asyncio.CancelledError:
+        logger.warning("客户端已主动断开连接 (CancelledError)！LLM 调用可能仍在后台运行或已卡死。")
+        print("CRITICAL WARNING: Request Cancelled by Client (Disconnected)")
+        raise
+        
+    except asyncio.TimeoutError:
+        error_detail = "Design Analysis Timed Out (120s limit reached)"
+        logger.error(error_detail)
+        print(f"CRITICAL ERROR: {error_detail}")
+        return JSONResponse(
+            status_code=504,
+            content={"detail": error_detail, "type": "TimeoutError"}
+        )
+
     except Exception as e:
+        import traceback
+        error_detail = f"Requirement analysis failed: {str(e)}"
         logger.error(f"Design Analysis Failed: {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Requirement analysis failed: {str(e)}")
+        
+        # Force print to stdout for debugging
+        print(f"CRITICAL ERROR: {error_detail}")
+        print(traceback.format_exc())
+        
+        return JSONResponse(
+            status_code=500,
+            content={"detail": error_detail, "type": type(e).__name__}
+        )
 
 @router.post(
     "/generate", 

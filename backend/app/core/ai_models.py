@@ -15,6 +15,7 @@ class ModelProvider(str, Enum):
     DASHSCOPE = "dashscope"  # 阿里云百炼
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
+    GEMINI = "gemini"  # Custom OpenAI Provider
     LOCAL = "local"  # 本地模型 (Ollama)
 
 
@@ -212,6 +213,16 @@ AVAILABLE_MODELS = {
         description="通义文本向量模型 V4",
         cost_per_1k_tokens=0.0005,
     ),
+
+    # === Custom Gemini ===
+    "gemini-3-pro-high": ModelConfig(
+        model_id="gemini-3-pro-high",
+        provider=ModelProvider.GEMINI,
+        capability=ModelCapability.TEXT,
+        max_tokens=8192,
+        temperature=0.7,
+        description="Gemini 3 Pro High - Custom Provider",
+    ),
 }
 
 
@@ -255,9 +266,9 @@ class AIModule(str, Enum):
 # 默认模型映射配置
 DEFAULT_MODEL_MAPPING = {
     # === 神经设计层 - 需要高智能 ===
-    AIModule.NEURAL_INTENT_PARSER: "qwen3.5-plus",
-    AIModule.NEURAL_SCENARIO_GENERATOR: "qwen3.5-plus",
-    AIModule.NEURAL_CRITIC: "qwen3.5-plus",
+    AIModule.NEURAL_INTENT_PARSER: "qwen3-max",
+    AIModule.NEURAL_SCENARIO_GENERATOR: "qwen3-max",
+    AIModule.NEURAL_CRITIC: "qwen3-max",
     
     # === 右瞳引擎 - 需要视觉能力 ===
     AIModule.RIGHT_PUPIL_PLANNER: "qwen3.5-plus",
@@ -299,9 +310,49 @@ def get_model_for_module(
     Returns:
         ModelConfig: 模型配置
     """
-    model_id = override or DEFAULT_MODEL_MAPPING.get(module, "qwen-plus")
+    # Priority: 1. Override arg, 2. AI_MODELS Default Mapping (Code Config), 3. External Config
+    # User Request: Prioritize ai_models.py config
+    if override:
+        model_id = override
+    elif module in DEFAULT_MODEL_MAPPING:
+        model_id = DEFAULT_MODEL_MAPPING[module]
+    else:
+        # Fallback to config only if not defined in code mapping
+        try:
+            from app.core.config import settings
+            config_mapping = {
+                AIModule.NEURAL_INTENT_PARSER: settings.MODEL_NEURAL_INTENT,
+                AIModule.NEURAL_SCENARIO_GENERATOR: settings.MODEL_NEURAL_SCENARIO,
+                AIModule.NEURAL_CRITIC: settings.MODEL_NEURAL_CRITIC,
+                
+                AIModule.RIGHT_PUPIL_PLANNER: settings.MODEL_RIGHT_PUPIL_PLANNER,
+                AIModule.RIGHT_PUPIL_GROUNDING: settings.MODEL_RIGHT_PUPIL_VL,
+                AIModule.RIGHT_PUPIL_VERIFY: settings.MODEL_RIGHT_PUPIL_VL,
+                
+                AIModule.LEFT_PUPIL_CHAIN_INFERENCE: settings.MODEL_LEFT_PUPIL_CHAIN,
+                AIModule.LEFT_PUPIL_PARAM_GEN: settings.MODEL_LEFT_PUPIL_PARAM,
+                
+                AIModule.PHOENIX_CODE_GEN: settings.MODEL_PHOENIX_CODEGEN,
+                AIModule.PHOENIX_CODEGEN: settings.MODEL_PHOENIX_CODEGEN,
+                
+                AIModule.DEFECT_ROOT_CAUSE: settings.MODEL_DEFECT_ANALYSIS,
+                AIModule.DEFECT_ANALYSIS: settings.MODEL_DEFECT_ANALYSIS,
+                
+                AIModule.GENERAL_CHAT: settings.MODEL_GENERAL_CHAT,
+                AIModule.GENERAL_SUMMARY: settings.MODEL_GENERAL_LONG,
+                AIModule.RAG_EMBEDDING: settings.MODEL_EMBEDDING,
+            }
+            model_id = config_mapping.get(module)
+        except ImportError:
+            model_id = None
+            
+    if not model_id:
+        model_id = "qwen-plus" # Absolute fallback
     
     if model_id not in AVAILABLE_MODELS:
+        # Fallback to a known safe model if configured model is missing (e.g. typo in config)
+        if "qwen-plus" in AVAILABLE_MODELS:
+            return AVAILABLE_MODELS["qwen-plus"]
         raise ValueError(f"未知模型: {model_id}")
     
     return AVAILABLE_MODELS[model_id]

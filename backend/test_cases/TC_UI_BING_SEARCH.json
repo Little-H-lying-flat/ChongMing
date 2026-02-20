@@ -1,0 +1,34 @@
+{
+    "id": "TC_UI_BING_SEARCH",
+    "name": "Bing Search - AI Agent Framework",
+    "mode": "UI",
+    "steps": [
+        {
+            "type": "UI",
+            "action": "navigate", 
+            "params": {"url": "https://www.bing.com"}
+        },
+        {
+            "type": "UI",
+            "action": "type",
+            "target": {"strategy": "dom", "value": "#sb_form_q"},
+            "params": {"text": "AI Agent Framework"}
+        },
+        {
+            "type": "UI",
+            "action": "press",
+            "target": {"strategy": "dom", "value": "#sb_form_q"},
+            "params": {"key": "Enter"}
+        },
+        {
+            "type": "UI",
+            "action": "wait",
+            "params": {"seconds": 3}
+        },
+        {
+            "type": "UI",
+            "action": "screenshot",
+            "params": {"name": "bing_search_result"}
+        }
+    ]
+}

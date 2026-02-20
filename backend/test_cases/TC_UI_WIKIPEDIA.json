@@ -1,0 +1,28 @@
+{
+    "id": "TC_UI_WIKIPEDIA",
+    "name": "Wikipedia Random Article",
+    "mode": "UI",
+    "steps": [
+        {
+            "type": "UI",
+            "action": "navigate",
+            "params": {
+                "url": "https://en.wikipedia.org/wiki/Special:Random"
+            }
+        },
+        {
+            "type": "UI",
+            "action": "wait",
+            "params": {
+                "seconds": 2
+            }
+        },
+        {
+            "type": "UI",
+            "action": "screenshot",
+            "params": {
+                "name": "wiki_random"
+            }
+        }
+    ]
+}
