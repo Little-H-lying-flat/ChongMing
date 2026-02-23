@@ -30,8 +30,7 @@ class VectorStore:
             return
 
         try:
-            # Parse host/port from config? Or use default
-            # settings.MILVUS_HOST, settings.MILVUS_PORT
+            # Docker Compose: `milvus`, Local port forward: `localhost`
             host = getattr(settings, "MILVUS_HOST", "localhost")
             port = getattr(settings, "MILVUS_PORT", "19530")
             
@@ -41,8 +40,8 @@ class VectorStore:
             self._init_collection()
             logger.info("Connected to Milvus successfully.")
         except Exception as e:
-            logger.error(f"Failed to connect to Milvus: {e}")
-            # Don't raise, allow app to run without Milvus (soft failure)
+            logger.warning(f"Failed to connect to Milvus: {e}. Semantic defect search will be disabled.")
+            self._connected = False
 
     def _init_collection(self):
         """初始化集合 (如果不存在则创建)"""

@@ -21,6 +21,9 @@ class TCIR:
     steps: List[dict]
     priority: str = "P1"
     tags: List[str] = None
+    description: Optional[str] = None
+    dependencies: List[str] = None
+    variables: dict = None
 
 @dataclass
 class StepResult:

@@ -41,7 +41,7 @@ class TestHealthChecker:
             mock_context.__aexit__ = AsyncMock(return_value=None)
             mock_client.return_value = mock_context
 
-            result = await checker._check_url("https://example.com")
+            result = await checker._check_url(mock_context, "https://example.com")
 
             assert result.status == "healthy"
             assert result.latency_ms is not None
@@ -60,7 +60,7 @@ class TestHealthChecker:
             mock_context.__aexit__ = AsyncMock(return_value=None)
             mock_client.return_value = mock_context
 
-            result = await checker._check_url("https://example.com")
+            result = await checker._check_url(mock_context, "https://example.com")
 
             assert result.status == "unhealthy"
             assert "HTTP 500" in result.error
@@ -77,7 +77,7 @@ class TestHealthChecker:
             mock_context.__aexit__ = AsyncMock(return_value=None)
             mock_client.return_value = mock_context
 
-            result = await checker._check_url("https://example.com")
+            result = await checker._check_url(mock_context, "https://example.com")
 
             assert result.status == "unhealthy"
             assert "timeout" in result.error.lower()
@@ -94,7 +94,7 @@ class TestHealthChecker:
             mock_context.__aexit__ = AsyncMock(return_value=None)
             mock_client.return_value = mock_context
 
-            result = await checker._check_url("https://example.com")
+            result = await checker._check_url(mock_context, "https://example.com")
 
             assert result.status == "unhealthy"
             assert "Connection" in result.error

@@ -5,15 +5,21 @@ Exposes Neural Design Service capabilities via REST API.
 """
 
 from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, UploadFile, File
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+import fitz # PyMuPDF
+import json
 
 from app.services.neural_design.service import DesignService
 from app.services.neural_design.models import DesignRequest, RefinedTestCase
 from app.core.ai_client import get_ai_manager
 from app.services.left_pupil.rag_retriever import RagRetriever
 from app.core.logging import logger
+from app.core.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.models.environment import Environment
 import traceback
 
 router = APIRouter(tags=["Flow 1: Neural Design (需求解析)"])
@@ -24,6 +30,53 @@ def get_design_service() -> DesignService:
     # In a real app, we might want to cache this or use a proper DI container
     # Since DesignService holds references to stateless/singleton clients, instantiation is cheap
     return DesignService(ai_manager=get_ai_manager(), retriever=RagRetriever())
+
+
+@router.post(
+    "/upload",
+    summary="解析上传文档 (Parse Uploaded Document)",
+    description="支持解析 .md, .pdf 和 Swagger .json 文件内容为纯文本提取。"
+)
+async def upload_document(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        filename = file.filename.lower()
+        
+        extracted_text = ""
+        file_type = "unknown"
+        
+        if filename.endswith(".md") or filename.endswith(".txt"):
+            extracted_text = content.decode("utf-8")
+            file_type = "markdown"
+        elif filename.endswith(".pdf"):
+            # Use PyMuPDF to extract text
+            doc = fitz.open(stream=content, filetype="pdf")
+            for page in doc:
+                extracted_text += page.get_text() + "\n"
+            doc.close()
+            file_type = "pdf"
+        elif filename.endswith(".json"):
+            # Could be Swagger/OpenAPI or just regular JSON
+            json_data = json.loads(content.decode("utf-8"))
+            extracted_text = json.dumps(json_data, ensure_ascii=False, indent=2)
+            file_type = "json"
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload .md, .pdf, or .json")
+            
+        return {
+            "filename": file.filename,
+            "file_type": file_type,
+            "extracted_text": extracted_text.strip()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to parse uploaded file: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"File parsing failed: {str(e)}")
+
 
 @router.post(
     "/analyze", 
@@ -42,11 +95,31 @@ def get_design_service() -> DesignService:
 )
 async def analyze_prd(
     request: DesignRequest,
-    service: DesignService = Depends(get_design_service)
+    service: DesignService = Depends(get_design_service),
+    db: AsyncSession = Depends(get_db)
 ):
     try:
         import asyncio
         from app.core.config import settings
+        
+        # Inject default environment Base URL into the context
+        env_stmt = select(Environment).where(Environment.is_default == True, Environment.is_active == True)
+        env_result = await db.execute(env_stmt)
+        default_env = env_result.scalar_one_or_none()
+        
+        if not default_env:
+            # Fallback to the first active environment if no default is marked
+            fallback_stmt = select(Environment).where(Environment.is_active == True).limit(1)
+            fallback_result = await db.execute(fallback_stmt)
+            default_env = fallback_result.scalar_one_or_none()
+        
+        env_context = ""
+        base_url = default_env.base_url if default_env and getattr(default_env, "base_url", None) else "http://127.0.0.1:8000"
+        
+        env_context = f"\n\n[系统当前测试环境]\nAPI Base URL: {base_url}\n绝对原则：你生成的所有 API 请求路径必须是完整的绝对路径（即必须以 http:// 或 https:// 开头）。请将此 Base URL 与具体接口路径拼接，绝不能只输出相对路径（如 /health），也绝不能自行编造绝对无效的占位符域名（如 api.example.com）。"
+        
+        request.context = (request.context or "") + env_context
+        
         logger.info(f"Design Analysis Request [START]: Project={request.project_id}, Type={request.target_type}, Model={settings.MODEL_NEURAL_SCENARIO}")
         
         logger.info("准备调用大模型 API (via Service)...")

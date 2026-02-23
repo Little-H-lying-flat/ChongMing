@@ -1,0 +1,18 @@
+﻿--- Execution EXEC_45528593 ---
+  Step ID: 102
+    Status: FAILED
+    tc_id: SC-f4aa7b29
+    step_results: {"steps": [{"step_index": 0, "success": false, "duration_ms": 11000.58913230896, "screenshot": null, "error": "Connection Error: ", "details": {"step_name": "Send GET request to health endpoint", "step_type": "API", "request": {"url": "https://api.example.com/health", "method": "GET", "headers": {}, "body": ""}, "response": {"status": 0, "headers": {}, "body": ""}, "extracted": {}, "assertions_failed": []}, "description": "Send GET request to health endpoint"}], "variable_trace": []}
+    start_time: 2026-02-21 03:40:38.887407
+    end_time: 2026-02-21 03:40:38.887407
+    duration_ms: 11002.052068710327
+    screenshots: []
+--- Execution EXEC_21F54914 ---
+  Step ID: 103
+    Status: FAILED
+    tc_id: SC-302c3d16
+    step_results: {"steps": [{"step_index": 0, "success": false, "duration_ms": 12028.342723846436, "screenshot": null, "error": "Connection Error: ", "details": {"step_name": "\u8c03\u7528\u5065\u5eb7\u68c0\u67e5\u63a5\u53e3", "step_type": "API", "request": {"url": "https://api.example.com/health", "method": "GET", "headers": {}, "body": ""}, "response": {"status": 0, "headers": {}, "body": ""}, "extracted": {}, "assertions_failed": []}, "description": "\u8c03\u7528\u5065\u5eb7\u68c0\u67e5\u63a5\u53e3"}], "variable_trace": []}
+    start_time: 2026-02-21 03:42:51.062460
+    end_time: 2026-02-21 03:42:51.062460
+    duration_ms: 12029.42156791687
+    screenshots: []

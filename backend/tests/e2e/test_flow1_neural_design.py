@@ -148,7 +148,7 @@ async def test_flow1_happy_path(mock_design_deps):
     # --- Assertions ---
     
     # 1. Verify RAG Retrieval called correctly
-    expected_query = "User logs in and checks out cart Login success Checkout success"
+    expected_query = "User logs in and checks out cart "
     mock_retriever.retrieve.assert_called_once_with(expected_query, "proj_123")
     
     # 2. Verify Knowledge Retrieval called

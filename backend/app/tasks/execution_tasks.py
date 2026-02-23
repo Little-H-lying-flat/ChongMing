@@ -14,8 +14,8 @@ def execute_test_cases(
     self,
     execution_id: str,
     tc_ids: List[str],
-    config: dict = None,
-    dynamic_payload: List[dict] = None, # Renamed from adhoc_cases
+    config: dict | None = None,
+    dynamic_payload: List[dict] | None = None, # Renamed from adhoc_cases
 ):
     """
     执行测试用例 (Orchestrator Task)
@@ -52,7 +52,7 @@ def execute_test_cases(
             except Exception as e:
                 logger.error(f"Failed to update execution record: {e}")
 
-        async def _safe_create_step(tc_id, status, result, duration=0.0, error=None):
+        async def _safe_create_step(tc_id, status, result, duration=0.0, error: str | None = None):
             try:
                 await ExecutionService.create_step_result(execution_id, tc_id, status, result, duration, error)
             except Exception as e:
@@ -89,7 +89,28 @@ def execute_test_cases(
                         except Exception as e:
                             logger.error(f"Failed to parse dynamic case {tc_id}: {e}")
 
-                # 2. Fallback to Loader (DB/File)
+                # 2. Try loading from Database
+                if not tc_ir:
+                    from app.core.database import get_db_session
+                    from sqlalchemy import select
+                    from app.models.test_case import TestCase
+                    try:
+                        async with get_db_session() as session:
+                            stmt = select(TestCase).where(TestCase.id == tc_id)
+                            tc_record = (await session.execute(stmt)).scalar_one_or_none()
+                            if tc_record:
+                                tc_dict = tc_record.to_tcir()
+                                # Convert mode string to enum if necessary for Pydantic
+                                try:
+                                    if isinstance(tc_dict.get("mode"), str):
+                                        tc_dict["mode"] = ExecutionMode(tc_dict["mode"])
+                                except Exception:
+                                    tc_dict["mode"] = ExecutionMode.UI
+                                tc_ir = TCIR(**tc_dict)
+                    except Exception as e:
+                        logger.error(f"[{tc_id}] DB Load Failed: {e}")
+
+                # 3. Fallback to Legacy Loader (DB/File Mocks)
                 if not tc_ir:
                     tc_ir = TestCaseLoader.load(tc_id)
                 
@@ -111,15 +132,18 @@ def execute_test_cases(
                     # Lazy Initialization: CHECK IF UI ENGINE IS NEEDED (STRICT)
                     dataset_steps = tc_ir.steps if isinstance(tc_ir.steps, list) else []
                     
-                    ui_needed = False
-                    for s in dataset_steps:
-                        # Handle both dict and object (attribute) access
-                        s_type = s.get("step_type") if isinstance(s, dict) else getattr(s, "step_type", None)
-                        
-                        # Strict matching: ONLY if step_type is explicitly "UI"
-                        if s_type == "UI":
-                            ui_needed = True
-                            break
+                    mode_str = getattr(tc_ir.mode, "value", str(tc_ir.mode))
+                    ui_needed = mode_str in ("UI", "HYBRID", "ExecutionMode.UI", "ExecutionMode.HYBRID")
+                    
+                    if not ui_needed:
+                        for s in dataset_steps:
+                            # Handle both dict and object (attribute) access
+                            s_type = s.get("step_type") if isinstance(s, dict) else getattr(s, "step_type", None)
+                            
+                            # Strict matching: ONLY if step_type is explicitly "UI"
+                            if s_type == "UI":
+                                ui_needed = True
+                                break
                     
                     if ui_needed:
                          logger.info(f"[{tc_id}] Initializing RightPupilEngine (UI Steps Detected)...")
@@ -130,7 +154,7 @@ def execute_test_cases(
 
                     async with left_pupil: # Context manager for HTTP client
                         logger.info(f"[{tc_id}] Executing...")
-                        result = await dispatcher.execute(tc_ir)
+                        result = await dispatcher.execute(tc_ir, execution_id)
                     
                 except Exception as e:
                     logger.error(f"[{tc_id}] Failed: {e}")
@@ -218,10 +242,13 @@ def execute_test_cases(
                     logger.error(f"Failed to report background crash to DB: {db_e}")
 
         try:
-            # Check if loop exists
+            # Check if loop exists (Python 3.12+ compatible)
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
             except RuntimeError:
+                loop = None
+            
+            if loop is None:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
@@ -236,7 +263,15 @@ def execute_test_cases(
                 }
             else:
                 # Worker Mode: No running loop, run blocking.
-                results, summary = loop.run_until_complete(safe_main_loop())
+                outcome = loop.run_until_complete(safe_main_loop())
+                if outcome is None:
+                    # safe_main_loop caught an exception internally
+                    return {
+                        "execution_id": execution_id,
+                        "status": "error",
+                        "info": "Execution crashed, see logs"
+                    }
+                results, summary = outcome
                 return {
                     "execution_id": execution_id,
                     "status": "completed",

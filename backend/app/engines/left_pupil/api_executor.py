@@ -41,7 +41,7 @@ class APIExecutor:
     
     async def __aenter__(self):
         """异步上下文管理器入口"""
-        self._client = httpx.AsyncClient(timeout=self.timeout)
+        self._client = httpx.AsyncClient(timeout=self.timeout, trust_env=False)
         return self
     
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -124,7 +124,7 @@ class APIExecutor:
             
             # 2. 发送请求
             if not self._client:
-                self._client = httpx.AsyncClient(timeout=self.timeout)
+                self._client = httpx.AsyncClient(timeout=self.timeout, trust_env=False)
             
             response = await self._client.request(
                 method=api_ir.method,

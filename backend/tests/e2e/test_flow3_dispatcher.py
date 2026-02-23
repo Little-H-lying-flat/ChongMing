@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, AsyncMock, patch, call
 from app.tasks.execution_tasks import execute_test_cases
 from app.schemas.execution import TCIR, ExecutionMode, StepResult as SchemaStepResult
 from app.models.execution import ExecutionStatus
@@ -16,60 +16,77 @@ def create_mock_tcir(tc_id, mode, steps):
         steps=steps
     )
 
+class AsyncContextManagerMock(MagicMock):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        return False
+
 @pytest.fixture
 def mock_dispatcher_deps():
     """
     Setup mocks globally for execution_tasks imports.
-    We patch where the class IS IMPORTED in execution_tasks or where it exists.
-    Since execution_tasks uses local imports, we patch the source modules.
+    
+    Key insight: execution_tasks.py imports ExecutionService INSIDE the function body
+    and calls its methods as CLASS-LEVEL static methods, e.g.:
+        ExecutionService.update_execution_status(...)
+        ExecutionService.create_step_result(...)
+    So we must patch the class and set up AsyncMock on the class-level attributes.
     """
     with patch("app.engines.runner.tc_loader.TestCaseLoader") as mock_loader, \
-         patch("app.engines.right_pupil.RightPupilEngine") as mock_right_cls, \
-         patch("app.engines.left_pupil.LeftPupilEngine") as mock_left_cls, \
+         patch("app.engines.right_pupil.RightPupilEngine", new_callable=AsyncContextManagerMock) as mock_right_cls, \
+         patch("app.engines.left_pupil.LeftPupilEngine", new_callable=AsyncContextManagerMock) as mock_left_cls, \
          patch("app.services.execution_service.ExecutionService") as mock_exec_service:
          
-        # 1. Setup Mock Engines
+        # 1. Setup Mock Engines using AsyncContextManagerMock
         mock_right = mock_right_cls.return_value
         mock_left = mock_left_cls.return_value
         
-        # Custom Result Class to avoid MagicMock 'assert' attribute issues
-        class MockResult:
-            def __init__(self, success=True, status="passed", error=None):
+        # Right Pupil (UI) Mock
+        async def right_async_success(*args, **kwargs):
+            return {
+                "success": True,
+                "status": "success",
+                "screenshot_after": "fake_base64_data",
+                "screenshot_before": "fake_base64_data",
+                "duration_ms": 100,
+                "page_url": "http://localhost",
+                "page_title": "Test Page",
+                "strategy": "visual"
+            }
+        
+        mock_right.execute_step.side_effect = right_async_success
+        mock_right.start_session = AsyncMock()
+        mock_right.stop_session = AsyncMock()
+        
+        # Left Pupil (API) Mock
+        class LeftMockResult:
+            def __init__(self, success=True, status="passed"):
                 self.success = success
                 self.status = status
-                self.step_results = []
+                self.response = MagicMock(
+                    status_code=200, 
+                    request_url="/test", 
+                    request_method="GET",
+                    headers={"Content-Type": "application/json"},
+                    body="{}"
+                )
                 self.total_duration_ms = 100
-                self.screenshot = None
-                self.screenshot_after = None # Required by Dispatcher
-                self.error = error
-                self.strategy_used = MagicMock()
-                self.strategy_used.value = "visual"
-                self.assertions_failed = [] # For API result
-                self.response = MagicMock(status_code=200) # For API result
-
-        # Async mocks for start/stop/execute
-        async def async_success(*args, **kwargs):
-            return MockResult(success=True, status="passed")
-
-        async def async_failure(*args, **kwargs):
-            return MockResult(success=False, status="failed", error="Mock Error")
+                self.error = None
+                self.assertions_failed = []
+                self.extracted_values = {}
+                
+        async def left_async_success(*args, **kwargs):
+            return LeftMockResult(success=True)
             
-        async def async_noop(*args, **kwargs):
-            return None
-
-        # Helper to set side effects dynamically
-        mock_right.execute = MagicMock(side_effect=async_success)
-        mock_right.start_session = MagicMock(side_effect=async_noop)
-        mock_right.stop_session = MagicMock(side_effect=async_noop)
+        mock_left.execute.side_effect = left_async_success
         
-        mock_left.execute = MagicMock(side_effect=async_success)
-        mock_left.__aenter__ = MagicMock(side_effect=async_noop)
-        mock_left.__aexit__ = MagicMock(side_effect=async_noop)
-        
-        # 2. Setup ExecutionService (Async methods)
-        mock_exec_service.create_execution = MagicMock(side_effect=async_noop)
-        mock_exec_service.update_execution_status = MagicMock(side_effect=async_noop)
-        mock_exec_service.create_step_result = MagicMock(side_effect=async_noop)
+        # 2. Setup ExecutionService — these are STATIC/CLASS methods
+        #    The production code calls e.g. ExecutionService.update_execution_status(...)
+        #    So we set AsyncMock directly on the class mock's attributes.
+        mock_exec_service.update_execution_status = AsyncMock(return_value=None)
+        mock_exec_service.create_step_result = AsyncMock(return_value=None)
         
         yield {
             "loader": mock_loader,
@@ -81,7 +98,9 @@ def mock_dispatcher_deps():
 def test_flow3_happy_path_mixed_dispatch(mock_dispatcher_deps):
     """
     Flow 3 Scenario A: Happy Path (Mixed Mode)
-    Verify Dispatcher calls RightPupil (Step 1) then LeftPupil (Step 2).
+    - Step 1 (UI) succeeds via RightPupilEngine
+    - Step 2 (API) succeeds via LeftPupilEngine
+    - Final status: PASSED
     """
     loader = mock_dispatcher_deps["loader"]
     right_engine = mock_dispatcher_deps["right"]
@@ -90,47 +109,39 @@ def test_flow3_happy_path_mixed_dispatch(mock_dispatcher_deps):
     
     # 1. Mock TC Loading
     steps = [
-        {"type": "UI", "action": "click", "target": {"strategy": "visual"}},
-        {"type": "API", "method": "GET", "url": "/test"}
+        {"type": "UI", "id": "step_1", "action": "click", "target": {"strategy": "visual"}},
+        {"type": "API", "id": "step_2", "method": "GET", "url": "/test"}
     ]
     tc_ir = create_mock_tcir("TC_MIXED", ExecutionMode.HYBRID, steps)
     loader.load.return_value = tc_ir
     
-    # 2. Run Task (Synchronously via apply)
-    # Note: execute_test_cases creates its own loop via asyncio.run
-    task_res = execute_test_cases.apply(args=[["TC_MIXED"]], kwargs={"config": {"parallel": False}})
+    # 2. Run Task 
+    task_res = execute_test_cases.apply(args=["mock-exec-1", ["TC_MIXED"]], kwargs={"config": {"parallel": False}})
     
     # 3. Assertions
-    
-    # Verify TC Loaded
     loader.load.assert_called_with("TC_MIXED")
     
-    # Verify RightPupil called for Step 1
-    assert right_engine.execute.call_count == 1
-    # Check arg type if needed, but call_count is good
+    # Verify RightPupil called for UI Step 1
+    assert right_engine.execute_step.call_count == 1
     
-    # Verify LeftPupil called for Step 2
+    # Verify LeftPupil called for API Step 2
     assert left_engine.execute.call_count == 1
     
-    # Verify ExecutionService usage
-    # create_execution called once
-    assert exec_service.create_execution.call_count == 1
-    
-    # create_step_result called once per Test Case (ExecutionStep table maps to TC)
+    # Verify create_step_result was called (persists the TC result)
     assert exec_service.create_step_result.call_count == 1
     
     # Verify the step results contain 2 steps
     step_call = exec_service.create_step_result.call_args
     args, _ = step_call
-    # args: (execution_id, tc_id, status, result_dict, duration, error)
-    result_dict = args[3]
+    result_dict = args[3]  # 4th positional arg is the result dict
     assert "steps" in result_dict
-    assert len(result_dict["steps"]) == 2 # 2 internal steps passed
-    # Args: (execution_id, status, summary, duration)
+    assert len(result_dict["steps"]) == 2 
+    
+    # Verify Final Status PASSED via update_execution_status
     update_call = exec_service.update_execution_status.call_args
     assert update_call is not None
     args, _ = update_call
-    assert args[1] == ExecutionStatus.PASSED # Status is 2nd arg
+    assert args[1] == ExecutionStatus.PASSED 
     assert args[2]["passed"] == 1
     assert args[2]["failed"] == 0
 
@@ -147,44 +158,34 @@ def test_flow3_error_path_circuit_breaker(mock_dispatcher_deps):
     
     # 1. Mock TC
     steps = [
-        {"type": "UI", "action": "click"}, # Will Fail
-        {"type": "API", "method": "GET"}   # Should Skip
+        {"type": "UI", "id": "step_1", "action": "click"}, # Will Fail
+        {"type": "API", "id": "step_2", "method": "GET"}   # Should Skip
     ]
     tc_ir = create_mock_tcir("TC_FAIL", ExecutionMode.HYBRID, steps)
     loader.load.return_value = tc_ir
     
     # 2. Configure Right Engine to Fail
-    async def async_fail(*args, **kwargs):
-        res = MagicMock()
-        res.success = False
-        res.status = "failed"
-        res.step_results = []
-        res.total_duration_ms = 50
-        res.error = "Simulated UI Failure"
-        res.screenshot = None
-        # Start/End strategy val
-        res.strategy_used.value = "visual"
-        return res
-    right_engine.execute.side_effect = async_fail
+    async def right_async_fail(*args, **kwargs):
+        return {
+            "status": "failed", 
+            "error": "UI Error", 
+            "duration_ms": 50,
+            "screenshot_after": None,
+            "screenshot_before": None
+        }
+    right_engine.execute_step.side_effect = right_async_fail
     
     # 3. Run Task
-    result = execute_test_cases.apply(args=[["TC_FAIL"]], kwargs={"config": {"parallel": False}})
+    result = execute_test_cases.apply(args=["mock-exec-2", ["TC_FAIL"]], kwargs={"config": {"parallel": False}})
     
     # 4. Assertions
-    
-    # Verify RightPupil called (Step 1)
-    assert right_engine.execute.call_count == 1
-    
-    # Verify LeftPupil NOT called (Step 2 Skipped)
+    assert right_engine.execute_step.call_count == 1
     assert left_engine.execute.call_count == 0
     
-    # Verify DB Logic
-    # One step result (Failed)
+    # Verify DB Logic — step result persisted as FAILED
     assert exec_service.create_step_result.call_count == 1
     step_call = exec_service.create_step_result.call_args
     args, _ = step_call
-    # args: (execution_id, tc_id, status, result_dict, width?, error?) 
-    # Check signature in execution_tasks: (execution_id, tc_id, status, result, duration, error)
     assert args[2] == ExecutionStatus.FAILED 
     
     # Verify Final Status FAILED

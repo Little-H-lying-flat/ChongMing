@@ -83,12 +83,15 @@ async def health_check(
     async def check_omniparser():
         try:
             import httpx
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                response = await client.get(f"{settings.OMNIPARSER_URL}/health")
-                if response.status_code == 200:
-                    services["omniparser"] = "ok"
-                else:
-                    services["omniparser"] = "loading"
+            # 修复: 用 127.0.0.1 替代 localhost 避免 Windows IPv6 DNS 回退耗时 4-5 秒
+            url = f"{settings.OMNIPARSER_URL}/health".replace("localhost", "127.0.0.1")
+            async with asyncio.timeout(1.5):
+                async with httpx.AsyncClient(timeout=1.0, trust_env=False) as client:
+                    response = await client.get(url)
+                    if response.status_code == 200:
+                        services["omniparser"] = "ok"
+                    else:
+                        services["omniparser"] = "loading"
         except Exception:
             services["omniparser"] = "down"
 

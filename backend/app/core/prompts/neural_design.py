@@ -82,7 +82,7 @@ Output:
                 "step_type": "API",
                 "description": "创建新用户并提取用户ID",
                 "method": "POST",
-                "url": "https://api.example.com/users",
+                "url": "http://127.0.0.1:8000/api/v1/users",
                 "body": {"name": "测试用户", "email": "test@example.com"},
                 "expected_status_code": 201,
                 "json_assertions": {},
@@ -92,7 +92,7 @@ Output:
                 "step_type": "API",
                 "description": "根据提取的用户ID查询用户详情",
                 "method": "GET",
-                "url": "https://api.example.com/users/${user_id}",
+                "url": "http://127.0.0.1:8000/api/v1/users/${user_id}",
                 "expected_status_code": 200,
                 "json_assertions": {"data.name": "测试用户"},
                 "extract": {}

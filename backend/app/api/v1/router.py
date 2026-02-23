@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     left_pupil,
     turbo,
     smart_ops,
+    visual_ui,
 )
 
 api_router = APIRouter()
@@ -105,4 +106,20 @@ api_router.include_router(
     smart_ops.router,
     prefix="/smart-ops",
     tags=["智能运维"]
+)
+
+# 视觉自动化 (Visual UI / RightPupil)
+api_router.include_router(
+    visual_ui.router,
+    prefix="/visual-ui",
+    tags=["视觉自动化"]
+)
+
+from app.api.v1.endpoints import dashboard
+
+# 总览大盘 (Dashboard)
+api_router.include_router(
+    dashboard.router,
+    prefix="/dashboard",
+    tags=["总览大盘"]
 )

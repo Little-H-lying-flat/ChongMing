@@ -43,19 +43,20 @@ class Dispatcher:
     
     def attach_engines(
         self,
-        right_pupil: RightPupilEngine = None,
-        left_pupil: LeftPupilEngine = None,
+        right_pupil: Optional[RightPupilEngine] = None,
+        left_pupil: Optional[LeftPupilEngine] = None,
     ):
         """附加执行引擎"""
         self.right_pupil = right_pupil
         self.left_pupil = left_pupil
     
-    async def execute(self, tc_ir: TCIR) -> ExecutionResult:
+    async def execute(self, tc_ir: TCIR, execution_id: Optional[str] = None) -> ExecutionResult:
         """
         执行测试用例
         
         Args:
             tc_ir: 测试用例中间表示
+            execution_id: 当前关联的执行任务 ID，用于实时追踪推送
             
         Returns:
             ExecutionResult: 执行结果
@@ -63,9 +64,6 @@ class Dispatcher:
         import time
         import uuid
         
-        trace_id = f"TRACE_{uuid.uuid4().hex[:8].upper()}"
-        start_time = time.time()
-        step_results: List[StepResult] = []
         trace_id = f"TRACE_{uuid.uuid4().hex[:8].upper()}"
         start_time = time.time()
         step_results: List[StepResult] = []
@@ -79,7 +77,7 @@ class Dispatcher:
         import re as _re
         all_downstream_vars: List[str] = []
         for s in tc_ir.steps:
-            step_dict = s.dict() if hasattr(s, 'dict') else dict(s)
+            step_dict = s.model_dump() if hasattr(s, 'model_dump') else (s.dict() if hasattr(s, 'dict') else dict(s))  # type: ignore[union-attr]
             # Scan URL, body, headers for ${var_name}
             for field_val in [step_dict.get("url", ""), str(step_dict.get("body", "")), str(step_dict.get("headers", ""))]:
                 all_downstream_vars.extend(_re.findall(r'\$\{(\w+)\}', str(field_val)))
@@ -96,18 +94,19 @@ class Dispatcher:
                 # Compute downstream vars needed by steps AFTER current one
                 downstream_vars_for_step: List[str] = []
                 for future_step in tc_ir.steps[i+1:]:
-                    fs_dict = future_step.dict() if hasattr(future_step, 'dict') else dict(future_step)
+                    fs_dict = future_step.model_dump() if hasattr(future_step, 'model_dump') else (future_step.dict() if hasattr(future_step, 'dict') else dict(future_step))  # type: ignore[union-attr]
                     for field_val in [fs_dict.get("url", ""), str(fs_dict.get("body", "")), str(fs_dict.get("headers", ""))]:
                         downstream_vars_for_step.extend(_re.findall(r'\$\{(\w+)\}', str(field_val)))
                 downstream_vars_for_step = list(set(downstream_vars_for_step))
                 
                 # Pass context_pool and downstream vars to _execute_step
-                result = await self._execute_step(step, tc_ir.mode, context_pool, downstream_vars_for_step)
+                result = await self._execute_step(step, tc_ir.mode, context_pool, downstream_vars_for_step, execution_id)
                 
                 step_result = StepResult(
                     step_index=i,
                     success=result["success"],
                     duration_ms=(time.time() - step_start) * 1000,
+                    screenshot=result.get("screenshot"),
                     error=result.get("error"),
                     details=result.get("details"),
                     description=step.get("description") or step.get("name") # Use description or name
@@ -141,7 +140,7 @@ class Dispatcher:
                             "var_name": k,
                             "value": v,
                             "source_step_index": i + 1,
-                            "source_step_name": step_result.details.get("step_name", f"Step {i+1}"),
+                            "source_step_name": (step_result.details or {}).get("step_name", f"Step {i+1}"),
                             "json_path": used_rules.get(k, "unknown")
                         })
                                         
@@ -185,9 +184,9 @@ class Dispatcher:
             variable_trace=variable_trace 
         )
     
-    async def _execute_step(self, step: dict, mode: ExecutionMode, context: Dict[str, Any] = None, downstream_var_names: List[str] = None) -> dict:
+    async def _execute_step(self, step: dict, mode: ExecutionMode, context: Optional[Dict[str, Any]] = None, downstream_var_names: Optional[List[str]] = None, execution_id: Optional[str] = None) -> dict:
         """执行单个步骤"""
-        logger.error(f"👀 [Check 1] Dispatcher 接收到的原始 Step: {step.dict() if hasattr(step, 'dict') else dict(step)}")
+        logger.debug(f"👀 [Check 1] Dispatcher 接收到的原始 Step: {step.model_dump() if hasattr(step, 'model_dump') else (step.dict() if hasattr(step, 'dict') else dict(step))}")  # type: ignore[union-attr]
 
         # 优先使用 step_type (新架构), 兼容 type (旧架构)
         step_type = step.get("step_type") or step.get("type") or ("UI" if mode == ExecutionMode.UI else "API")
@@ -201,11 +200,16 @@ class Dispatcher:
             # 空字符串也视为 None
             if url and not url.strip():
                 url = None
-            
-            logger.info(f"👁️ [Dispatcher] UI 步骤 → AI Agent: {description}")
+                
+            # Fallback: 如果没有 url 但 target 是一个 URL 字符串 (常见于从非标准 IR 转换的情况)
+            target = step.get("target")
+            if not url and isinstance(target, str) and (target.startswith("http://") or target.startswith("https://")):
+                url = target
+                
+            logger.info(f"👁️ [Dispatcher] UI 步骤 → AI Agent: {description}, URL: {url}")
             
             # 调用单步 AI 执行
-            ui_result = await self.right_pupil.execute_step(description, url)
+            ui_result = await self.right_pupil.execute_step(description, url or "", execution_id or "")
             
             # 构建截图 data URI
             screenshot_data_uri = None
@@ -317,22 +321,20 @@ class Dispatcher:
                 json_assertions=explicit_json if explicit_json else runtime_json,
             )
             
-            logger.error(f"👀 [Check 2] Dispatcher 转换后的 APIIR: {api_ir}")
+            logger.debug(f"👀 [Check 2] Dispatcher 转换后的 APIIR: {api_ir}")
             
             try:
                 # Returns Engine's ExecutionResult
                 # Pass context to engine
-                result: APIExecutionResult = await self.left_pupil.execute(api_ir, context)
+                result: APIExecutionResult = await self.left_pupil.execute(api_ir, context or {})
                 
                 status_code = 0
                 if result.response:
                     status_code = result.response.status_code
                 
-                # Enrich Step Result with Geeky Details
-                # Enrich Step Result with Geeky Details (Standardized Structure)
                 # Enrich Step Result with Geeky Details (Standardized Structure)
                 details = {
-                    "step_name": step.get("description") or step.get("name") or f"Step {i + 1}",
+                    "step_name": step.get("description") or step.get("name") or "API Step",
                     "step_type": "API",
                     "request": {
                         "url": getattr(result.response, "request_url", api_ir.url) if result.response else (api_ir.url or ""),
@@ -353,8 +355,8 @@ class Dispatcher:
                 if result.response and "application/json" in result.response.headers.get("Content-Type", ""):
                      try:
                          details["response"]["body"] = result.response.body # Already parsed in APIExecutor
-                     except:
-                         pass
+                     except Exception:
+                          pass
 
                 return {
                     "success": result.success,
@@ -392,7 +394,7 @@ class Dispatcher:
         """清空轨迹日志"""
         self._trace_log = []
 
-    async def _runtime_intent_parsing(self, description: str, downstream_var_names: List[str] = None) -> Optional[dict]:
+    async def _runtime_intent_parsing(self, description: str, downstream_var_names: Optional[List[str]] = None) -> Optional[dict]:
         """
         Runtime Intent Parsing
         

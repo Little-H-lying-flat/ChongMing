@@ -8,6 +8,7 @@ OmniParser Client
 import base64
 import logging
 from typing import List, Dict, Any, Tuple, Optional
+import asyncio
 import httpx
 from pydantic import BaseModel
 from app.core.config import settings
@@ -38,7 +39,10 @@ class OmniClient:
             return self._client
         
         if not self._internal_client or self._internal_client.is_closed:
-            self._internal_client = httpx.AsyncClient(timeout=self.timeout)
+            self._internal_client = httpx.AsyncClient(
+                timeout=self.timeout,
+                trust_env=False
+            )
             
         return self._internal_client
 
@@ -105,7 +109,6 @@ class OmniClient:
                 if e.response.status_code >= 500 and attempt < max_retries:
                     wait = 2 ** (attempt + 1)  # 2s, 4s
                     logger.warning(f"OmniParser 返回 {e.response.status_code}, 第 {attempt+1}/{max_retries} 次重试, 等待 {wait}s...")
-                    import asyncio
                     await asyncio.sleep(wait)
                     continue
                 logger.error(f"OmniParser HTTP 错误 {e.response.status_code}: {e}")

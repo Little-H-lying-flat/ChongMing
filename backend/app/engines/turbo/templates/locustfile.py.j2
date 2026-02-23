@@ -11,7 +11,9 @@ logger = logging.getLogger("TurboLocust")
 
 class TurboUser(HttpUser):
     wait_time = between(1, 3)
+    {% if target_host %}
     host = "{{ target_host }}"
+    {% endif %}
     
     def on_start(self):
         """Initialization: Load data and login if needed"""

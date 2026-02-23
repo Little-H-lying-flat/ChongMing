@@ -4,7 +4,7 @@
 对应 TC-IR 资产的 CRUD 操作
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,13 +17,6 @@ router = APIRouter()
 
 # ===================== 数据模型 =====================
 
-class TCIRStep(BaseModel):
-    """TC-IR 步骤"""
-    action: str = Field(..., description="动作类型: click, input, verify, etc.")
-    target: str = Field(..., description="目标描述")
-    value: Optional[str] = Field(None, description="输入值")
-    expected: Optional[str] = Field(None, description="预期结果")
-
 
 class TCIRCreate(BaseModel):
     """创建测试用例请求"""
@@ -31,7 +24,7 @@ class TCIRCreate(BaseModel):
     description: Optional[str] = Field(None, description="用例描述")
     mode: str = Field("UI", description="执行模式: UI, API, HYBRID")
     priority: str = Field("P1", description="优先级: P0, P1, P2, P3")
-    steps: List[TCIRStep] = Field(..., description="执行步骤")
+    steps: List[Dict[str, Any]] = Field(..., description="执行步骤")
     tags: List[str] = Field(default_factory=list, description="标签")
 
 
@@ -43,7 +36,7 @@ class TCIRResponse(BaseModel):
     mode: str
     priority: str
     status: str
-    steps: List[TCIRStep]
+    steps: List[Dict[str, Any]]
     tags: List[str]
     created_at: str
     updated_at: str

@@ -96,29 +96,30 @@ async def test_neural_design_integration():
     # The error "object list can't be used in 'await' expression" suggests it wasn't treated as coroutine.
     # Let's ensure it is.
     
-    # Re-setup mocks more explicitly
-    service.knowledge_retriever = AsyncMock()
-    service.knowledge_retriever.retrieve.return_value = [
+    # Re-setup mocks more explicitly using object patching (both are @property with no setter)
+    mock_kr = AsyncMock()
+    mock_kr.retrieve.return_value = [
         MagicMock(content="Rule: User must be 18+")
     ]
+    mock_retriever = AsyncMock()
+    mock_retriever.retrieve.return_value = []
+    with patch.object(type(service), 'knowledge_retriever', new_callable=lambda: property(lambda self: mock_kr)), \
+         patch.object(type(service), 'retriever', new_callable=lambda: property(lambda self: mock_retriever)):
     
-    service.retriever = AsyncMock()
-    service.retriever.retrieve.return_value = []
+        # 2. Execute
+        scenario = {"name": "Test Scenario", "description": "Verify Age Check"}
+        await service.generate_test_case(scenario, "proj_test")
     
-    # 2. Execute
-    scenario = {"name": "Test Scenario", "description": "Verify Age Check"}
-    await service.generate_test_case(scenario, "proj_test")
+        # 3. Verify interaction
+        # Confirm Knowledge Retriever was called
+        mock_kr.retrieve.assert_called_once()
     
-    # 3. Verify interaction
-    # Confirm Knowledge Retriever was called
-    service.knowledge_retriever.retrieve.assert_called_once()
-    
-    # Confirm Prompt contained the knowledge
-    call_args = mock_ai.invoke.call_args_list[0]
-    # Check messages content
-    # messages is named arg? or positional? Check service implementation.
-    # invoke(module, messages) -> args[0]=module, args[1]=messages
-    messages = call_args[0][1] # messages list
-    user_msg = messages[1].content
-    assert "Rule: User must be 18+" in user_msg
-    assert "领域知识/业务规则" in user_msg
+        # Confirm Prompt contained the knowledge
+        call_args = mock_ai.invoke.call_args_list[0]
+        # Check messages content
+        # messages is named arg? or positional? Check service implementation.
+        # invoke(module, messages) -> args[0]=module, args[1]=messages
+        messages = call_args[0][1] # messages list
+        user_msg = messages[1].content
+        assert "Rule: User must be 18+" in user_msg
+        assert "领域知识/业务规则" in user_msg

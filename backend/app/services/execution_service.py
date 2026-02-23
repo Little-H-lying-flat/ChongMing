@@ -36,7 +36,7 @@ class ExecutionService:
     async def update_execution_status(
         execution_id: str,
         status: ExecutionStatus,
-        summary: Dict[str, int] = None,
+        summary: Dict[str, Any] | None = None,
         duration_ms: float = 0.0
     ):
         """更新执行状态"""
@@ -66,23 +66,55 @@ class ExecutionService:
         status: ExecutionStatus,
         result_data: Dict[str, Any],
         duration_ms: float = 0.0,
-        error: str = None
+        error: str | None = None
     ):
         """创建步骤(用例)执行结果"""
+        import os
+        import base64
+        from loguru import logger
+        import copy
+        
+        # Deep copy to avoid mutating the original dict if used elsewhere
+        result_data_copy = copy.deepcopy(result_data)
+        
+        # 1. 拦截并剥离大 Base64 数据，落盘以防撑爆 DB JSONB
+        try:
+            screenshot_dir = os.path.join("data", "screenshots", execution_id)
+            os.makedirs(screenshot_dir, exist_ok=True)
+            
+            steps_list = result_data_copy.get("steps", [])
+            for step_idx, step_data in enumerate(steps_list):
+                details = step_data.get("details", {})
+                if not isinstance(details, dict):
+                    continue
+                for field in ("screenshot_before", "screenshot_after"):
+                    val = details.get(field)
+                    if val and isinstance(val, str) and len(val) > 1000:  # is Base64
+                        img_type = field.replace("screenshot_", "")
+                        filename = f"{tc_id}_{step_idx}_{img_type}.png"
+                        filepath = os.path.join(screenshot_dir, filename)
+                        
+                        b64_data = val.split(",", 1)[-1] if val.startswith("data:image") else val
+                        with open(filepath, "wb") as f:
+                            f.write(base64.b64decode(b64_data))
+                        
+                        # Replace heavy base64 with a lightweight local marker
+                        details[field] = f"LOCAL:{filename}"
+        except Exception as e:
+            logger.error(f"Failed to offload Base64 screenshots to disk for {tc_id}: {e}")
+
         async with get_db_session() as session:
             step = ExecutionStep(
                 execution_id=execution_id,
                 tc_id=tc_id,
                 status=status,
-                step_results=result_data, # Detailed step results
+                step_results=result_data_copy, # Stripped results
                 duration_ms=duration_ms,
                 error_message=error,
-                start_time=datetime.utcnow(), # Approximate
-                end_time=datetime.utcnow()    # Approximate
+                start_time=datetime.utcnow(), 
+                end_time=datetime.utcnow()
             )
-            # Debug Log for Persistence Verification
-            from loguru import logger
-            logger.info(f"💾 Saving Step Result for {tc_id}: Details Keys={[s.get('details', {}).keys() for s in result_data.get('steps', [])]}")
+            logger.info(f"💾 Saving Step Result for {tc_id}: Details Keys={[(s.get('details') or {}).keys() for s in result_data_copy.get('steps', [])]}")
             
             session.add(step)
             await session.commit()
@@ -102,6 +134,76 @@ class ExecutionService:
             stmt = select(Execution).order_by(desc(Execution.created_at)).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return result.scalars().all()
+
+    @staticmethod
+    async def delete_execution(execution_id: str) -> bool:
+        """删除执行记录及其关联步骤和截图"""
+        import os
+        import shutil
+        from sqlalchemy import delete
+        
+        async with get_db_session() as session:
+            # 1. Check if exists
+            stmt = select(Execution).where(Execution.id == execution_id)
+            exec_obj = (await session.execute(stmt)).scalar_one_or_none()
+            if not exec_obj:
+                return False
+                
+            # 2. Delete execution steps
+            del_steps_stmt = delete(ExecutionStep).where(ExecutionStep.execution_id == execution_id)
+            await session.execute(del_steps_stmt)
+            
+            # 3. Delete execution
+            del_exec_stmt = delete(Execution).where(Execution.id == execution_id)
+            await session.execute(del_exec_stmt)
+            
+            await session.commit()
+            
+            # 4. Clean up disk screenshots
+            try:
+                screenshot_dir = os.path.join("data", "screenshots", execution_id)
+                if os.path.exists(screenshot_dir):
+                    shutil.rmtree(screenshot_dir)
+            except Exception as e:
+                logger.error(f"Failed to delete screenshot dir for {execution_id}: {e}")
+                
+            return True
+
+    @staticmethod
+    async def count_executions() -> int:
+        """获取执行总数"""
+        from sqlalchemy import func
+        async with get_db_session() as session:
+            stmt = select(func.count(Execution.id))
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
+    @staticmethod
+    async def get_execution_stats() -> dict:
+        """获取执行统计大盘数据"""
+        from sqlalchemy import func
+        async with get_db_session() as session:
+            active_stmt = select(func.count(Execution.id)).where(Execution.status.in_([ExecutionStatus.PENDING, ExecutionStatus.RUNNING]))
+            active_count = (await session.execute(active_stmt)).scalar() or 0
+            
+            total_stmt = select(func.count(Execution.id))
+            total_count = (await session.execute(total_stmt)).scalar() or 0
+            
+            passed_stmt = select(func.count(Execution.id)).where(Execution.status == ExecutionStatus.PASSED)
+            passed_count = (await session.execute(passed_stmt)).scalar() or 0
+            
+            success_rate = round((passed_count / total_count * 100), 1) if total_count > 0 else 0.0
+            
+            duration_stmt = select(func.avg(Execution.duration_ms)).where(Execution.status.in_([ExecutionStatus.PASSED, ExecutionStatus.FAILED]))
+            avg_duration_ms = (await session.execute(duration_stmt)).scalar() or 0.0
+            avg_duration = round(avg_duration_ms / 1000.0, 1)
+            
+            return {
+                "active": active_count,
+                "success_rate": success_rate,
+                "avg_duration": avg_duration,
+                "total": total_count
+            }
 
     @staticmethod
     async def get_execution_steps(execution_id: str) -> List[ExecutionStep]:
@@ -166,7 +268,7 @@ class ExecutionService:
             
             if strip_screenshots:
                 step_list = ExecutionService._strip_screenshots(
-                    execution_id, case_idx, step_list
+                    execution_id, case_idx, step_list, step.tc_id
                 )
             
             case_results.append({
@@ -193,9 +295,9 @@ class ExecutionService:
         }
 
     @staticmethod
-    def _strip_screenshots(execution_id: str, case_idx: int, step_list: list) -> list:
+    def _strip_screenshots(execution_id: str, case_idx: int, step_list: list, tc_id: str = "") -> list:
         """
-        将步骤中的 base64 截图替换为按需加载的 URL。
+        将步骤中的截图标记替换为按需加载的 URL。
         保持数据结构不变，仅替换 screenshot_before / screenshot_after 的值。
         """
         for step_idx, step_data in enumerate(step_list):
@@ -205,24 +307,25 @@ class ExecutionService:
             
             for field in ("screenshot_before", "screenshot_after"):
                 val = details.get(field)
-                if val and (val.startswith("data:image") or len(str(val)) > 1000):
+                if val: # it has image info (either LOCAL: marker or legacy data URI)
                     img_type = field.replace("screenshot_", "")  # "before" or "after"
-                    details[field] = f"/api/v1/executions/{execution_id}/screenshot/{case_idx}/{step_idx}/{img_type}"
+                    details[field] = f"/api/v1/executions/{execution_id}/screenshot/{case_idx}/{step_idx}/{img_type}?tc_id={tc_id}"
         
         return step_list
 
     @staticmethod
-    async def list_executions_dicts(limit: int = 20) -> List[Dict[str, Any]]:
+    async def list_executions_dicts(skip: int = 0, limit: int = 20) -> Dict[str, Any]:
         """
         获取执行列表的纯字典列表
-
-        封装 DB model 访问，避免 API 层直接依赖 models。
+        返回 {"total": x, "items": [...]}
         """
-        executions = await ExecutionService.list_executions(limit=limit)
-        result = []
+        total = await ExecutionService.count_executions()
+        executions = await ExecutionService.list_executions(limit=limit, offset=skip)
+        
+        items = []
         for exec_record in executions:
-            is_terminal = exec_record.status in [ExecutionStatus.PASSED, ExecutionStatus.FAILED]
-            result.append({
+            is_terminal = exec_record.status in [ExecutionStatus.PASSED, ExecutionStatus.FAILED, ExecutionStatus.ERROR, ExecutionStatus.CANCELLED]
+            items.append({
                 "execution_id": exec_record.id,
                 "status": exec_record.status.value,
                 "progress": 100.0 if is_terminal else 0.0,
@@ -234,4 +337,4 @@ class ExecutionService:
                 "start_time": exec_record.start_time.isoformat() if exec_record.start_time else "",
                 "elapsed_seconds": exec_record.duration_ms / 1000.0 if exec_record.duration_ms else 0.0,
             })
-        return result
+        return {"total": total, "items": items}

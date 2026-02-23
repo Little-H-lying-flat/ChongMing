@@ -44,6 +44,10 @@ class ExecutionResult:
     status_code: int = 0
     response_body: Optional[dict] = None
     response_headers: dict[str, str] = field(default_factory=dict)
+    request_method: str = ""
+    request_url: str = ""
+    request_headers: dict[str, str] = field(default_factory=dict)
+    request_body: Optional[dict] = None
     duration_ms: float = 0.0
     extracted_values: dict[str, Any] = field(default_factory=dict)
     assertion_report: Optional[AssertionReport] = None
@@ -160,6 +164,11 @@ class ApiRunner:
         try:
             # 1. 注入变量
             url = self.memory.inject(request.url)
+            
+            # Automatically handle relative paths to prevent Protocol Errors 
+            if url.startswith("/") and self.base_url:
+                url = self.base_url + url
+                
             headers = {**self.default_headers}
             for k, v in request.headers.items():
                 headers[k] = self.memory.inject(v)
@@ -219,6 +228,10 @@ class ApiRunner:
                 status_code=response.status_code,
                 response_body=response_body,
                 response_headers=response_headers,
+                request_method=request.method,
+                request_url=url,
+                request_headers=headers,
+                request_body=body,
                 duration_ms=duration,
                 extracted_values=extracted,
                 assertion_report=assertion_report,

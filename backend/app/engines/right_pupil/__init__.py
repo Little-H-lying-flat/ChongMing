@@ -156,7 +156,7 @@ class RightPupilEngine:
                 "error": str(e)
             })()
 
-    async def execute_step(self, description: str, url: str = None) -> Dict[str, Any]:
+    async def execute_step(self, description: str, url: str = None, execution_id: str = None) -> Dict[str, Any]:
         """
         单步 AI 执行 — Dispatcher 调用入口
         
@@ -242,6 +242,23 @@ class RightPupilEngine:
                     h = int(bbox[3] - bbox[1])
                     som_text_lines.append(f"ID {k}: [{w}x{h}] {v.get('label')} {v.get('content', '')}")
                 som_text = "\n".join(som_text_lines)
+                
+                # BroadCast Live Trace if execution_id is provided
+                if execution_id:
+                    from app.api.v1.endpoints.visual_ui import visual_ws_manager
+                    try:
+                        asyncio.create_task(
+                            visual_ws_manager.broadcast_to_execution(
+                                execution_id,
+                                {
+                                    "event": "live_trace",
+                                    "step_description": description,
+                                    "image_b64": f"data:image/png;base64,{annotated_b64}"
+                                }
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to broadcast live trace: {e}")
                 
                 # 4.1 Visual Planning
                 logger.info(f"🧠 [execute_step] 视觉规划: {description}")

@@ -144,6 +144,7 @@ async def create_environment(
         auth_config=data.auth_config,
         is_default=data.is_default,
     )
+    await db.commit()
     return env.to_dict()
 
 
@@ -241,6 +242,7 @@ async def update_environment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"环境 '{env_id}' 不存在",
         )
+    await db.commit()
     return env.to_dict()
 
 
@@ -257,6 +259,7 @@ async def delete_environment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"环境 '{env_id}' 不存在",
         )
+    await db.commit()
 
 
 # ========== 变量管理端点 ==========
@@ -306,6 +309,7 @@ async def set_environment_variable(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"环境 '{env_id}' 不存在",
         )
+    await db.commit()
     return {"message": f"变量 '{data.key}' 已设置"}
 
 
@@ -323,6 +327,7 @@ async def delete_environment_variable(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"环境 '{env_id}' 或变量 '{key}' 不存在",
         )
+    await db.commit()
 
 
 # ========== 变量注入端点 ==========

@@ -119,10 +119,28 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
-    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-slate-700 rounded-full;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-600;
   }
 }

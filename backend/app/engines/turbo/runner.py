@@ -1,6 +1,8 @@
 import subprocess
 import os
+import os
 import signal
+import sys
 import logging
 from typing import Optional, Dict, Any, List
 from app.schemas.turbo import TurboRunConfig, TurboMode
@@ -36,10 +38,11 @@ class LocustRunner:
         
         # 2. Prepare Command
         cmd = [
-            "locust",
+            sys.executable, "-m", "locust",
             "-f", script_path,
-            "--host", config.target_host,
         ]
+        if getattr(config, "target_host", None):
+            cmd.extend(["--host", config.target_host])
         
         if config.mode == TurboMode.LOCAL:
             cmd.extend(["--headless", "-u", str(config.users), "-r", str(config.spawn_rate), "-t", config.run_time])

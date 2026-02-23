@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock
 from app.api.v1.endpoints.design import router, get_design_service
 from app.services.neural_design.service import DesignService
-from app.services.neural_design.models import RefinedTCIR, RefinedRequestSpec
+from app.services.neural_design.models import RefinedTestCase, RefinedRequestSpec, RefinedApiStep
 
 # Setup standalone app for testing
 app = FastAPI()
@@ -37,12 +37,19 @@ def test_analyze_endpoint(mock_service):
 def test_generate_endpoint(mock_service):
     app.dependency_overrides[get_design_service] = lambda: mock_service
     
-    # Mock return value
-    # Needs to match RefinedTCIR Pydantic model structure
-    mock_tcir = RefinedTCIR(
+    # Mock return value using the current RefinedTestCase model
+    mock_tcir = RefinedTestCase(
         id="tc1",
         name="Login Test",
-        request=RefinedRequestSpec(method="POST", url="/login")
+        description="Test login flow",
+        steps=[
+            RefinedApiStep(
+                id="step1",
+                name="POST Login",
+                request=RefinedRequestSpec(method="POST", url="/login"),
+                expected_status_code=200,
+            )
+        ]
     )
     mock_service.generate_test_case.return_value = mock_tcir
     

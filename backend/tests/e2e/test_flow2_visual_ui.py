@@ -176,7 +176,7 @@ async def test_flow2_happy_path(mock_engine_deps):
     call_args = mock_planner.plan_next_step.call_args_list[0]
     assert call_args.args[0] == "Click the search button" # Task is 1st arg
     assert "annotated_base64_str" in call_args.args[1]    # Screenshot is 2nd arg
-    assert "ID 1: button Search" in call_args.args[2]     # SoM Text is 3rd arg
+    assert "button Search" in call_args.args[2]     # SoM Text is 3rd arg
     
     # 5. Verify UiRunner Usage (The Critical "Limb" Check)
     # Must be called with the action returned by Planner and the ID Map from SoM

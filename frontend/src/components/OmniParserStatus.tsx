@@ -14,19 +14,20 @@ interface HealthData {
     };
 }
 
+import { api } from "@/services/api";
+
 export function OmniParserStatus() {
     const [health, setHealth] = useState<HealthData | null>(null);
     const [loading, setLoading] = useState(true);
 
     const fetchHealth = async () => {
         try {
-            const res = await fetch("/api/v1/health");
-            if (res.ok) {
-                const data = await res.json();
-                setHealth(data);
-            }
+            const { data } = await api.get<HealthData>("/health");
+            setHealth(data);
         } catch (error) {
-            console.error("Failed to fetch health:", error);
+            // Silently handle fetch failures for background polling 
+            // to avoid triggering the Next.js Error Overlay when the backend restarts.
+            setHealth(null);
         } finally {
             setLoading(false);
         }
@@ -43,35 +44,35 @@ export function OmniParserStatus() {
 
         if (loading && !health) {
             return {
-                label: "Loading...",
+                label: "加载中... (Loading...)",
                 color: "bg-slate-500",
                 icon: <Loader2 className="w-3 h-3 animate-spin" />,
-                description: "Detecting OmniParser status..."
+                description: "检测 OmniParser 状态中... (Detecting OmniParser status...)"
             };
         }
 
         switch (opStatus) {
             case "ok":
                 return {
-                    label: "OmniParser Ready",
+                    label: "OmniParser就绪 (OmniParser Ready)",
                     color: "bg-emerald-500",
                     icon: <Activity className="w-3 h-3 text-white" />,
-                    description: "Visual Parsing Service is online and ready."
+                    description: "视觉解析服务在线且已就绪。 (Visual Parsing Service is online and ready.)"
                 };
             case "loading":
                 return {
-                    label: "Model Loading",
+                    label: "模型加载中 (Model Loading)",
                     color: "bg-amber-500",
                     icon: <Loader2 className="w-3 h-3 animate-spin text-white" />,
-                    description: "OmniParser is starting up and loading weights. Please wait."
+                    description: "OmniParser正在启动并加载权重，请稍候。 (OmniParser is starting up and loading weights. Please wait.)"
                 };
             case "down":
             default:
                 return {
-                    label: "OmniParser Offline",
+                    label: "OmniParser离线 (OmniParser Offline)",
                     color: "bg-rose-500",
                     icon: <AlertCircle className="w-3 h-3 text-white" />,
-                    description: "OmniParser service is unreachable. AI Agent will fallback to DOM strategy."
+                    description: "OmniParser服务不可达。AI代理将回退至DOM策略。 (OmniParser service is unreachable. AI Agent will fallback to DOM strategy.)"
                 };
         }
     };

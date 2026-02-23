@@ -1,0 +1,29 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Swagger Petstore",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/pets": {
+            "get": {
+                "summary": "List all pets",
+                "operationId": "listPets",
+                "responses": {
+                    "200": {
+                        "description": "A paged array of pets"
+                    }
+                }
+            },
+            "post": {
+                "summary": "Create a pet",
+                "operationId": "createPets",
+                "responses": {
+                    "201": {
+                        "description": "Null response"
+                    }
+                }
+            }
+        }
+    }
+}

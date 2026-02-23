@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-blue" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-0.1.1-blue" alt="Version"/>
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green" alt="License"/>
   <img src="https://img.shields.io/badge/python-3.12-yellow" alt="Python"/>
   <img src="https://img.shields.io/badge/react-18-blue" alt="React"/>

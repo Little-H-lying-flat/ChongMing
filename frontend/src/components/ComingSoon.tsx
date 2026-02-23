@@ -22,7 +22,7 @@ export function ComingSoon({ title }: ComingSoonProps) {
                             {title}
                         </h1>
                         <p className="text-slate-400 text-sm">
-                            该核心业务模块正在研发与接入中... (Coming Soon)
+                            该核心业务模块正在研发与接入中... (This module is under development...)
                         </p>
                     </div>
 

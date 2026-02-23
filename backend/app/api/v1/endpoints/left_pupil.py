@@ -26,33 +26,33 @@ router = APIRouter(tags=["Flow 4: Left Pupil (API Automation)"])
 
 class RequestSpecModel(BaseModel):
     """请求规格"""
-    method: str = Field("GET", description="HTTP 方法", example="GET")
-    url: str = Field(..., description="请求 URL (支持 ${var} 变量)", example="https://api.example.com/users/${user_id}")
-    headers: Dict[str, str] = Field(default_factory=dict, description="请求头", example={"Authorization": "Bearer ${token}"})
-    body: Optional[Dict[str, Any]] = Field(None, description="请求体 (JSON)", example={"name": "test_user"})
-    query_params: Dict[str, str] = Field(default_factory=dict, description="查询参数", example={"page": "1"})
-    timeout_ms: int = Field(30000, description="超时时间(毫秒)", example=5000)
+    method: str = Field("GET", description="HTTP 方法", json_schema_extra={"example": "GET"})
+    url: str = Field(..., description="请求 URL (支持 ${var} 变量)", json_schema_extra={"example": "https://api.example.com/users/${user_id}"})
+    headers: Dict[str, str] = Field(default_factory=dict, description="请求头", json_schema_extra={"example": {"Authorization": "Bearer ${token}"}})
+    body: Optional[Dict[str, Any]] = Field(None, description="请求体 (JSON)", json_schema_extra={"example": {"name": "test_user"}})
+    query_params: Dict[str, str] = Field(default_factory=dict, description="查询参数", json_schema_extra={"example": {"page": "1"}})
+    timeout_ms: int = Field(30000, description="超时时间(毫秒)", json_schema_extra={"example": 5000})
 
 
 class AssertionModel(BaseModel):
     """断言配置"""
-    status_code: Optional[int] = Field(None, description="期望状态码", example=200)
-    json_assertions: Dict[str, Any] = Field(default_factory=dict, description="JsonPath 断言 (路径 -> 期望值)", example={"$.code": 0})
-    contains: Optional[str] = Field(None, description="响应体包含文本", example="Success")
-    not_contains: Optional[str] = Field(None, description="响应体不包含文本", example="Error")
-    expression: Optional[str] = Field(None, description="自定义 Python 表达式 (response.json()['id'] > 0)", example="len(response.json()['items']) > 0")
+    status_code: Optional[int] = Field(None, description="期望状态码", json_schema_extra={"example": 200})
+    json_assertions: Dict[str, Any] = Field(default_factory=dict, description="JsonPath 断言 (路径 -> 期望值)", json_schema_extra={"example": {"$.code": 0}})
+    contains: Optional[str] = Field(None, description="响应体包含文本", json_schema_extra={"example": "Success"})
+    not_contains: Optional[str] = Field(None, description="响应体不包含文本", json_schema_extra={"example": "Error"})
+    expression: Optional[str] = Field(None, description="自定义 Python 表达式 (response.json()['id'] > 0)", json_schema_extra={"example": "len(response.json()['items']) > 0"})
 
 
 class ApiIRStepModel(BaseModel):
     """API-IR 步骤"""
-    id: str = Field(..., description="步骤 ID (唯一)", example="STEP_001")
-    name: str = Field("", description="步骤名称", example="获取用户信息")
+    id: str = Field(..., description="步骤 ID (唯一)", json_schema_extra={"example": "STEP_001"})
+    name: str = Field("", description="步骤名称", json_schema_extra={"example": "获取用户信息"})
     request: RequestSpecModel = Field(..., description="请求详情")
-    extraction: Dict[str, str] = Field(default_factory=dict, description="变量提取规则 (变量名 -> JsonPath)", example={"user_token": "$.data.token"})
+    extraction: Dict[str, str] = Field(default_factory=dict, description="变量提取规则 (变量名 -> JsonPath)", json_schema_extra={"example": {"user_token": "$.data.token"}})
     assertion: Optional[AssertionModel] = Field(None, description="断言配置")
     
-    class Config:
-        json_schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "id": "STEP_01",
                 "name": "获取用户列表",
@@ -64,14 +64,15 @@ class ApiIRStepModel(BaseModel):
                 "assertion": {"status_code": 200},
             }
         }
+    }
 
 
 class ExecuteStepRequest(BaseModel):
     """执行单步请求"""
-    base_url: str = Field(..., description="API 基础 URL", example="https://api.example.com")
+    base_url: str = Field(..., description="API 基础 URL", json_schema_extra={"example": "https://api.example.com"})
     step: ApiIRStepModel = Field(..., description="API-IR 步骤定义")
-    context: Dict[str, Any] = Field(default_factory=dict, description="初始上下文变量", example={"env": "dev"})
-    default_headers: Dict[str, str] = Field(default_factory=dict, description="默认请求头 (如 Auth Token)", example={"X-Request-ID": "123"})
+    context: Dict[str, Any] = Field(default_factory=dict, description="初始上下文变量", json_schema_extra={"example": {"env": "dev"}})
+    default_headers: Dict[str, str] = Field(default_factory=dict, description="默认请求头 (如 Auth Token)", json_schema_extra={"example": {"X-Request-ID": "123"}})
 
 
 class ExecuteChainRequest(BaseModel):
@@ -93,6 +94,8 @@ class StepResultResponse(BaseModel):
     assertion_passed: bool = Field(True, description="断言是否全部通过")
     assertion_details: Optional[Dict] = Field(None, description="断言详情报告")
     error: Optional[str] = Field(None, description="错误信息")
+    request_details: Optional[Dict[str, Any]] = Field(None, description="请求详情 (method, url, headers, body)")
+    response_details: Optional[Dict[str, Any]] = Field(None, description="响应详情 (headers, body)")
 
 
 class ChainResultResponse(BaseModel):
@@ -200,7 +203,18 @@ async def execute_step(request: ExecuteStepRequest):
         # 执行
         result = await runner.execute(step)
         await runner.close()
-        
+        # 构建请求详情
+        req_details = {
+            "method": result.request_method,
+            "url": result.request_url,
+            "headers": result.request_headers,
+            "body": result.request_body
+        }
+        res_details = {
+            "headers": result.response_headers,
+            "body": result.response_body
+        }
+
         return StepResultResponse(
             step_id=result.step_id,
             status=result.status,
@@ -210,6 +224,8 @@ async def execute_step(request: ExecuteStepRequest):
             assertion_passed=result.assertion_report.passed if result.assertion_report else True,
             assertion_details=result.assertion_report.to_dict() if result.assertion_report else None,
             error=result.error,
+            request_details=req_details,
+            response_details=res_details,
         )
         
     except Exception as e:
@@ -268,7 +284,18 @@ async def execute_chain(request: ExecuteChainRequest):
             )
             
             result = await runner.execute(step)
-            
+            # 构建请求详情
+            req_details = {
+                "method": result.request_method,
+                "url": result.request_url,
+                "headers": result.request_headers,
+                "body": result.request_body
+            }
+            res_details = {
+                "headers": result.response_headers,
+                "body": result.response_body
+            }
+
             step_result = StepResultResponse(
                 step_id=result.step_id,
                 status=result.status,
@@ -278,6 +305,8 @@ async def execute_chain(request: ExecuteChainRequest):
                 assertion_passed=result.assertion_report.passed if result.assertion_report else True,
                 assertion_details=result.assertion_report.to_dict() if result.assertion_report else None,
                 error=result.error,
+                request_details=req_details,
+                response_details=res_details,
             )
             results.append(step_result)
             

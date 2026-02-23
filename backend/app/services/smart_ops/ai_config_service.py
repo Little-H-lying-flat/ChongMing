@@ -259,3 +259,45 @@ class AIConfigService:
 
             await session.commit()
         return {"status": "success", "provider": provider}
+
+    @classmethod
+    async def get_token_metrics(cls, days: int = 7) -> List[Dict[str, Any]]:
+        """
+        获取过去 N 天的模型 Token 消耗和估算成本统计
+        """
+        from datetime import timedelta, datetime, timezone
+        from collections import defaultdict
+        
+        # Determine cutoff date
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        
+        async with async_session_maker() as session:
+            stmt = select(AICostLog).where(AICostLog.created_at >= cutoff_date)
+            result = await session.execute(stmt)
+            logs = result.scalars().all()
+            
+        # Group by Date (YYYY-MM-DD) and accumulate tokens per model and total cost
+        daily_metrics = defaultdict(lambda: {"cost": 0.0})
+        
+        for log in logs:
+            if not log.created_at:
+                continue
+            date_str = log.created_at.strftime("%Y-%m-%d")
+            model_key = log.model_id
+            
+            entry = daily_metrics[date_str]
+            entry["date"] = date_str
+            
+            if model_key not in entry:
+                entry[model_key] = 0
+                
+            total_tokens = (log.input_tokens or 0) + (log.output_tokens or 0)
+            entry[model_key] += total_tokens
+            entry["cost"] += (log.total_cost or 0.0)
+            
+        # Round cost for cleaner frontend display
+        for entry in daily_metrics.values():
+            entry["cost"] = round(entry["cost"], 4)
+            
+        # Return chronologically sorted array
+        return sorted(list(daily_metrics.values()), key=lambda x: x.get("date", ""))

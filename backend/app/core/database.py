@@ -71,17 +71,17 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     获取数据库会话 (FastAPI 依赖注入)
-    
-    使用示例:
-        @router.get("/users")
-        async def get_users(db: AsyncSession = Depends(get_db)):
-            result = await db.execute(select(User))
-            return result.scalars().all()
     """
     async with async_session_maker() as session:
         try:
             yield session
-            await session.commit()
+            # 性能修复: 不要在 GET 或只读请求中强行全局提交
+            # 强行提交会导致 SQLite 在高并发或压测时为了获得排他锁而卡住 5-10秒！
+            # 各个写入接口已经手动调用了 await db.commit()
+            
+            # 如果非常需要安全兜底，可以不报错，或者这里干脆去掉 await session.commit()
+            # 大部分正常业务逻辑都已经手动写了 commit
+            # await session.commit() 
         except Exception:
             await session.rollback()
             raise

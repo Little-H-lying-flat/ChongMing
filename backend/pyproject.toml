@@ -1,6 +1,6 @@
 [project]
 name = "chongming"
-version = "2.0.0"
+version = "0.1.1"
 # description = "重明 - AI Agent 驱动的自动化质量工程平台"
 # readme = "README.md"
 license = { text = "Apache-2.0" }

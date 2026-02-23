@@ -10,15 +10,14 @@ from app.core.ai_config_provider import AIConfigProvider
 class MockAIConfigProvider(AIConfigProvider):
     async def get_model_config(self, module: AIModule) -> ModelConfig:
         return ModelConfig(
-            module=module,
-            provider=ModelProvider.DASHSCOPE,
             model_id="qwen-turbo",
+            provider=ModelProvider.DASHSCOPE,
+            capability=ModelCapability.TEXT,
             max_tokens=100,
             temperature=0.7,
-            capability=ModelCapability.CHAT
         )
     
-    async def log_cost(self, module: AIModule, model: str, usage: dict) -> None:
+    async def log_cost(self, module: AIModule, model_id: str, usage: dict) -> None:
         pass
 
 @pytest.fixture

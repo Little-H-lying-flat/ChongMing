@@ -1,0 +1,4 @@
+﻿src/components/api-auto/ResponseConsole.tsx(101,45): error TS2322: Type '{ value: any; theme: string; displayDataTypes: false; }' is not assignable to type 'IntrinsicAttributes & JsonViewProps<object>'.
+  Property 'theme' does not exist on type 'IntrinsicAttributes & JsonViewProps<object>'.
+src/components/api-auto/ResponseConsole.tsx(118,68): error TS2322: Type '{ value: Record<string, any>; theme: string; displayDataTypes: false; }' is not assignable to type 'IntrinsicAttributes & JsonViewProps<object>'.
+  Property 'theme' does not exist on type 'IntrinsicAttributes & JsonViewProps<object>'.

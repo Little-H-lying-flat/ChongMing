@@ -48,18 +48,18 @@ class DraftTestCase(BaseModel):
 
 class RefinedRequestSpec(BaseModel):
     """请求规范 (Pydantic版)"""
-    method: str = Field(..., description="HTTP 请求方法 (GET, POST, PUT, DELETE 等)", example="POST")
-    url: str = Field(..., description="请求目标 URL", example="https://api.example.com/v1/login")
-    headers: Dict[str, str] = Field(default_factory=dict, description="HTTP 请求头", example={"Content-Type": "application/json"})
-    body: Optional[Dict[str, Any]] = Field(None, description="请求体 (JSON)", example={"username": "admin", "password": "***"})
-    query_params: Dict[str, str] = Field(default_factory=dict, description="URL 查询参数", example={"page": "1", "size": "10"})
+    method: str = Field(..., description="HTTP 请求方法 (GET, POST, PUT, DELETE 等)", json_schema_extra={"example": "POST"})
+    url: str = Field(..., description="请求目标 URL", json_schema_extra={"example": "https://api.example.com/v1/login"})
+    headers: Dict[str, str] = Field(default_factory=dict, description="HTTP 请求头", json_schema_extra={"example": {"Content-Type": "application/json"}})
+    body: Optional[Dict[str, Any]] = Field(None, description="请求体 (JSON)", json_schema_extra={"example": {"username": "admin", "password": "***"}})
+    query_params: Dict[str, str] = Field(default_factory=dict, description="URL 查询参数", json_schema_extra={"example": {"page": "1", "size": "10"}})
     timeout_ms: int = Field(30000, description="请求超时时间 (毫秒)")
 
 class RefinedAssertionSpec(BaseModel):
     """断言规范 (Pydantic版)"""
-    status_code: int = Field(200, description="MUST extract the explicit expected HTTP status code (e.g., 200, 403, 500).", example=200)
+    status_code: int = Field(200, description="MUST extract the explicit expected HTTP status code (e.g., 200, 403, 500).", json_schema_extra={"example": 200})
     schema_validate: bool = Field(False, description="是否进行 Schema 校验")
-    json_assertions: Dict[str, Any] = Field(default_factory=dict, description="Dictionary of JSON path/keys and expected values to assert in the response body. e.g. {'data.first_name': '孙悟空'}", example={"$.data.id": 123})
+    json_assertions: Dict[str, Any] = Field(default_factory=dict, description="Dictionary of JSON path/keys and expected values to assert in the response body. e.g. {'data.first_name': '孙悟空'}", json_schema_extra={"example": {"$.data.id": 123}})
     contains: Optional[str] = Field(None, description="响应体包含的字符串")
     expression: Optional[str] = Field(None, description="自定义 Python 表达式断言")
 

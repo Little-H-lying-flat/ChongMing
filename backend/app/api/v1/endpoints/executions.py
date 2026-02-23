@@ -20,17 +20,17 @@ router = APIRouter(tags=["Flow 3: Execution Dispatcher (任务调度)"])
 
 class UiRunRequest(BaseModel):
     """UI 任务请求"""
-    prompt: str = Field(..., description="自然语言指令", example="打开百度首页并搜索 ChongMing")
-    url: str = Field(..., description="目标 URL", example="https://www.baidu.com")
+    prompt: str = Field(..., description="自然语言指令", json_schema_extra={"example": "打开百度首页并搜索 ChongMing"})
+    url: str = Field(..., description="目标 URL", json_schema_extra={"example": "https://www.baidu.com"})
 
 
 class ExecutionRequest(BaseModel):
     """执行请求"""
-    tc_ids: List[str] = Field(..., description="测试用例 ID 列表", example=["TC-001", "TC-002"])
-    mode: str = Field("normal", description="执行模式: normal (标准), debug (调试), fast (快速)", example="normal")
+    tc_ids: List[str] = Field(..., description="测试用例 ID 列表", json_schema_extra={"example": ["TC-001", "TC-002"]})
+    mode: str = Field("normal", description="执行模式: normal (标准), debug (调试), fast (快速)", json_schema_extra={"example": "normal"})
     parallel: bool = Field(True, description="是否开启并行执行")
     max_workers: int = Field(5, ge=1, le=20, description="最大并行 Worker 数量")
-    env: Optional[str] = Field(None, description="目标运行环境 (如 dev, staging)", example="staging")
+    env: Optional[str] = Field(None, description="目标运行环境 (如 dev, staging)", json_schema_extra={"example": "staging"})
     dynamic_payload: Optional[List[dict]] = Field(None, description="动态测试用例 Payload (用于临时运行)")
 
 
@@ -64,6 +64,14 @@ class ExecutionResult(BaseModel):
     cases: List[dict] = Field([], description="用例结果列表")
     duration_seconds: float = Field(0.0, description="耗时 (秒)")
     report_url: Optional[str] = Field(None, description="报告链接")
+
+
+class DashboardStats(BaseModel):
+    """大盘统计数据"""
+    active: int = Field(..., description="运行中或等待中的任务数")
+    success_rate: float = Field(..., description="全局成功率")
+    avg_duration: float = Field(..., description="平均耗时 (秒)")
+    total: int = Field(..., description="总执行次数")
 
 
 # ===================== API 端点 =====================
@@ -106,7 +114,7 @@ async def start_execution(
     await ExecutionService.create_execution(execution_id, request.tc_ids, config)
     
     # 4. Dispatch Task with existing ID
-    task = execute_test_cases.delay(
+    task = execute_test_cases.delay(  # type: ignore[misc]  # Celery task
         execution_id=execution_id,
         tc_ids=request.tc_ids,
         config=config,
@@ -119,6 +127,12 @@ async def start_execution(
         total_cases=len(request.tc_ids),
         dashboard_url=f"/executions/{execution_id}",
     )
+
+
+@router.get("/stats", response_model=DashboardStats, summary="获取大盘高级指标 (Stats)")
+async def get_execution_stats():
+    """获取调度大盘全局指标"""
+    return await ExecutionService.get_execution_stats()
 
 
 @router.get(
@@ -241,7 +255,7 @@ async def get_execution_result(execution_id: str):
     return ExecutionResult(
         execution_id=execution_id,
         status=task_result.state.lower(),
-        summary=task_result.info or {} if isinstance(task_result.info, dict) else {},
+        summary=task_result.info if isinstance(task_result.info, dict) else {},
         cases=[],
         duration_seconds=0.0,
         report_url=None
@@ -268,7 +282,7 @@ async def get_execution_steps(execution_id: str):
 @router.get(
     "/{execution_id}/screenshot/{case_idx}/{step_idx}/{img_type}",
     summary="获取步骤截图 (Get Screenshot)",
-    description="按需返回单个步骤的截图（before / after），避免在步骤列表中传输大量 base64 数据。",
+    description="优先从本地磁盘读取截图，若为历史遗留数据则从 DB 中读取 base64。",
     responses={200: {"content": {"image/png": {}}}},
 )
 async def get_step_screenshot(
@@ -276,17 +290,25 @@ async def get_step_screenshot(
     case_idx: int,
     step_idx: int,
     img_type: str,  # "before" or "after"
+    tc_id: Optional[str] = None
 ):
     """
-    按需获取截图二进制数据
+    按需获取截图二进制数据或文件
     """
-    from fastapi.responses import Response
+    import os
+    from fastapi.responses import Response, FileResponse
     import base64
 
     if img_type not in ("before", "after"):
         raise HTTPException(status_code=400, detail="img_type must be 'before' or 'after'")
 
-    # 从 DB 获取原始数据（不剥离截图）
+    # 1. 尝试从本地磁盘读取 (优化后的架构)
+    if tc_id:
+        filepath = os.path.join("data", "screenshots", execution_id, f"{tc_id}_{step_idx}_{img_type}.png")
+        if os.path.exists(filepath):
+            return FileResponse(filepath, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+
+    # 2. 从 DB 获取原始数据（兼容历史执行数据）
     result = await ExecutionService.get_execution_result_dict(
         execution_id, strip_screenshots=False
     )
@@ -307,6 +329,15 @@ async def get_step_screenshot(
 
     if not b64_data:
         raise HTTPException(status_code=404, detail="Screenshot not available")
+
+    # If the marker LOCAL was accidentally kept in DB
+    if b64_data.startswith("LOCAL:"):
+        filename = b64_data.replace("LOCAL:", "")
+        filepath = os.path.join("data", "screenshots", execution_id, filename)
+        if os.path.exists(filepath):
+            return FileResponse(filepath, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
+        else:
+            raise HTTPException(status_code=404, detail="Local screenshot file missing")
 
     # Strip data URI prefix if present
     if b64_data.startswith("data:image"):
@@ -335,22 +366,42 @@ async def cancel_execution_endpoint(execution_id: str):
     AsyncResult(execution_id).revoke(terminate=True)
     
     # 也可以发送一个专门的取消任务来清理资源
-    cancel_task.delay(execution_id)
+    cancel_task.delay(execution_id)  # type: ignore[misc]  # Celery task
     
     return {"message": f"取消请求已发送: {execution_id}"}
 
 
 
-@router.get("", response_model=List[ExecutionStatus], summary="执行历史列表 (List Executions)")
+class PaginatedExecutions(BaseModel):
+    total: int = Field(..., description="总记录数")
+    items: List[ExecutionStatus] = Field(..., description="当页数据")
+
+@router.get("", response_model=PaginatedExecutions, summary="执行历史列表 (List Executions)")
 async def list_executions(
     status: Optional[str] = Query(None, description="状态过滤"),
+    skip: int = Query(0, ge=0, description="跳过记录数"),
     limit: int = Query(20, ge=1, le=100, description="返回数量"),
 ):
     """
-    获取执行列表
+    获取带分页的执行列表
     """
-    dicts = await ExecutionService.list_executions_dicts(limit=limit)
-    return [ExecutionStatus(**d) for d in dicts]
+    data = await ExecutionService.list_executions_dicts(skip=skip, limit=limit)
+    return {"total": data["total"], "items": [ExecutionStatus(**d) for d in data["items"]]}
+
+
+@router.delete(
+    "/{execution_id}",
+    summary="删除执行记录 (Delete Execution)",
+    description="删除指定的执行历史记录以及相关联的测试步骤和本地截图数据。"
+)
+async def delete_execution(execution_id: str):
+    """
+    删除执行记录
+    """
+    success = await ExecutionService.delete_execution(execution_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Execution not found or could not be deleted")
+    return {"message": "Execution deleted successfully", "execution_id": execution_id}
 
 
 @router.post(
@@ -403,7 +454,7 @@ async def run_ui_task_async(request: UiRunRequest):
         from app.tasks.execution_tasks import execute_adhoc_task
         print("Imported execute_adhoc_task")
         
-        task = execute_adhoc_task.delay(request.prompt, request.url)
+        task = execute_adhoc_task.delay(request.prompt, request.url)  # type: ignore  # Celery task .delay()
         print(f"Task dispatched: {task.id}")
         
         return {

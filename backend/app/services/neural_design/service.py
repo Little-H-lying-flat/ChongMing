@@ -24,6 +24,7 @@ from app.core.prompts.neural_design import (
     CRITIC_SYSTEM_PROMPT, CRITIC_USER_TEMPLATE
 )
 from app.utils.json_repair import repair_json
+from app.services.neural_design.graph import neural_design_graph
 
 logger = logging.getLogger(__name__)
 
@@ -55,15 +56,15 @@ class DesignService:
         
     async def analyze_requirement(self, request: DesignRequest) -> List[Dict[str, Any]]:
         """
-        分析需求，提取测试场景
+        分析需求，提取测试场景 (LangGraph Multi-Agent Implementation)
         
         Args:
-            request: 设计请求 (包含 PRD 文本)
+            request: 设计请求 (包含 PRD 文本 或 OpenAPI JSON)
             
         Returns:
             场景列表 (JSON 结构)
         """
-        logger.info(f"开始分析需求: Project={request.project_id}")
+        logger.info(f"开始分析需求 (LangGraph): Project={request.project_id}")
         
         # 0. 构建动态约束 (Prompt Injection)
         constraint = ""
@@ -74,38 +75,28 @@ class DesignService:
         elif request.target_type == "MIXED":
             constraint = "你是一个全栈质量工程师，请根据需求自由组合前后端步骤 (API + UI)。"
         
-        # 使用 System/User Role 分离防止 Prompt Injection
-        user_content = PRD_ANALYSIS_USER_TEMPLATE.format(
-            requirement_text=request.requirement_text,
-            context=request.context or "无额外上下文",
-            constraint=constraint
-        )
-        
-        messages = [
-            Message(role="system", content=PRD_ANALYSIS_SYSTEM_PROMPT),
-            Message(role="user", content=user_content)
-        ]
+        initial_state = {
+            "project_id": request.project_id,
+            "requirement_text": request.requirement_text,
+            "target_type": request.target_type,
+            "context": (request.context or "无额外上下文") + f"\n\n约束:\n{constraint}",
+            "extracted_points": [],
+            "scenarios": [],
+            "feedback": "",
+            "revision_count": 0,
+            "is_swagger": False
+        }
         
         try:
-            # 调用 LLM 分析需求 (使用 invoke 以支持 Message 对象)
-            response = await self.ai.invoke(
-                module=AIModule.NEURAL_SCENARIO_GENERATOR,
-                messages=messages
-            )
-            data = self._parse_json(response.content)
+            # 执行 LangGraph 编译的图
+            final_state = await neural_design_graph.ainvoke(initial_state)
+            scenarios = final_state.get("scenarios", [])
             
-            scenarios = data.get("scenarios", [])
-            
-            # Enrich with IDs
-            for s in scenarios:
-                if "scenario_id" not in s:
-                    s["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
-            
-            logger.info(f"需求分析完成，提取了 {len(scenarios)} 个场景")
+            logger.info(f"需求分析完成 (LangGraph Workflow)，提取了 {len(scenarios)} 个场景")
             return scenarios
             
         except Exception as e:
-            logger.error(f"需求分析失败: {e}")
+            logger.error(f"需求分析失败 (LangGraph): {e}")
             raise RuntimeError(f"需求分析失败: {str(e)}") from e
 
     async def generate_test_case(self, scenario: Dict[str, Any], project_id: str) -> RefinedTestCase:

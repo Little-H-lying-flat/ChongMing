@@ -1,9 +1,12 @@
 
 from typing import List, Dict, Optional
+import json
 from loguru import logger
 from langchain_openai import OpenAIEmbeddings
+from langchain_core.messages import SystemMessage, HumanMessage
 from app.core.config import settings
 from app.services.smart_ops.vector_store import VectorStore
+from app.core.ai_client import get_ai_manager, AIModule
 
 class DefectManager:
     """
@@ -66,3 +69,55 @@ class DefectManager:
         except Exception as e:
             logger.error(f"Failed to find similar defects: {e}")
             return []
+
+    async def analyze_root_cause(self, error_msg: str, context: Optional[str] = None) -> Dict[str, str]:
+        """
+        Use LLM to analyze the error message and context to deduce the root cause and a suggested fix.
+        """
+        ai_manager = get_ai_manager()
+        
+        system_prompt = (
+            "You are a Senior QA Automation Engineer troubleshooting test failures. "
+            "You will be given an error message from a failed test run, and optionally some context. "
+            "Your task is to analyze the error and provide:\n"
+            "1. root_cause: A concise explanation of why the test failed.\n"
+            "2. suggested_fix: A concise recommendation on how to fix it.\n"
+            "Output MUST be in valid JSON format with keys 'root_cause' and 'suggested_fix'."
+        )
+        
+        user_content = f"Error Message:\n{error_msg}\n"
+        if context:
+            user_content += f"\nContext (e.g., Code Snippet, DOM Context, Action History):\n{context}"
+            
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_content)
+        ]
+        
+        try:
+            logger.info("Requesting Defect Root Cause Analysis from AI...")
+            response = await ai_manager.invoke(AIModule.DEFECT_ROOT_CAUSE, messages)
+            
+            # Extract JSON from response. Handle potential markdown formatting.
+            content = response.content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+                
+            analysis_dict = json.loads(content.strip())
+            
+            root_cause = analysis_dict.get("root_cause", "Analysis incomplete")
+            suggested_fix = analysis_dict.get("suggested_fix", "No fix suggested")
+            
+            return {
+                "root_cause": root_cause,
+                "suggested_fix": suggested_fix
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to analyze defect root cause: {e}")
+            return {
+                "root_cause": f"AI Analysis Failed: {str(e)}",
+                "suggested_fix": "Please investigate manually."
+            }

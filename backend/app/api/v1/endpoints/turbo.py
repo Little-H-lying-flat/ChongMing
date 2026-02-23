@@ -1,8 +1,12 @@
 from typing import Dict, Optional
 from typing import Dict, Optional
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import get_db
 from app.schemas.turbo import TurboRunConfig, TurboTestStats
 from app.engines.turbo.engine import TurboEngine
+from app.services.test_case_service import TestCaseService
+from app.schemas.api_ir import APIIR
 import uuid
 
 router = APIRouter(tags=["Flow 5: Turbo Engine (性能压测)"])
@@ -25,12 +29,39 @@ turbo_engine = TurboEngine()
     - **返回**: `test_id` 用于控制和监控。
     """
 )
-async def start_turbo_test(config: TurboRunConfig, background_tasks: BackgroundTasks):
+async def start_turbo_test(config: TurboRunConfig, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """
     Start a Turbo Load Test
     """
     if not config.test_id:
         config.test_id = f"test_{uuid.uuid4().hex[:8]}"
+        
+    # Handle API TestCase integration
+    if config.test_case_id:
+        tc_service = TestCaseService(db)
+        tc_model = await tc_service.get(config.test_case_id)
+        if not tc_model:
+            raise HTTPException(status_code=404, detail=f"Test case {config.test_case_id} not found")
+        
+        # Parse test case steps into APIIR chain
+        config.api_ir_chain = []
+        for step in tc_model.steps:
+            req = step.get("request", {})
+            api_ir = APIIR(
+                method=req.get("method", "GET"),
+                url=req.get("url", "/"),
+                headers=req.get("headers", {}),
+                body=req.get("body"),
+            )
+            config.api_ir_chain.append(api_ir)
+            
+        # Optional: set target_host to the first URL origin if not set
+        if not config.target_host and config.api_ir_chain:
+            first_url = config.api_ir_chain[0].url
+            from urllib.parse import urlparse
+            parsed = urlparse(first_url)
+            if parsed.scheme and parsed.netloc:
+                config.target_host = f"{parsed.scheme}://{parsed.netloc}"
         
     # Check if already running
     # The runner check is inside run_test, but we can check here too or catch exception

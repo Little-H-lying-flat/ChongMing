@@ -385,25 +385,31 @@ class HealthChecker:
         Returns:
             HealthReport: 健康检查报告
         """
+        import asyncio
         details = {}
         
-        # 检查基础 URL
-        web_result = await self._check_url(env.base_url)
-        details["base_url"] = {
-            "url": env.base_url,
-            "status": web_result.status,
-            "latency_ms": web_result.latency_ms,
-            "error": web_result.error,
-        }
-        
-        # 尝试检查健康端点
-        health_result = await self._check_health_endpoint(env.base_url)
-        if health_result:
-            details["health_endpoint"] = {
-                "status": health_result.status,
-                "latency_ms": health_result.latency_ms,
-                "error": health_result.error,
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            # 检查基础 URL
+            web_result = await self._check_url(client, env.base_url)
+            details["base_url"] = {
+                "url": env.base_url,
+                "status": web_result.status,
+                "latency_ms": web_result.latency_ms,
+                "error": web_result.error,
             }
+            
+            # 快速失败：如果基础 URL 直接超时或拒绝连接，大概率健康端点也连不上，直接跳过以节省时间
+            if web_result.error and ("timeout" in web_result.error.lower() or "failed" in web_result.error.lower()):
+                pass # Fail fast
+            else:
+                # 尝试并行检查健康端点
+                health_result = await self._check_health_endpoints_concurrently(client, env.base_url)
+                if health_result:
+                    details["health_endpoint"] = {
+                        "status": health_result.status,
+                        "latency_ms": health_result.latency_ms,
+                        "error": health_result.error,
+                    }
         
         # 计算总体状态
         overall_status = self._calculate_overall_status(details)
@@ -416,22 +422,21 @@ class HealthChecker:
             details=details,
         )
     
-    async def _check_url(self, url: str) -> CheckResult:
+    async def _check_url(self, client: httpx.AsyncClient, url: str) -> CheckResult:
         """检查单个 URL"""
         try:
             start = time.time()
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(url, follow_redirects=True)
-                latency = (time.time() - start) * 1000
-                
-                if response.status_code < 400:
-                    return CheckResult(status="healthy", latency_ms=round(latency, 2))
-                else:
-                    return CheckResult(
-                        status="unhealthy",
-                        latency_ms=round(latency, 2),
-                        error=f"HTTP {response.status_code}",
-                    )
+            response = await client.get(url, follow_redirects=True)
+            latency = (time.time() - start) * 1000
+            
+            if response.status_code < 400:
+                return CheckResult(status="healthy", latency_ms=round(latency, 2))
+            else:
+                return CheckResult(
+                    status="unhealthy",
+                    latency_ms=round(latency, 2),
+                    error=f"HTTP {response.status_code}",
+                )
         except httpx.TimeoutException:
             return CheckResult(status="unhealthy", error="Connection timeout")
         except httpx.ConnectError as e:
@@ -439,18 +444,31 @@ class HealthChecker:
         except Exception as e:
             return CheckResult(status="error", error=str(e)[:100])
     
-    async def _check_health_endpoint(self, base_url: str) -> CheckResult | None:
-        """尝试检查健康端点"""
+    async def _check_health_endpoints_concurrently(self, client: httpx.AsyncClient, base_url: str) -> CheckResult | None:
+        """并行尝试检查多个健康端点，返回最快成功的那个以减少耗时"""
+        import asyncio
         base = base_url.rstrip("/")
         
+        tasks = []
         for endpoint in self.HEALTH_ENDPOINTS:
             url = f"{base}{endpoint}"
-            result = await self._check_url(url)
-            if result.status == "healthy":
-                return result
+            tasks.append(asyncio.create_task(self._check_url(client, url)))
         
-        # 如果所有健康端点都失败，返回最后一个结果
-        return None
+        if not tasks:
+            return None
+            
+        last_result = None
+        for coro in asyncio.as_completed(tasks):
+            result = await coro
+            if result.status == "healthy":
+                # 找到健康的端点，取消其他还在等超时的任务
+                for t in tasks:
+                    if not t.done():
+                        t.cancel()
+                return result
+            last_result = result
+            
+        return last_result
     
     def _calculate_overall_status(self, details: dict) -> str:
         """计算总体健康状态"""
@@ -475,6 +493,7 @@ class HealthChecker:
         Returns:
             bool: 是否可达
         """
-        result = await self._check_url(url)
-        return result.status == "healthy"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            result = await self._check_url(client, url)
+            return result.status == "healthy"
 
