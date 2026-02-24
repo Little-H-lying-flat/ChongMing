@@ -20,6 +20,14 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import { getEnvironments, Environment } from '@/services/environmentService';
 
 const NEW_STEP_TEMPLATE: ApiStep = {
     id: "step_1",
@@ -53,9 +61,22 @@ export default function ApiAutoPage() {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [caseToDelete, setCaseToDelete] = useState<string | null>(null);
 
+    const [environments, setEnvironments] = useState<Environment[]>([]);
+    const [selectedEnv, setSelectedEnv] = useState<string>("default");
+
     useEffect(() => {
         loadCases();
+        loadEnvironments();
     }, []);
+
+    const loadEnvironments = async () => {
+        try {
+            const data = await getEnvironments(true);
+            setEnvironments(data);
+        } catch (err) {
+            console.error("Failed to load environments", err);
+        }
+    };
 
     const loadCases = async () => {
         setIsLoadingList(true);
@@ -145,8 +166,8 @@ export default function ApiAutoPage() {
         setExecResult(null);
 
         try {
-            // For MVP, if we haven't implemented Environment Selector, just pass empty string or user input
-            const res = await apiAutoService.runApiChain(activeCase.steps, "");
+            const envId = selectedEnv === "default" ? undefined : selectedEnv;
+            const res = await apiAutoService.runApiChain(activeCase.steps, "", {}, {}, envId);
             setExecResult(res.data);
             if (res.data.success) {
                 toast.success("执行完成: 全通过 (Execution Complete: All Passed)");
@@ -232,15 +253,29 @@ export default function ApiAutoPage() {
                                 />
                             </div>
                             <div className="flex items-center gap-3">
-                                <Button variant="outline" onClick={handleSave} disabled={isSaving} className="border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
+                                <Select value={selectedEnv} onValueChange={setSelectedEnv}>
+                                    <SelectTrigger className="w-48 bg-slate-900 border-slate-700 text-slate-200 h-9 text-sm">
+                                        <SelectValue placeholder="选择运行环境" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
+                                        <SelectItem value="default">无环境设定 (No Env)</SelectItem>
+                                        {environments.map(env => (
+                                            <SelectItem key={env.id} value={env.id}>
+                                                {env.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+
+                                <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving} className="border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
                                     <Save className="h-4 w-4 mr-2" />
-                                    {isSaving ? "保存中... (Saving...)" : "保存集合 (Save Collection)"}
+                                    {isSaving ? "保存中" : "保存"}
                                 </Button>
                                 {/* Only allow chain execution if we have steps */}
-                                {activeCase.steps.length > 1 && (
-                                    <Button onClick={handleRunChain} disabled={isExecuting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                                {activeCase.steps.length > 0 && (
+                                    <Button size="sm" onClick={handleRunChain} disabled={isExecuting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
                                         <PlayCircle className="h-4 w-4 mr-2" />
-                                        Run All ({activeCase.steps.length})
+                                        运行 ({activeCase.steps.length})
                                     </Button>
                                 )}
                             </div>

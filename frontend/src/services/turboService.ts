@@ -98,12 +98,13 @@ export const turboService = {
       const response = await axios.get(`${API_BASE_URL}/api/v1/test-cases?mode=API`);
       const items = response.data.items || [];
       const formattedItems = items.map((tc: any) => {
-        const firstStepReq = tc.steps?.[0]?.request || {};
+        const firstStep = tc.steps?.[0] || {};
+        const firstStepReq = firstStep.request || firstStep;
         return {
           id: tc.id,
           name: tc.name,
           method: firstStepReq.method || "GET",
-          url: firstStepReq.url || "/"
+          url: firstStepReq.url || firstStepReq.target || "/"
         };
       });
       return { items: formattedItems };

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Activity, Play, Server, Database, Zap, Brain, ShieldAlert, Settings } from 'lucide-react'
+import { LayoutDashboard, Activity, Play, Server, Database, Zap, Brain, ShieldAlert, Settings, Flame } from 'lucide-react'
 import { Button } from './ui/button'
 
 const Sidebar = () => {
@@ -17,6 +17,7 @@ const Sidebar = () => {
     { name: '性能压测 (Performance)', path: '/performance', icon: Zap },
     { name: '智能运维 (Smart Ops)', path: '/smart-ops', icon: ShieldAlert },
     { name: '模型治理 (Model Config)', path: '/model-config', icon: Brain },
+    { name: '凤凰涅槃 (Phoenix)', path: '/phoenix', icon: Flame },
     { name: '系统设置 (Settings)', path: '/settings', icon: Settings },
   ]
 

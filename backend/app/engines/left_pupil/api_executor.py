@@ -14,6 +14,7 @@ import httpx
 from loguru import logger
 
 from app.schemas.api_ir import APIIR, APIResponse, AuthConfig, AuthType, ExecutionResult
+from app.utils.context_injector import render_string, render_context, extract_values
 
 
 class APIExecutor:
@@ -359,26 +360,9 @@ class APIExecutor:
         return final_headers
     
     def _replace_variables(self, text: str, context: Dict[str, Any]) -> str:
-        """替换变量占位符 ${variable}"""
-        if not isinstance(text, str):
-            return text
-        
-        pattern = r'\$\{(\w+)\}'
-        
-        def replacer(match):
-            var_name = match.group(1)
-            val = context.get(var_name)
-            if val is None:
-                val = self._context.get(var_name)
-            if val is None:
-                logger.warning(
-                    f"⚠️ 变量 ${{{var_name}}} 未在 context_pool 中找到! "
-                    f"可用变量: {list(context.keys())}"
-                )
-                return match.group(0)  # 原样返回
-            return str(val)
-        
-        return re.sub(pattern, replacer, text)
+        """替换变量占位符 ${variable} 和 {{variable}}"""
+        merged_context = {**self._context, **context}
+        return render_string(str(text), merged_context)
     
     def _replace_path_params(self, url: str, path_params: Dict[str, Any], context: Dict[str, Any]) -> str:
         """替换路径参数 {param}"""
@@ -388,26 +372,9 @@ class APIExecutor:
     
     def _replace_variables_in_obj(self, obj: Any, context: Dict[str, Any]) -> Any:
         """递归替换对象中的变量"""
-        if isinstance(obj, str):
-            return self._replace_variables(obj, context)
-        elif isinstance(obj, dict):
-            return {k: self._replace_variables_in_obj(v, context) for k, v in obj.items()}
-        elif isinstance(obj, list):
-            return [self._replace_variables_in_obj(item, context) for item in obj]
-        return obj
+        merged_context = {**self._context, **context}
+        return render_context(obj, merged_context)
     
     def _extract_values(self, body: Any, extract_rules: Dict[str, str]) -> Dict[str, Any]:
         """提取响应值"""
-        from app.engines.left_pupil.variable_extractor import VariableExtractor
-        extractor = VariableExtractor()
-        
-        extracted = {}
-        for var_name, rule in extract_rules.items():
-            try:
-                value = extractor.extract(body, rule)
-                extracted[var_name] = value
-                logger.debug(f"提取变量: {var_name} = {value}")
-            except Exception as e:
-                logger.warning(f"提取变量失败: {var_name} - {e}")
-        
-        return extracted
+        return extract_values(body, extract_rules)

@@ -35,6 +35,11 @@ class Execution(Base):
     # 执行配置
     config: Mapped[dict] = mapped_column(JSON, default=dict)
     
+    # 关联环境 (可选)
+    environment_id: Mapped[Optional[str]] = mapped_column(
+        String(50), ForeignKey("environments.id", ondelete="SET NULL"), nullable=True
+    )
+    
     # 状态
     status: Mapped[ExecutionStatus] = mapped_column(
         Enum(ExecutionStatus), default=ExecutionStatus.PENDING

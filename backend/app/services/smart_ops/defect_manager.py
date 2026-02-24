@@ -3,10 +3,9 @@ from typing import List, Dict, Optional
 import json
 from loguru import logger
 from langchain_openai import OpenAIEmbeddings
-from langchain_core.messages import SystemMessage, HumanMessage
 from app.core.config import settings
 from app.services.smart_ops.vector_store import VectorStore
-from app.core.ai_client import get_ai_manager, AIModule
+from app.core.ai_client import get_ai_manager, AIModule, Message
 
 class DefectManager:
     """
@@ -77,12 +76,12 @@ class DefectManager:
         ai_manager = get_ai_manager()
         
         system_prompt = (
-            "You are a Senior QA Automation Engineer troubleshooting test failures. "
-            "You will be given an error message from a failed test run, and optionally some context. "
-            "Your task is to analyze the error and provide:\n"
-            "1. root_cause: A concise explanation of why the test failed.\n"
-            "2. suggested_fix: A concise recommendation on how to fix it.\n"
-            "Output MUST be in valid JSON format with keys 'root_cause' and 'suggested_fix'."
+            "你是一名资深的 QA 自动化工程师，正在排查测试失败的问题。"
+            "你将收到一条来自失败测试运行的错误信息，以及相关的上下文。"
+            "你的任务是分析错误并提供以下两项：\n"
+            "1. root_cause：用中文简明扼要地解释测试失败的根本原因。\n"
+            "2. suggested_fix：用中文扼要地给出修复建议。\n"
+            "输出必须是有效的 JSON 格式，且包含 'root_cause' 和 'suggested_fix' 两个键，值必须完全使用中文编写。"
         )
         
         user_content = f"Error Message:\n{error_msg}\n"
@@ -90,8 +89,8 @@ class DefectManager:
             user_content += f"\nContext (e.g., Code Snippet, DOM Context, Action History):\n{context}"
             
         messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_content)
+            Message(role="system", content=system_prompt),
+            Message(role="user", content=user_content)
         ]
         
         try:
@@ -107,8 +106,8 @@ class DefectManager:
                 
             analysis_dict = json.loads(content.strip())
             
-            root_cause = analysis_dict.get("root_cause", "Analysis incomplete")
-            suggested_fix = analysis_dict.get("suggested_fix", "No fix suggested")
+            root_cause = analysis_dict.get("root_cause", "分析未完成或格式不正确")
+            suggested_fix = analysis_dict.get("suggested_fix", "未提供修复建议")
             
             return {
                 "root_cause": root_cause,
@@ -118,6 +117,6 @@ class DefectManager:
         except Exception as e:
             logger.error(f"Failed to analyze defect root cause: {e}")
             return {
-                "root_cause": f"AI Analysis Failed: {str(e)}",
-                "suggested_fix": "Please investigate manually."
+                "root_cause": f"AI 分析调用失败：{str(e)}",
+                "suggested_fix": "请检查后端日志，或进行人工排查。"
             }

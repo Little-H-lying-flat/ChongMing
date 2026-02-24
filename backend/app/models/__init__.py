@@ -5,5 +5,6 @@ from app.models.execution import Execution, ExecutionStep
 from app.models.script import Script
 from app.models.visual_ui import VisualUseCase, VisualStep
 from app.models.defect import DefectRecord
+from app.models.environment import Environment
 
-__all__ = ["TestCase", "Execution", "ExecutionStep", "Script", "VisualUseCase", "VisualStep", "DefectRecord"]
+__all__ = ["TestCase", "Execution", "ExecutionStep", "Script", "VisualUseCase", "VisualStep", "DefectRecord", "Environment"]

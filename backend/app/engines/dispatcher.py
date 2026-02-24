@@ -50,7 +50,7 @@ class Dispatcher:
         self.right_pupil = right_pupil
         self.left_pupil = left_pupil
     
-    async def execute(self, tc_ir: TCIR, execution_id: Optional[str] = None) -> ExecutionResult:
+    async def execute(self, tc_ir: TCIR, execution_id: Optional[str] = None, initial_context: Optional[Dict[str, Any]] = None) -> ExecutionResult:
         """
         执行测试用例
         
@@ -71,7 +71,7 @@ class Dispatcher:
         overall_success = True
         
         # Initialize Context Pool for this execution
-        context_pool: Dict[str, Any] = {}
+        context_pool: Dict[str, Any] = initial_context.copy() if initial_context else {}
         
         # 🔍 Pre-scan: Collect ALL ${var_name} references from all steps
         import re as _re

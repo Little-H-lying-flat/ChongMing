@@ -60,7 +60,7 @@ def execute_test_cases(
 
         # --- End Helper ---
 
-        async def run_single_tc(tc_id: str, semaphore: asyncio.Semaphore):
+        async def run_single_tc(tc_id: str, semaphore: asyncio.Semaphore, initial_context: dict):
             async with semaphore:
                 logger.info(f"[{tc_id}] Loading...")
                 
@@ -154,7 +154,7 @@ def execute_test_cases(
 
                     async with left_pupil: # Context manager for HTTP client
                         logger.info(f"[{tc_id}] Executing...")
-                        result = await dispatcher.execute(tc_ir, execution_id)
+                        result = await dispatcher.execute(tc_ir, execution_id, initial_context=initial_context)
                     
                 except Exception as e:
                     logger.error(f"[{tc_id}] Failed: {e}")
@@ -199,8 +199,30 @@ def execute_test_cases(
         async def main_loop():
             start_time = asyncio.get_event_loop().time()
             
+            # 1. Fetch Environment Context
+            global_context = {}
+            env_id = config.get("env")
+            if env_id:
+                from app.core.database import get_db_session
+                from app.services.environment_manager import EnvironmentManager
+                try:
+                    async with get_db_session() as session:
+                        env_manager = EnvironmentManager(session)
+                        env_record = await env_manager.get(env_id)
+                        if env_record:
+                            for key, var in env_record.variables.items():
+                                val = var.get("value", "")
+                                if var.get("encrypted"):
+                                    val = env_manager._decrypt(val)
+                                global_context[key] = val
+                            global_context["base_url"] = env_record.base_url
+                            global_context["env_name"] = env_record.name
+                            logger.info(f"✅ Loaded Environment Context: {list(global_context.keys())}")
+                except Exception as e:
+                    logger.error(f"Failed to load environment {env_id}: {e}")
+
             semaphore = asyncio.Semaphore(max_workers if parallel else 1)
-            tasks = [run_single_tc(tid, semaphore) for tid in tc_ids]
+            tasks = [run_single_tc(tid, semaphore, global_context) for tid in tc_ids]
             
             results = await asyncio.gather(*tasks)
             

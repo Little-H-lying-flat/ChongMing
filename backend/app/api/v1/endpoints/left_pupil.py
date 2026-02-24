@@ -82,6 +82,7 @@ class ExecuteChainRequest(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict, description="初始上下文变量")
     default_headers: Dict[str, str] = Field(default_factory=dict, description="默认请求头")
     stop_on_failure: bool = Field(True, description="遇到失败是否停止")
+    env_id: Optional[str] = Field(None, description="关联的环境 ID")
 
 
 class StepResultResponse(BaseModel):
@@ -257,8 +258,26 @@ async def execute_chain(request: ExecuteChainRequest):
         memory = ContextMemory()
         memory.from_dict(request.context)
         
+        base_url = request.base_url
+        if request.env_id:
+            from app.core.database import get_db_session
+            from app.services.environment_manager import EnvironmentManager
+            async with get_db_session() as session:
+                env_manager = EnvironmentManager(session)
+                env_record = await env_manager.get(request.env_id)
+                if env_record:
+                    if not base_url or base_url == "default":
+                        base_url = env_record.base_url
+                    for key, var in env_record.variables.items():
+                        val = var.get("value", "")
+                        if var.get("encrypted"):
+                            val = env_manager._decrypt(val)
+                        memory.set(key, val)
+                    memory.set("base_url", env_record.base_url)
+                    memory.set("env_name", env_record.name)
+        
         runner = ApiRunner(
-            base_url=request.base_url,
+            base_url=base_url,
             memory=memory,
             default_headers=request.default_headers,
         )

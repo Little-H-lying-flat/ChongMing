@@ -17,6 +17,7 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.models.execution import Execution, ExecutionStatus
 from app.models.environment import Environment
+from app.models.defect import DefectRecord
 
 router = APIRouter()
 
@@ -184,17 +185,47 @@ async def get_dashboard_overview(db: AsyncSession = Depends(get_db)):
         for k, v in trend_map.items()
     ]
 
-    # 3. Defect Analysis (MVP Mock using real failed count)
-    failed_eval_query = select(func.count(Execution.id)).where(Execution.status == ExecutionStatus.FAILED)
-    failed_count = (await db.execute(failed_eval_query)).scalar() or 0
+    # 3. Defect Analysis (Real data from DefectRecord)
+    defect_records = (await db.execute(select(DefectRecord.root_cause))).scalars().all()
     
     defects = []
-    if failed_count > 0:
+    if defect_records:
+        category_counts = {
+            "UI定位/可见性异常": 0,
+            "断言失败(状态/返回值)": 0,
+            "网络或连接服务异常": 0,
+            "超时与等待挂起": 0,
+            "环境或鉴权异常": 0,
+            "其他未知类型": 0
+        }
+        
+        for cause in defect_records:
+            rc_lower = cause.lower() if cause else ""
+            if any(k in rc_lower for k in ["可见", "找不", "定位", "locator", "元素", "element"]):
+                category_counts["UI定位/可见性异常"] += 1
+            elif any(k in rc_lower for k in ["断言", "状态码", "期望", "不匹配", "assert"]):
+                category_counts["断言失败(状态/返回值)"] += 1
+            elif any(k in rc_lower for k in ["网络", "连接", "refused", "网关", "502", "超时", "timeout"]):
+                category_counts["网络或连接服务异常"] += 1
+            elif any(k in rc_lower for k in ["超时", "timeout", "挂起", "等待"]):
+                category_counts["超时与等待挂起"] += 1
+            elif any(k in rc_lower for k in ["认证", "权", "token", "401", "403"]):
+                category_counts["环境或鉴权异常"] += 1
+            else:
+                category_counts["其他未知类型"] += 1
+                
         defects = [
-            DefectData(name="断言错误", value=int(failed_count * 0.4) or 1),
-            DefectData(name="定位器超时", value=int(failed_count * 0.4) or 1),
-            DefectData(name="网络连接断开", value=failed_count - (int(failed_count * 0.4) * 2))
+            DefectData(name=k, value=v)
+            for k, v in category_counts.items() if v > 0
         ]
+        # Sort by most frequent
+        defects.sort(key=lambda x: x.value, reverse=True)
+    else:
+        # Fallback if no defect records exist yet, but executions failed
+        failed_eval_query = select(func.count(Execution.id)).where(Execution.status == ExecutionStatus.FAILED)
+        failed_count = (await db.execute(failed_eval_query)).scalar() or 0
+        if failed_count > 0:
+            defects = [DefectData(name="待智能排查缺陷", value=failed_count)]
 
     # 4. Recent Activities (Limit 5)
     recent_query = select(Execution).order_by(desc(Execution.created_at)).limit(5)

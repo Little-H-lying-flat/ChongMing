@@ -104,14 +104,16 @@ export const apiAutoService = {
         steps: ApiStep[],
         baseUrl: string,
         context: Record<string, any> = {},
-        defaultHeaders: Record<string, string> = {}
+        defaultHeaders: Record<string, string> = {},
+        envId?: string
     ) => {
         return api.post<ChainExecutionResult>('/left-pupil/execute-chain', {
             base_url: baseUrl,
             steps,
             context,
             default_headers: defaultHeaders,
-            stop_on_failure: true
+            stop_on_failure: true,
+            env_id: envId
         });
     }
 };

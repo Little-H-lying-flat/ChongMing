@@ -46,10 +46,10 @@ async def start_turbo_test(config: TurboRunConfig, background_tasks: BackgroundT
         # Parse test case steps into APIIR chain
         config.api_ir_chain = []
         for step in tc_model.steps:
-            req = step.get("request", {})
+            req = step.get("request", step)
             api_ir = APIIR(
                 method=req.get("method", "GET"),
-                url=req.get("url", "/"),
+                url=req.get("url", req.get("target", "/")),
                 headers=req.get("headers", {}),
                 body=req.get("body"),
             )

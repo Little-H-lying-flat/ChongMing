@@ -83,14 +83,19 @@ class GitManager:
         except Exception as e:
             logger.error(f"Git Push Failed: {e}")
 
-    def get_history(self, max_count: int = 10) -> List[dict]:
+    def get_history(self, max_count: int = 10, file_path: Optional[str] = None) -> List[dict]:
         """获取提交历史"""
         if not self.repo:
             return []
             
         commits = []
         try:
-            for commit in self.repo.iter_commits(max_count=max_count):
+            # Use paths=file_path if it's provided to filter commits touching this file
+            kwargs = {"max_count": max_count}
+            if file_path:
+                kwargs["paths"] = file_path
+                
+            for commit in self.repo.iter_commits(**kwargs):
                 commits.append({
                     "hash": commit.hexsha,
                     "message": commit.message.strip(),

@@ -475,10 +475,12 @@ const SaveTestButton = ({ scenario, projectId }: { scenario: any, projectId: str
                     steps: (scenario.steps || []).map((s: any) => {
                         const desc = typeof s === 'string' ? s : s.description;
                         return {
-                            action: typeof s === 'string' ? "verify" : (s.method || "verify"),
-                            target: typeof s === 'string' ? desc : (s.url || desc),
-                            value: typeof s === 'string' ? undefined : (s.body ? JSON.stringify(s.body) : undefined),
-                            expected: desc
+                            name: desc,
+                            method: typeof s === 'string' ? "GET" : (s.method || "GET"),
+                            url: typeof s === 'string' ? desc : (s.url || desc),
+                            headers: {},
+                            body: typeof s === 'string' ? undefined : (s.body || undefined),
+                            asserts: [{ type: "status", expected: "200" }]
                         };
                     }),
                     tags: ["auto-generated", "neural-design"]
