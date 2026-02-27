@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Code2, Save, PlayCircle } from "lucide-react";
+import { Plus, Trash2, Code2, Save, PlayCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -293,12 +293,27 @@ export default function ApiAutoPage() {
                                             {step.name}
                                         </h3>
                                     </div>
-                                    <RequestBuilder
-                                        step={step}
-                                        onChange={(newStep) => updateStep(index, newStep)}
-                                        onRun={handleRunChain} // Technically ruins the individual step run, but "Run Chain" serves both for now
-                                        isExecuting={isExecuting}
-                                    />
+                                    {((step as any).step_type === "UI" || !step.request) ? (
+                                        <div className="p-4 bg-slate-900/50 rounded-md border border-slate-800 text-slate-400 flex flex-col gap-2">
+                                            <div className="flex items-center text-amber-500 text-sm">
+                                                <AlertCircle className="w-4 h-4 mr-2" />
+                                                包含了非 API 类型的步骤 (UI/混合步骤)
+                                            </div>
+                                            <div className="text-sm">
+                                                描述 (Description): {(step as any).description || "无"}
+                                            </div>
+                                            <div className="text-sm">
+                                                目前 API 工作台仅支持可视化编排 HTTP 接口测试步骤。
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <RequestBuilder
+                                            step={step}
+                                            onChange={(newStep) => updateStep(index, newStep)}
+                                            onRun={handleRunChain}
+                                            isExecuting={isExecuting}
+                                        />
+                                    )}
                                 </div>
                             ))}
                         </div>

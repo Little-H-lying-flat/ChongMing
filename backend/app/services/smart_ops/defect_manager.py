@@ -6,6 +6,7 @@ from langchain_openai import OpenAIEmbeddings
 from app.core.config import settings
 from app.services.smart_ops.vector_store import VectorStore
 from app.core.ai_client import get_ai_manager, AIModule, Message
+from app.services.smart_ops.diagnostic_room import run_diagnostic_chat
 
 class DefectManager:
     """
@@ -71,34 +72,16 @@ class DefectManager:
 
     async def analyze_root_cause(self, error_msg: str, context: Optional[str] = None) -> Dict[str, str]:
         """
-        Use LLM to analyze the error message and context to deduce the root cause and a suggested fix.
+        Use AutoGen Multi-Agent Diagnostic Room to analyze the error message and context.
         """
-        ai_manager = get_ai_manager()
-        
-        system_prompt = (
-            "你是一名资深的 QA 自动化工程师，正在排查测试失败的问题。"
-            "你将收到一条来自失败测试运行的错误信息，以及相关的上下文。"
-            "你的任务是分析错误并提供以下两项：\n"
-            "1. root_cause：用中文简明扼要地解释测试失败的根本原因。\n"
-            "2. suggested_fix：用中文扼要地给出修复建议。\n"
-            "输出必须是有效的 JSON 格式，且包含 'root_cause' 和 'suggested_fix' 两个键，值必须完全使用中文编写。"
-        )
-        
-        user_content = f"Error Message:\n{error_msg}\n"
-        if context:
-            user_content += f"\nContext (e.g., Code Snippet, DOM Context, Action History):\n{context}"
-            
-        messages = [
-            Message(role="system", content=system_prompt),
-            Message(role="user", content=user_content)
-        ]
-        
         try:
-            logger.info("Requesting Defect Root Cause Analysis from AI...")
-            response = await ai_manager.invoke(AIModule.DEFECT_ROOT_CAUSE, messages)
+            logger.info("Requesting Defect Root Cause Analysis from Joint Diagnostic Room (AutoGen)...")
+            
+            # Call the new GroupChat
+            final_json_str = await run_diagnostic_chat(error_msg=error_msg, context=context)
             
             # Extract JSON from response. Handle potential markdown formatting.
-            content = response.content.strip()
+            content = final_json_str.strip()
             if content.startswith("```json"):
                 content = content[7:]
             if content.endswith("```"):
@@ -114,9 +97,15 @@ class DefectManager:
                 "suggested_fix": suggested_fix
             }
             
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from Diagnostic Room output: {e}\nRaw Output: {final_json_str}")
+            return {
+                "root_cause": "多智能体会诊完成，但输出的 JSON 格式解析失败",
+                "suggested_fix": f"原始诊断输出:\n{final_json_str}"
+            }
         except Exception as e:
             logger.error(f"Failed to analyze defect root cause: {e}")
             return {
-                "root_cause": f"AI 分析调用失败：{str(e)}",
+                "root_cause": f"AI 多专家联合诊断调用失败：{str(e)}",
                 "suggested_fix": "请检查后端日志，或进行人工排查。"
             }

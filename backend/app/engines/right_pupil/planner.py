@@ -141,7 +141,7 @@ class VisualPlanner:
             
             # invoke vison model
             response = await self.ai_manager.invoke_vision(
-                module=AIModule.RIGHT_PUPIL_GROUNDING,
+                module=AIModule.AGENT_RIGHT_VISUAL,
                 prompt=prompt,
                 image_base64=screenshot_base64
             )
@@ -170,7 +170,7 @@ class VisualPlanner:
             
             # DOM 模式下，图片作为辅助，也传入
             response = await self.ai_manager.invoke_vision(
-                 module=AIModule.RIGHT_PUPIL_GROUNDING,
+                 module=AIModule.AGENT_RIGHT_VISUAL,
                  prompt=prompt,
                  image_base64=screenshot_base64
             )

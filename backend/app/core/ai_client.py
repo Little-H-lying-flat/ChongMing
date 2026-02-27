@@ -99,6 +99,13 @@ class DashScopeClient(BaseAIClient):
         # 支持 extra_body (如 enable_thinking)
         extra_body = kwargs.get("extra_body", {})
         
+        # Auto-inject enable_thinking for reasoning models
+        if "enable_thinking" not in extra_body and getattr(model_config, "capability", None) in [ModelCapability.REASONING, ModelCapability.VISION]:
+             if "qwen3.5" in model_config.model_id or "max-2025" in model_config.model_id:
+                  extra_body["enable_thinking"] = True
+                  
+        print(f"DEBUG PAYLOAD to DashScope ({model_config.model_id}): extra_body={extra_body}, messages={formatted_messages}")
+        
         response = await self.client.chat.completions.create(
             model=model_config.model_id,
             messages=formatted_messages,
@@ -273,14 +280,6 @@ class AIClientManager:
             self._clients[ModelProvider.DASHSCOPE] = DashScopeClient()
             logger.info("DashScope 客户端已初始化")
             
-        # Gemini (Custom OpenAI)
-        if hasattr(settings, "GEMINI_API_KEY") and settings.GEMINI_API_KEY:
-            self._clients[ModelProvider.GEMINI] = OpenAIClient(
-                api_key=settings.GEMINI_API_KEY,
-                base_url=settings.GEMINI_BASE_URL,
-            )
-            logger.info("Gemini 客户端已初始化")
-            
         # TODO: Add other providers
     
     def _get_client(self, provider: ModelProvider) -> BaseAIClient:
@@ -405,18 +404,21 @@ class AIClientManager:
         # But wait, invoke calls get_model_config AGAIN.
         # It's better to construct messages key logic here available.
 
-        # ... existing content construction code ...
         content = []
         if image_path:
             image_data = self._encode_image(image_path)
             content.append({
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{image_data}"}
+                "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}
             })
         elif image_base64:
+            # Important: DashScope requires format like data:image/jpeg;base64,...
+            # RightPupil generates png usually, so ensure format is complete
+            if not image_base64.startswith("data:image"):
+                image_base64 = f"data:image/png;base64,{image_base64}"
             content.append({
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{image_base64}"}
+                "image_url": {"url": image_base64}
             })
         elif image_url:
             content.append({
@@ -425,10 +427,11 @@ class AIClientManager:
             })
         
         content.append({"type": "text", "text": prompt})
+        
         messages = [Message(role="user", content=content)]
         
-        # Pass model_override if needed, but we already resolved config to check capability.
-        # We can pass model_override to invoke to let it re-resolve or just trust it.
+        
+        # We need to use model_config.model_id instead of model_override directly
         return await self.invoke(module, messages, model_override=model_config.model_id, **kwargs)
 
     def _encode_image(self, image_path: str) -> str:

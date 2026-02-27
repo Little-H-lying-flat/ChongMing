@@ -12,6 +12,7 @@ class DesignRequest(BaseModel):
     requirement_text: str = Field(..., description="需求描述或 PRD 文本")
     context: Optional[str] = Field(None, description="上下文信息 (如相关 API 定义)")
     target_type: Literal["API", "UI", "MIXED"] = Field("MIXED", description="生成目标类型")
+    target_url: Optional[str] = Field(None, description="全局基础 URL")
 
 class DraftApiStep(BaseModel):
     step_id: str = Field(..., description="步骤 ID")

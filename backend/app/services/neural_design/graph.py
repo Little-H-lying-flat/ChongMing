@@ -9,11 +9,13 @@ from app.core.ai_client import get_ai_manager, Message
 from app.core.ai_models import AIModule
 from app.utils.json_repair import repair_json
 from app.core.logging import logger
+from app.core.memory_base import memory_base
 
 class GraphState(TypedDict):
     project_id: str
     requirement_text: str
     target_type: str
+    target_url: str
     context: str
     
     # Internal state
@@ -22,6 +24,7 @@ class GraphState(TypedDict):
     feedback: str
     revision_count: int
     is_swagger: bool
+    editor_output: str # New field to track the last raw output from the editor
 
 # === Nodes ===
 
@@ -52,7 +55,7 @@ async def node_swagger_parser(state: GraphState) -> Dict[str, Any]:
         Message(role="user", content=prompt)
     ]
     try:
-        response = await ai.invoke(AIModule.NEURAL_SCENARIO_GENERATOR, messages)
+        response = await ai.invoke(AIModule.AGENT_NEURAL_MERGER, messages)
         data = repair_json(response.content)
         scenarios = data.get("scenarios", [])
         
@@ -70,13 +73,26 @@ async def node_prd_extractor(state: GraphState) -> Dict[str, Any]:
     """Extract test points from PRD text"""
     logger.info("[Graph Node] Extracting test points from PRD...")
     ai = get_ai_manager()
+    
+    user_id = state.get("project_id", "default_user")
+    project_id = state.get("project_id", "default_proj")
+    
+    memory_context = memory_base.search_memory(
+        query=f"测试偏好和需求分析经验: {state['requirement_text'][:200]}", 
+        user_id=user_id, 
+        project_id=project_id
+    )
+    
     prompt = f"Extract the key business requirements and testing points from this PRD:\n{state['requirement_text']}\n\nTarget Type: {state.get('target_type', 'MIXED')}"
+    if memory_context:
+        prompt = f"{memory_context}\n\n{prompt}"
+        
     messages = [
         Message(role="system", content="You are a strict QA requirement analyzer. Output ONLY clear, concise testing points as a JSON list of strings under the key 'points'. DO NOT add markdown markers outside the JSON."),
         Message(role="user", content=prompt)
     ]
     try:
-        response = await ai.invoke(AIModule.NEURAL_SCENARIO_GENERATOR, messages)
+        response = await ai.invoke(AIModule.AGENT_NEURAL_MERGER, messages)
         data = repair_json(response.content)
         points = data.get("points", [])
         logger.info(f"[Graph Node] Extracted {len(points)} points.")
@@ -85,44 +101,49 @@ async def node_prd_extractor(state: GraphState) -> Dict[str, Any]:
         logger.error(f"PRD extraction failed: {e}")
         return {"extracted_points": []}
 
+from app.services.neural_design.autogen_scenarist import run_scenarist_group_chat
+
 async def node_scenarist(state: GraphState) -> Dict[str, Any]:
-    """Generate test scenarios from extracted points"""
-    logger.info("[Graph Node] Generating scenarios...")
-    ai = get_ai_manager()
+    """Generate test scenarios from extracted points via AutoGen Group Chat"""
+    logger.info("[Graph Node] Entering AutoGen Multi-Agent Discussion Room...")
     
-    feedback_str = f"Critical Critic Feedback to address (MUST FIX):\n{state.get('feedback', '')}" if state.get("feedback") else "No previous feedback."
+    extracted_points = state.get("extracted_points", [])
+    requirement_text = state.get("requirement_text", "")
+    target = state.get("target_type", "MIXED")
+    context_info = state.get("context", "")
     
-    prompt = f"""
-    Context Info: {state.get('context', '')}
-    Target Testing Type: {state.get('target_type', 'MIXED')}
+    user_id = state.get("project_id", "default_user")
+    project_id = state.get("project_id", "default_proj")
+    memory_context = memory_base.search_memory(
+        query="业务场景生成建议和测试用例偏好", 
+        user_id=user_id, 
+        project_id=project_id
+    )
     
-    Extracted Test Points:
-    {json.dumps(state.get('extracted_points', []), ensure_ascii=False)}
-    
-    {feedback_str}
-    
-    Generate deep, robust test scenarios covering the points. Return a JSON object with a 'scenarios' list.
-    Every scenario must include: 'name', 'priority' (e.g. P0, P1), 'description', and 'steps' (list of detailed steps).
-    """
-    
-    messages = [
-        Message(role="system", content="You are an elite QA Scenarist. Generate a JSON with a 'scenarios' list."),
-        Message(role="user", content=prompt)
-    ]
+    feedback_str = f"Critical Critic Feedback to address (MUST FIX):\n{state.get('feedback', '')}" if state.get("feedback") else ""
+    full_context = f"【原始需求文档 PRD (Highest Priority)】\n{requirement_text}\n\n【系统约束与上下文】\n{context_info}\n\n{memory_context}\n\n{feedback_str}\n(如果原始需求中指定了测试网址或域名，请优先使用文档中的网址，忽略系统上下文的默认 Base URL)"
     
     try:
-        response = await ai.invoke(AIModule.NEURAL_SCENARIO_GENERATOR, messages)
-        data = repair_json(response.content)
+        final_merged_json = await run_scenarist_group_chat(
+            extracted_points=extracted_points,
+            target_type=target,
+            target_url=state.get("target_url", ""),
+            context=full_context
+        )
         
+        data = repair_json(final_merged_json)
         scenarios = data.get("scenarios", [])
+        
         for s in scenarios:
             if "scenario_id" not in s:
                 s["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
+            if "[AutoGen-Merged]" not in s.get("name", ""):
+                s["name"] = "[AutoGen-Merged] " + s.get("name", "Scenario")
                 
         return {"scenarios": scenarios}
     except Exception as e:
-        logger.error(f"Scenarist failed: {e}")
-        return {"scenarios": state.get("scenarios", [])} # fallback to old if failed
+        logger.error(f"Scenarist Agent Chat failed: {e}")
+        return {"scenarios": state.get("scenarios", [])}
 
 async def node_critic(state: GraphState) -> Dict[str, Any]:
     """Criticize generated scenarios"""
@@ -140,7 +161,7 @@ async def node_critic(state: GraphState) -> Dict[str, Any]:
     ]
     
     try:
-        response = await ai.invoke(AIModule.NEURAL_SCENARIO_GENERATOR, messages)
+        response = await ai.invoke(AIModule.AGENT_NEURAL_MERGER, messages)
         data = repair_json(response.content)
         
         is_approved = data.get("approved", False)
@@ -155,6 +176,46 @@ async def node_critic(state: GraphState) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Critic failed: {e}")
         return {"feedback": ""} # Pass if critic breaks
+
+from app.services.neural_design.autogen_editor import run_editor_agent
+
+async def node_editor(state: GraphState) -> Dict[str, Any]:
+    """Execute single-agent Editor to fix scenarios based on Critic feedback"""
+    logger.info(f"[Graph Node] Editor Agent fixing scenarios... (Revision {state.get('revision_count', 0)})")
+    
+    scenarios = state.get("scenarios", [])
+    feedback = state.get("feedback", "")
+    context_info = state.get("context", "")
+    
+    if not scenarios or not feedback:
+        return {} # Nothing to do
+        
+    try:
+        final_merged_json = await run_editor_agent(
+            scenarios=scenarios,
+            feedback=feedback,
+            context=context_info
+        )
+        
+        data = repair_json(final_merged_json)
+        updated_scenarios = data.get("scenarios", [])
+        
+        # Ensure we don't lose all our scenarios if editor breaks completely
+        if not updated_scenarios:
+            logger.warning("[Graph Node] Editor returned empty scenarios, retaining old ones.")
+            return {"editor_output": final_merged_json}
+            
+        for s in updated_scenarios:
+            if "scenario_id" not in s:
+                s["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
+            if "[Edited]" not in s.get("name", ""):
+                 s["name"] = "[Edited] " + s.get("name", "Scenario")
+                 
+        return {"scenarios": updated_scenarios, "editor_output": final_merged_json}
+    except Exception as e:
+        logger.error(f"Editor Agent failed: {e}")
+        return {}
+
 
 # === Edges ===
 def route_after_router(state: GraphState) -> str:
@@ -173,7 +234,7 @@ def route_after_critic(state: GraphState) -> str:
         logger.warning("[Graph Router] Max revisions reached. Forcing END.")
         return END
         
-    return "scenarist"
+    return "editor"
 
 # === Build Graph ===
 def build_neural_design_graph():
@@ -184,6 +245,7 @@ def build_neural_design_graph():
     builder.add_node("prd_extractor", node_prd_extractor)
     builder.add_node("scenarist", node_scenarist)
     builder.add_node("critic", node_critic)
+    builder.add_node("editor", node_editor)
     
     builder.add_edge(START, "router")
     
@@ -206,9 +268,11 @@ def build_neural_design_graph():
         route_after_critic,
         {
             END: END,
-            "scenarist": "scenarist"
+            "editor": "editor"
         }
     )
+    
+    builder.add_edge("editor", "critic")
     
     return builder.compile()
 

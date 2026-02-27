@@ -11,11 +11,9 @@ from typing import Optional
 
 
 class ModelProvider(str, Enum):
-    """模型提供商"""
+    """大模型提供商"""
     DASHSCOPE = "dashscope"  # 阿里云百炼
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
-    GEMINI = "gemini"  # Custom OpenAI Provider
+    OPENAI = "openai"        # OpenAI (备用)AI Provider
     LOCAL = "local"  # 本地模型 (Ollama)
 
 
@@ -47,24 +45,6 @@ class ModelConfig:
 
 AVAILABLE_MODELS = {
     # === 阿里云 DashScope 模型 ===
-    "qwen-max": ModelConfig(
-        model_id="qwen-max",
-        provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.TEXT,
-        max_tokens=8192,
-        temperature=0.7,
-        description="通义千问 Max - 高智能复杂任务",
-        cost_per_1k_tokens=0.04,
-    ),
-    "qwen-plus": ModelConfig(
-        model_id="qwen-plus",
-        provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.TEXT,
-        max_tokens=8192,
-        temperature=0.7,
-        description="通义千问 Plus - 平衡性能与成本",
-        cost_per_1k_tokens=0.008,
-    ),
     "qwen-turbo": ModelConfig(
         model_id="qwen-turbo",
         provider=ModelProvider.DASHSCOPE,
@@ -74,15 +54,6 @@ AVAILABLE_MODELS = {
         description="通义千问 Turbo - 快速响应",
         cost_per_1k_tokens=0.002,
     ),
-    "qwen-flash": ModelConfig(
-        model_id="qwen-flash", # Assumed valid model ID, maybe qwen2.5-flash
-        provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.TEXT,
-        max_tokens=8192,
-        temperature=0.7,
-        description="通义千问 Flash - 极速响应",
-        cost_per_1k_tokens=0.001, # Estimated cheaper than turbo
-    ),
     "qwen-long": ModelConfig(
         model_id="qwen-long",
         provider=ModelProvider.DASHSCOPE,
@@ -91,42 +62,6 @@ AVAILABLE_MODELS = {
         temperature=0.7,
         description="通义千问 Long - 超长上下文",
         cost_per_1k_tokens=0.0005,
-    ),
-    "qwen-vl-plus": ModelConfig(
-        model_id="qwen-vl-plus",
-        provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.VISION,
-        max_tokens=8192,
-        temperature=0.7,
-        description="通义千问 VL Plus - 视觉理解",
-        cost_per_1k_tokens=0.008,
-    ),
-    "qwen-vl-max": ModelConfig(
-        model_id="qwen-vl-max",
-        provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.VISION,
-        max_tokens=8192,
-        temperature=0.7,
-        description="通义千问 VL Max - 高级视觉理解",
-        cost_per_1k_tokens=0.02,
-    ),
-    "qwen3-235b-a22b": ModelConfig(
-        model_id="qwen3-235b-a22b",
-        provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.REASONING,
-        max_tokens=8192,
-        temperature=0.7,
-        description="Qwen3 235B - 深度推理 (需开通)",
-        cost_per_1k_tokens=0.004,
-    ),
-    "qwen-max-2025-01-25": ModelConfig( # Assuming this is the qwen3-max equivalent or placeholder if exact ID is qwen-max-latest
-        model_id="qwen-max-2025-01-25",
-        provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.REASONING,
-        max_tokens=8192,
-        temperature=0.7,
-        description="通义千问 Qwen2.5-Max (2025-01-25)",
-        cost_per_1k_tokens=0.02, # Estimated
     ),
     "qwen3-max": ModelConfig( # Renamed key to match usage 
         # Actually user said "qwen3-max" and "qwen3-vl-plus". 
@@ -150,31 +85,23 @@ AVAILABLE_MODELS = {
         description="Qwen3 VL Plus (User Requested)",
         cost_per_1k_tokens=0.01,
     ),
-    "qwen2.5-max": ModelConfig(
-        model_id="qwen-max-2025-01-25",
-        provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.REASONING,
-        max_tokens=8192,
-        description="Qwen2.5 Max (2025-01-25)",
-        cost_per_1k_tokens=0.02,
-    ),
-    "qwen2.5-plus": ModelConfig(
-        model_id="qwen-plus-2025-01-25",
-        provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.REASONING,
-        max_tokens=8192,
-        description="Qwen2.5 Plus (2025-01-25)",
-        cost_per_1k_tokens=0.004,
-    ),
     # User specifically asked for this ID
     "qwen3.5-plus": ModelConfig( 
         model_id="qwen3.5-plus", 
         provider=ModelProvider.DASHSCOPE,
-        capability=ModelCapability.REASONING, # It supports everything
+        capability=ModelCapability.VISION, # Ensure this handles VL natively
         max_tokens=8192,
         description="Qwen3.5 Plus - 原生视觉语言系列，混合架构，深度思考",
         describe="Qwen3.5原生视觉语言系列Plus模型，基于混合架构设计，融合了线性注意力机制与稀疏混合专家模型，实现了更高的推理效率。在多项任务评测中，3.5系列均展现出与当前顶尖前沿模型相媲美的卓越性能，模型效果在纯文本与多模态方面相较3系列均实现飞跃式进步。(qwen3.5-plus-2026-02-15)",
         cost_per_1k_tokens=0.004, 
+    ),
+    "qwen3.5-flash": ModelConfig( 
+        model_id="qwen3.5-flash", 
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.VISION, # Ensure this handles VL natively for fast mode
+        max_tokens=8192,
+        description="Qwen3.5 Flash - 原生视觉语言系列，极速多模态",
+        cost_per_1k_tokens=0.001, 
     ),
     "text-embedding-v3": ModelConfig(
         model_id="text-embedding-v3",
@@ -213,16 +140,6 @@ AVAILABLE_MODELS = {
         description="通义文本向量模型 V4",
         cost_per_1k_tokens=0.0005,
     ),
-
-    # === Custom Gemini ===
-    "gemini-3-pro-high": ModelConfig(
-        model_id="gemini-3-pro-high",
-        provider=ModelProvider.GEMINI,
-        capability=ModelCapability.TEXT,
-        max_tokens=8192,
-        temperature=0.7,
-        description="Gemini 3 Pro High - Custom Provider",
-    ),
 }
 
 
@@ -233,66 +150,63 @@ AVAILABLE_MODELS = {
 class AIModule(str, Enum):
     """AI 功能模块"""
     
-    # === 神经设计层 ===
-    NEURAL_INTENT_PARSER = "neural.intent_parser"       # 意图解析
-    NEURAL_SCENARIO_GENERATOR = "neural.scenario_gen"   # 场景推理
-    NEURAL_CRITIC = "neural.critic"                     # 用例审核
-    
-    # === 右瞳引擎 ===
-    RIGHT_PUPIL_PLANNER = "right_pupil.planner"         # 动作规划
-    RIGHT_PUPIL_GROUNDING = "right_pupil.grounding"     # 元素定位 (VL)
-    RIGHT_PUPIL_VERIFY = "right_pupil.verify"           # 结果验证 (VL)
-    
-    # === 左瞳引擎 ===
-    LEFT_PUPIL_CHAIN_INFERENCE = "left_pupil.chain"     # 调用链推理
-    LEFT_PUPIL_PARAM_GEN = "left_pupil.param_gen"       # 参数生成
-    
-    # === 凤凰涅槃层 ===
-    PHOENIX_CODE_GEN = "phoenix.code_gen"               # 代码生成
-    PHOENIX_CODEGEN = "phoenix.code_gen"                # Alias for compatibility
-    PHOENIX_ASSERTION_GEN = "phoenix.assertion"         # 断言生成
-    
-    # === 缺陷分析 ===
-    DEFECT_ROOT_CAUSE = "defect.root_cause"             # 根因分析
-    DEFECT_FIX_SUGGEST = "defect.fix_suggest"           # 修复建议
-    DEFECT_ANALYSIS = "defect.root_cause"               # Alias for compatibility
-    
     # === 通用 ===
     GENERAL_CHAT = "general.chat"                       # 通用对话
     GENERAL_SUMMARY = "general.summary"                 # 文档摘要
     RAG_EMBEDDING = "rag.embedding"                     # RAG 向量化
+    
+    # === 角色智能体挂载点 (Agent Mount Points) ===
+    # 1. Neural Design
+    AGENT_NEURAL_ADMIN = "agent.neural.admin"
+    AGENT_NEURAL_FINDER = "agent.neural.finder"
+    AGENT_NEURAL_UI_EXPERT = "agent.neural.ui_expert"
+    AGENT_NEURAL_API_EXPERT = "agent.neural.api_expert"
+    AGENT_NEURAL_MERGER = "agent.neural.merger"
+    
+    # 2. Left Pupil (API Flow)
+    AGENT_LEFT_SHERLOCK = "agent.left.sherlock"
+    AGENT_LEFT_HEALER = "agent.left.healer"
+    AGENT_LEFT_PERSONA = "agent.left.persona"
+    AGENT_LEFT_RED_TEAMER = "agent.left.red_teamer"
+    AGENT_LEFT_JANITOR = "agent.left.janitor"
+    
+    # 3. Right Pupil (UI Flow)
+    AGENT_RIGHT_VISUAL = "agent.right.visual"
+    AGENT_RIGHT_PERSONA = "agent.right.persona"
+    AGENT_RIGHT_CRITIC = "agent.right.critic"
+    AGENT_RIGHT_SHERLOCK = "agent.right.sherlock"
+    AGENT_RIGHT_HEALER = "agent.right.healer"
 
 
 # 默认模型映射配置
 DEFAULT_MODEL_MAPPING = {
-    # === 神经设计层 - 需要高智能 ===
-    AIModule.NEURAL_INTENT_PARSER: "qwen3-max",
-    AIModule.NEURAL_SCENARIO_GENERATOR: "qwen3-max",
-    AIModule.NEURAL_CRITIC: "qwen3-max",
-    
-    # === 右瞳引擎 - 需要视觉能力 ===
-    AIModule.RIGHT_PUPIL_PLANNER: "qwen3.5-plus",
-    AIModule.RIGHT_PUPIL_GROUNDING: "qwen3.5-plus",  # 视觉定位
-    AIModule.RIGHT_PUPIL_VERIFY: "qwen3.5-plus",     # 视觉验证
-    
-    # === 左瞳引擎 ===
-    AIModule.LEFT_PUPIL_CHAIN_INFERENCE: "qwen3.5-plus",
-    AIModule.LEFT_PUPIL_PARAM_GEN: "qwen-flash",     # 极速生成
-    
-    # === 凤凰涅槃层 ===
-    AIModule.PHOENIX_CODE_GEN: "qwen3.5-plus",
-    AIModule.PHOENIX_CODEGEN: "qwen3.5-plus",
-    AIModule.PHOENIX_ASSERTION_GEN: "qwen-flash",
-    
-    # === 缺陷分析 - 需要推理能力 ===
-    AIModule.DEFECT_ROOT_CAUSE: "qwen3.5-plus",
-    AIModule.DEFECT_FIX_SUGGEST: "qwen3.5-plus",
-    AIModule.DEFECT_ANALYSIS: "qwen3.5-plus",
     
     # === 通用 ===
-    AIModule.GENERAL_CHAT: "qwen-flash",
-    AIModule.GENERAL_SUMMARY: "qwen-long",           # 长文本摘要
-    AIModule.RAG_EMBEDDING: "text-embedding-v4",
+    AIModule.GENERAL_CHAT: "qwen-turbo",
+    AIModule.GENERAL_SUMMARY: "qwen-turbo",
+    AIModule.RAG_EMBEDDING: "text-embedding-v3",
+    
+    # === 角色智能体挂载点默认映射 ===
+    # 1. Neural Design (推理为主，qwen3.5-flash 性价比最高)
+    AIModule.AGENT_NEURAL_ADMIN: "qwen3.5-flash",
+    AIModule.AGENT_NEURAL_FINDER: "qwen3.5-flash",
+    AIModule.AGENT_NEURAL_UI_EXPERT: "qwen3.5-flash",
+    AIModule.AGENT_NEURAL_API_EXPERT: "qwen3.5-flash",
+    AIModule.AGENT_NEURAL_MERGER: "qwen3.5-flash",
+    
+    # 2. Left Pupil (API Flow - 分析代码和结构，需强推理)
+    AIModule.AGENT_LEFT_SHERLOCK: "qwen3.5-plus",  # 根因分析需更强能力
+    AIModule.AGENT_LEFT_HEALER: "qwen3.5-plus",    # 载荷自愈需更强能力
+    AIModule.AGENT_LEFT_PERSONA: "qwen3.5-flash",
+    AIModule.AGENT_LEFT_RED_TEAMER: "qwen3.5-plus",
+    AIModule.AGENT_LEFT_JANITOR: "qwen3.5-flash",
+    
+    # 3. Right Pupil (UI Flow - 强视觉依赖)
+    AIModule.AGENT_RIGHT_VISUAL: "qwen3.5-plus",   # 必须 Vision 能力
+    AIModule.AGENT_RIGHT_PERSONA: "qwen3.5-flash",
+    AIModule.AGENT_RIGHT_CRITIC: "qwen3.5-flash",
+    AIModule.AGENT_RIGHT_SHERLOCK: "qwen3.5-plus", # 也可以给文字版
+    AIModule.AGENT_RIGHT_HEALER: "qwen3.5-plus",   # UI 自愈需较强能力
 }
 
 
@@ -321,22 +235,11 @@ def get_model_for_module(
         try:
             from app.core.config import settings
             config_mapping = {
-                AIModule.NEURAL_INTENT_PARSER: settings.MODEL_NEURAL_INTENT,
-                AIModule.NEURAL_SCENARIO_GENERATOR: settings.MODEL_NEURAL_SCENARIO,
-                AIModule.NEURAL_CRITIC: settings.MODEL_NEURAL_CRITIC,
+                AIModule.AGENT_NEURAL_MERGER: settings.MODEL_NEURAL_SCENARIO,
                 
-                AIModule.RIGHT_PUPIL_PLANNER: settings.MODEL_RIGHT_PUPIL_PLANNER,
-                AIModule.RIGHT_PUPIL_GROUNDING: settings.MODEL_RIGHT_PUPIL_VL,
-                AIModule.RIGHT_PUPIL_VERIFY: settings.MODEL_RIGHT_PUPIL_VL,
-                
-                AIModule.LEFT_PUPIL_CHAIN_INFERENCE: settings.MODEL_LEFT_PUPIL_CHAIN,
-                AIModule.LEFT_PUPIL_PARAM_GEN: settings.MODEL_LEFT_PUPIL_PARAM,
-                
-                AIModule.PHOENIX_CODE_GEN: settings.MODEL_PHOENIX_CODEGEN,
-                AIModule.PHOENIX_CODEGEN: settings.MODEL_PHOENIX_CODEGEN,
-                
-                AIModule.DEFECT_ROOT_CAUSE: settings.MODEL_DEFECT_ANALYSIS,
-                AIModule.DEFECT_ANALYSIS: settings.MODEL_DEFECT_ANALYSIS,
+                AIModule.AGENT_RIGHT_VISUAL: settings.MODEL_RIGHT_PUPIL_VL,
+                AIModule.AGENT_LEFT_SHERLOCK: settings.MODEL_LEFT_PUPIL_CHAIN,
+                AIModule.AGENT_NEURAL_API_EXPERT: settings.MODEL_PHOENIX_CODEGEN,
                 
                 AIModule.GENERAL_CHAT: settings.MODEL_GENERAL_CHAT,
                 AIModule.GENERAL_SUMMARY: settings.MODEL_GENERAL_LONG,

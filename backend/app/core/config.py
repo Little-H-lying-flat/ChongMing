@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     # 左瞳引擎 (API 推理)
     MODEL_LEFT_PUPIL_CHAIN: str = "qwen-plus"
     MODEL_LEFT_PUPIL_PARAM: str = "qwen-turbo"
+    QWEN_MODEL_OMNI: str = "qwen-omni-turbo"
     
     # 凤凰涅槃层 (代码生成)
     MODEL_PHOENIX_CODEGEN: str = "qwen-plus"

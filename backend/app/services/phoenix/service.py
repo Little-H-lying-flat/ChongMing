@@ -35,7 +35,7 @@ class PhoenixService:
         try:
             # Generate script using LLM
             response = await self.ai.invoke(
-                module=AIModule.PHOENIX_CODEGEN,
+                module=AIModule.AGENT_NEURAL_API_EXPERT,
                 messages=messages
             )
             
@@ -68,7 +68,7 @@ class PhoenixService:
         
         try:
             response = await self.ai.invoke(
-                module=AIModule.DEFECT_ANALYSIS,
+                module=AIModule.AGENT_LEFT_SHERLOCK,
                 messages=messages
             )
             

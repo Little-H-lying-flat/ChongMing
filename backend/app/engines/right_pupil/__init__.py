@@ -21,6 +21,8 @@ from .planner import VisualPlanner
 from app.engines.runner.ui_runner import UiRunner
 from app.engines.turbo.synthesizer import DataSynthesizer
 from app.schemas.execution import AUIIR
+from .state import AgentState
+from .graph import create_right_pupil_graph
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,9 @@ class RightPupilEngine:
         self.data_synthesizer = DataSynthesizer()
         self.max_steps = 10
         self.waiter: Optional[SmartWaiter] = None
+        
+        # Initialize LangGraph
+        self.graph = create_right_pupil_graph(self)
 
 
     async def start_session(self, headless: bool = True):
@@ -156,175 +161,608 @@ class RightPupilEngine:
                 "error": str(e)
             })()
 
-    async def execute_step(self, description: str, url: str = None, execution_id: str = None) -> Dict[str, Any]:
+    # ═══════════════════════════════════════════
+    # LangGraph Nodes Implementation
+    # ═══════════════════════════════════════════
+    
+    async def node_perceive(self, state: AgentState) -> Dict[str, Any]:
         """
-        单步 AI 执行 — Dispatcher 调用入口
-        
-        将自然语言描述交给 AI Agent 的一次 Sense→Plan→Act 循环:
-        1. (可选) 导航到 URL
-        2. Smart Wait → 截图 → OmniParser → SoM
-        3. VisualPlanner 根据 description 规划动作
-        4. UiRunner 执行
-        5. 截图 → 返回结果
+        [Node] 感知锚定: 获取截图并调用 OmniParser
         """
+        logger.info("--- [Node: Perceive] ---")
         import base64
         
+        # Step 1: Wait & Screenshot
+        if self.waiter:
+            await self.waiter.wait_until_stable()
+            
+        screenshot_bytes = await self.page.screenshot(type="png")
+        screenshot_b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+        
+        # Initialize state updates
+        updates = {
+            "current_screenshot": screenshot_b64,
+            "error": None,
+            "failure_type": None
+        }
+        
+        # Check if navigating
+        if state.get("action_intent") and getattr(state["action_intent"], "action_type", "") == "navigate":
+            # Just navigated, return screenshot, no need for OmniParser this cycle until next reasoned action
+            return updates
+
+        # Step 2: Perception (OmniParser -> SoM)
+        try:
+            elements = await self.omni_client.parse_screenshot(screenshot_b64)
+            if not elements:
+                logger.warning("OmniParser found no elements.")
+                updates["error"] = "No elements found on screen."
+                updates["failure_type"] = "VISION_FAILED"
+                return updates
+                
+            loop = asyncio.get_running_loop()
+            annotated_b64, id_map = await loop.run_in_executor(
+                None, self.som_renderer.draw_som, screenshot_b64, elements
+            )
+            
+            # Construct SoM text for the Reason node
+            som_text_lines = []
+            for k, v in id_map.items():
+                bbox = v.get('bbox', [0, 0, 0, 0])
+                w = int(bbox[2] - bbox[0])
+                h = int(bbox[3] - bbox[1])
+                som_text_lines.append(f"ID {k}: [{w}x{h}] {v.get('label')} {v.get('content', '')}")
+            som_text = "\n".join(som_text_lines)
+            
+            # Live trace broadcast (Optional)
+            execution_id = state.get("execution_id")
+            if execution_id:
+                from app.api.v1.endpoints.visual_ui import visual_ws_manager
+                try:
+                    asyncio.create_task(
+                        visual_ws_manager.broadcast_to_execution(
+                            execution_id,
+                            {
+                                "event": "live_trace",
+                                "step_description": state.get("task_description", ""),
+                                "image_b64": f"data:image/png;base64,{annotated_b64}"
+                            }
+                        )
+                    )
+                except Exception as e:
+                    pass
+            
+            updates.update({
+                "annotated_screenshot": annotated_b64,
+                "id_map": id_map,
+                "som_text": som_text
+            })
+            
+        except Exception as e:
+            logger.error(f"Perception failed: {e}")
+            updates["error"] = f"Perception Error: {str(e)}"
+            updates["failure_type"] = "VISION_FAILED"
+            
+        return updates
+
+    async def node_reason(self, state: AgentState) -> Dict[str, Any]:
+        """
+        [Node] 群智决策: AutoGen GroupChat (VisualExpert + Persona + Critic)
+
+        """
+        logger.info("--- [Node: Reason] ---")
+        
+        # If perceive failed, skip reasoning
+        if state.get("error"):
+            return {}
+            
+        task_desc = state.get("task_description")
+        
+        # Handle Navigation specifically if initial step has url but no intent yet
+        if state.get("task_url") and not state.get("action_intent"):
+             # For Phase 1, if we have a URL initially, we navigate first
+             from app.schemas.execution import AUIIR
+             action = AUIIR(
+                 action_type="navigate",
+                 target=type('ActionTarget', (object,), {"strategy": "url", "value": state["task_url"]})(),
+                 params={}
+             )
+             return {"action_intent": action}
+        
+        try:
+            from app.engines.right_pupil.agents.visual_expert import VisualExpertAgent
+            from app.engines.right_pupil.agents.persona import PersonaAgent
+            from app.engines.right_pupil.agents.critic import CriticAgent
+            import autogen
+            import json
+            import re
+            from app.core.config import settings
+            from app.schemas.execution import AUIIR
+            from app.core.ai_models import AIModule
+            from app.core.ai_client import get_ai_manager
+            
+            # Setup AutoGen LLM Config using DashScope through our unify config
+            # (In a real production setup, we'd wire AIClient in, but AutoGen expects OpenAI-compatible config dict)
+            from app.services.smart_ops.ai_config_service import AIConfigService
+            from app.core.ai_models import AIModule
+            
+            visual_cfg = await AIConfigService.get_model_config(AIModule.AGENT_RIGHT_VISUAL)
+            persona_cfg = await AIConfigService.get_model_config(AIModule.AGENT_RIGHT_PERSONA)
+            critic_cfg = await AIConfigService.get_model_config(AIModule.AGENT_RIGHT_CRITIC)
+
+            def build_cfg(cfg):
+                return {
+                    "config_list": [{
+                        "model": cfg.model_id,
+                        "api_key": settings.QWEN_API_KEY,
+                        "base_url": settings.QWEN_BASE_URL
+                    }],
+                    "temperature": cfg.temperature,
+                    "max_tokens": cfg.max_tokens,
+                    "timeout": 120,
+                }
+            
+            # 1. Initialize Agents
+            admin = autogen.UserProxyAgent(
+                name="Orchestrator",
+                system_message="You manage the reasoning flow. Provide the SoM data and task to the experts. Wait for the Critic to say TERMINATE.",
+                human_input_mode="NEVER",
+                code_execution_config=False
+            )
+            
+            visual_expert = VisualExpertAgent("视觉交互专家_VisualExpert", build_cfg(visual_cfg))
+            persona = PersonaAgent("视觉意图拆解_Persona", build_cfg(persona_cfg))
+            critic = CriticAgent("视觉审查官_Critic", build_cfg(critic_cfg))
+            
+            from app.engines.right_pupil.agents.librarian import search_knowledge_base
+            autogen.agentchat.register_function(
+                search_knowledge_base,
+                caller=visual_expert,
+                executor=admin,
+                name="search_knowledge_base",
+                description="Search the knowledge base for historical context or element locators."
+            )
+            autogen.agentchat.register_function(
+                search_knowledge_base,
+                caller=persona,
+                executor=admin,
+                name="search_knowledge_base",
+                description="Search the knowledge base for historical context or synthetic test data examples."
+            )
+            
+            # 2. Build GroupChat
+            groupchat = autogen.GroupChat(
+                agents=[admin, visual_expert, persona, critic],
+                messages=[],
+                max_round=10,
+                speaker_selection_method="round_robin", # Admin -> Visual -> Persona -> Critic
+                allow_repeat_speaker=False
+            )
+            
+            manager = autogen.GroupChatManager(groupchat=groupchat, llm_config=build_cfg(critic_cfg))
+            
+            # 3. Construct Prompt
+            prompt = f"""Task: {task_desc}
+            
+Recent History: {json.dumps(state.get('history')[-3:] if state.get('history') else [])}
+
+OmniParser SoM Elements:
+{state.get('som_text', '')}
+
+Please propose the next action."""
+
+            # 4. Run GroupChat (Synchronously in executor to not block async loop)
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                admin.initiate_chat,
+                manager,
+                prompt
+            )
+
+            # 5. Extract JSON from Critic's last message
+            last_msg = None
+            # Find the last message from Critic
+            for msg in reversed(groupchat.messages):
+                if msg.get("name") == "视觉审查官_Critic":
+                    last_msg = msg.get("content", "")
+                    break
+                    
+            if not last_msg:
+                raise ValueError("Critic did not provide a final output.")
+                
+            # Extract JSON block
+            import re
+            json_str = last_msg
+            json_match = re.search(r'```(?:json)?\n(.*?)\n```', last_msg, re.DOTALL)
+            if json_match:
+               json_str = json_match.group(1)
+            else:
+               # Try to find { ... }
+               match = re.search(r'(\{.*\})', last_msg, re.DOTALL)
+               if match:
+                   json_str = match.group(1)
+
+            action_data = json.loads(json_str)
+            
+            # Parse into AUIIR
+            action = AUIIR(**action_data)
+            
+            # Action correction (fallback to our heuristics if needed)
+            if action and action.action_type != "done":
+                action = self._correct_action_type(action, task_desc)
+                
+            return {"action_intent": action}
+            
+        except Exception as e:
+            logger.error(f"Reasoning failed (AutoGen): {e}")
+            return {
+                "error": f"Reasoning Error: {str(e)}",
+                "failure_type": "PLANNING_FAILED"
+            }
+
+    async def node_act(self, state: AgentState) -> Dict[str, Any]:
+        """
+        [Node] 物理执行: 使用 Playwright 执行动作
+        """
+        logger.info("--- [Node: Act] ---")
+        
+        if state.get("error"):
+            return {}
+            
+        action = state.get("action_intent")
+        if not action:
+            return {"error": "No action to execute", "failure_type": "EXECUTION_FAILED"}
+            
+        if action.action_type == "done":
+            return {"action_result": {"success": True, "details": "Task marked as done by planner"}}
+            
+        # Execute
+        try:
+            if action.action_type == "navigate":
+                 await self.page.goto(action.target.value, wait_until="domcontentloaded", timeout=30000)
+                 success = True
+            else:
+                 success = await self.runner.execute(action, state.get("id_map", {}))
+            
+            return {
+                "action_result": {
+                    "success": success,
+                    "action_type": action.action_type,
+                    "target": action.target.value if hasattr(action.target, 'value') else None
+                }
+            }
+        except Exception as e:
+            logger.error(f"Action Execution failed: {e}")
+            return {
+                "error": f"Execution Error: {str(e)}",
+                "failure_type": "EXECUTION_FAILED"
+            }
+
+    async def node_evaluate(self, state: AgentState) -> Dict[str, Any]:
+        """
+        [Node] 结果裁定: 判断动作是否成功
+        """
+        logger.info("--- [Node: Evaluate] ---")
+        # Phase 1: Simple evaluation based on runner success boolean
+        action_result = state.get("action_result", {})
+        
+        # If already errored out upstream
+        if state.get("error"):
+             return {}
+             
+        if not action_result.get("success", False):
+             return {
+                 "error": "Action execution failed in runner",
+                 "failure_type": "RETRYABLE"
+             }
+             
+        # Record history on success
+        history = state.get("history", [])
+        if state.get("action_intent"):
+            # safely convert action to dict if model_dump is available
+            intent = state["action_intent"]
+            intent_dict = intent.model_dump() if hasattr(intent, 'model_dump') else str(intent)
+            history.append({
+                "action": intent_dict,
+                "status": "success",
+                "timestamp": __import__('time').time()
+            })
+            
+        return {"history": history, "error": None, "failure_type": "NONE"}
+
+    async def node_sherlock(self, state: AgentState) -> Dict[str, Any]:
+        """
+        [Node] 根因分析: Call Sherlock to analyze the failure.
+        """
+        logger.info("--- [Node: Sherlock] ---")
+        
+        try:
+            import autogen, json, re
+            from app.engines.right_pupil.agents.sherlock import SherlockAgent
+            from app.core.config import settings
+            
+            from app.services.smart_ops.ai_config_service import AIConfigService
+            from app.core.ai_models import AIModule
+            
+            cfg = await AIConfigService.get_model_config(AIModule.AGENT_RIGHT_SHERLOCK)
+            llm_config = {
+                "config_list": [{
+                    "model": cfg.model_id,
+                    "api_key": settings.QWEN_API_KEY,
+                    "base_url": settings.QWEN_BASE_URL
+                }],
+                "temperature": cfg.temperature,
+                "max_tokens": cfg.max_tokens,
+            }
+            sherlock = SherlockAgent("DOM推断专家_Sherlock", llm_config)
+            admin = autogen.UserProxyAgent(
+                "Admin",
+                human_input_mode="NEVER",
+                code_execution_config=False,
+                max_consecutive_auto_reply=1
+            )
+            
+            from app.engines.right_pupil.agents.librarian import search_knowledge_base
+            autogen.agentchat.register_function(
+                search_knowledge_base,
+                caller=sherlock,
+                executor=admin,
+                name="search_knowledge_base",
+                description="Search the knowledge base for root cause of known errors, system bugs, or UI changes."
+            )
+            
+            error_msg = state.get("error", "Unknown error")
+            history = state.get("history", [])
+            last_action = history[-1] if history else {}
+            
+            prompt = f"Error: {error_msg}\nLast Action: {json.dumps(last_action)}\nAnalyze the root cause and output strict JSON."
+            
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                admin.initiate_chat,
+                sherlock,
+                prompt
+            )
+            
+            # Extract last reply from sherlock
+            last_msg = None
+            for msg in reversed(admin.chat_messages[sherlock]):
+                if msg.get("role") == "assistant": # Sherlock's reply
+                    last_msg = msg.get("content", "")
+                    break
+                    
+            if not last_msg:
+                last_msg = sherlock.last_message().get("content", "")
+                
+            json_match = re.search(r'```(?:json)?\n(.*?)\n```', last_msg, re.DOTALL)
+            json_str = json_match.group(1) if json_match else last_msg
+            match = re.search(r'(\{.*\})', json_str, re.DOTALL)
+            if match:
+                json_str = match.group(1)
+                
+            res = json.loads(json_str)
+            failure_type = res.get("failure_type", "UNKNOWN_ERROR")
+            logger.info(f"Sherlock Diagnosis: {failure_type} ({res.get('reasoning', '')})")
+            
+            # Scribe: Save Memory of the Diagnosis
+            from app.core.memory_base import memory_base
+            memory_base.add_memory(
+                content=f"UI 缺陷诊断特征库: 遇到报错 {error_msg} 时，诊断根因为 {failure_type}。推理逻辑: {res.get('reasoning', '')}",
+                user_id=state.get("execution_id", "default_execution_user"),
+                project_id="default_proj"
+            )
+            
+            return {"failure_type": failure_type}
+            
+        except Exception as e:
+            logger.error(f"Sherlock failed: {e}")
+            return {"failure_type": "UNKNOWN_ERROR"}
+
+    async def node_healer(self, state: AgentState) -> Dict[str, Any]:
+        """
+        [Node] 自愈修正: Call Healer to propose a fix based on Sherlock's RCA.
+        """
+        logger.info("--- [Node: Healer] ---")
+        current_retries = state.get("retry_count", 0)
+        max_retries = state.get("max_retries", 1)
+        
+        if current_retries >= max_retries:
+            logger.warning("Max retries reached. Aborting.")
+            # Set failure_type to NONE so the edge defaults to END, stopping the loop
+            return {"error": f"Max retries ({max_retries}) reached", "failure_type": "ABORT"}
+            
+        try:
+            import autogen, json, re
+            from app.engines.right_pupil.agents.healer import HealerAgent
+            from app.schemas.execution import AUIIR
+            from app.core.config import settings
+            
+            from app.services.smart_ops.ai_config_service import AIConfigService
+            from app.core.ai_models import AIModule
+            
+            cfg = await AIConfigService.get_model_config(AIModule.AGENT_RIGHT_HEALER)
+            llm_config = {
+                "config_list": [{
+                    "model": cfg.model_id,
+                    "api_key": settings.QWEN_API_KEY,
+                    "base_url": settings.QWEN_BASE_URL
+                }],
+                "temperature": cfg.temperature,
+                "max_tokens": cfg.max_tokens,
+            }
+            healer = HealerAgent("交互纠偏师_Healer", llm_config)
+            admin = autogen.UserProxyAgent(
+                "Admin",
+                human_input_mode="NEVER",
+                code_execution_config=False,
+                max_consecutive_auto_reply=1
+            )
+            
+            from app.engines.right_pupil.agents.librarian import search_knowledge_base
+            autogen.agentchat.register_function(
+                search_knowledge_base,
+                caller=healer,
+                executor=admin,
+                name="search_knowledge_base",
+                description="Search the knowledge base for historical state fixes, known environment issues, and recovery paths."
+            )
+            
+            failure_type = state.get("failure_type", "UNKNOWN_ERROR")
+            history = state.get("history", [])
+            last_action = history[-1] if history else {}
+            som_text = state.get("som_text", "")
+            
+            prompt = f"Failure Type: {failure_type}\nLast Action: {json.dumps(last_action)}\nCurrent SoM:\n{som_text}\nPlease propose a fixing action in strict JSON."
+            
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                admin.initiate_chat,
+                healer,
+                prompt
+            )
+            
+            # Extract last reply from healer
+            last_msg = None
+            for msg in reversed(admin.chat_messages[healer]):
+                if msg.get("role") == "assistant":
+                    last_msg = msg.get("content", "")
+                    break
+                    
+            if not last_msg:
+                last_msg = healer.last_message().get("content", "")
+                
+            json_match = re.search(r'```(?:json)?\n(.*?)\n```', last_msg, re.DOTALL)
+            json_str = json_match.group(1) if json_match else last_msg
+            match = re.search(r'(\{.*\})', json_str, re.DOTALL)
+            if match:
+                json_str = match.group(1)
+                
+            res = json.loads(json_str)
+            if res.get("action_type") == "abort":
+                return {"retry_count": current_retries + 1, "error": "Healer aborted", "failure_type": "ABORT"}
+                
+            action = AUIIR(**res)
+            logger.info(f"Healer proposed fix: {action.action_type}")
+            
+            # Scribe: Save Memory of the Fix
+            from app.core.memory_base import memory_base
+            memory_base.add_memory(
+                content=f"UI 自愈成功经验: 当遭遇 {failure_type} 且任务为 {state.get('task_description')} 时，成功使用了动作: {json.dumps(res, ensure_ascii=False)}",
+                user_id=state.get("execution_id", "default_execution_user"), 
+                project_id="default_proj" 
+            )
+            
+            # Update state: clear error and failure type to allow a clean retry of node_act
+            # We don't go back to node_reason; the Healer outputs the new action bypass.
+            return {
+                "retry_count": current_retries + 1,
+                "action_intent": action,
+                "error": None,
+                "failure_type": None
+            }
+            
+        except Exception as e:
+            logger.error(f"Healer failed: {e}")
+            return {"retry_count": current_retries + 1, "error": f"Healer error: {e}", "failure_type": "ABORT"}
+
+
+    async def execute_step(self, description: str, url: str = None, execution_id: str = None) -> Dict[str, Any]:
+        """
+        单步 AI 执行 — Dispatcher 调用入口 (Refactored to LangGraph)
+        
+        将自然语言描述交给 AI Agent 执行。基于 LangGraph 的状态机完成感知、决策、执行与自愈。
+        """
         if not hasattr(self, 'page') or not self.page:
             raise RuntimeError("Session not started. Call start_session() first.")
+            
+        logger.info(f"🔄 [execute_step] Starting LangGraph for: {description}")
         
-        result = {
-            "success": False,
-            "action_taken": None,
-            "target_description": None,
-            "screenshot_before": None,
-            "screenshot_after": None,
-            "page_url": None,
-            "page_title": None,
-            "strategy": "ai_vision",
+        # 1. Initialize State
+        initial_state: AgentState = {
+            "task_description": description,
+            "task_url": url,
+            "execution_id": execution_id,
+            "history": [],
+            "current_screenshot": None,
+            "current_dom": None,
+            "som_text": None,
+            "annotated_screenshot": None,
+            "id_map": {},
+            "action_intent": None,
+            "action_result": None,
             "error": None,
+            "failure_type": None,
+            "retry_count": 0,
+            "max_retries": 1
         }
         
         try:
-            # Step 0: 导航 (如果有 URL)
-            if url:
-                logger.info(f"🌐 [execute_step] 导航: {url}")
-                await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                if self.waiter:
-                    await self.waiter.wait_until_stable()
-                
-                # 纯导航步骤直接返回成功
-                screenshot_bytes = await self.page.screenshot(type="png")
-                result["success"] = True
-                result["action_taken"] = "navigate"
-                result["target_description"] = url
-                result["screenshot_after"] = base64.b64encode(screenshot_bytes).decode("utf-8")
-                result["page_url"] = self.page.url
-                result["page_title"] = await self.page.title()
-                return result
+            # 2. Invoke Graph (Async)
+            final_state = await self.graph.ainvoke(initial_state)
             
-            # Step 1: Smart Wait
-            if self.waiter:
-                await self.waiter.wait_until_stable()
+            # 3. Format Result for Dispatcher
+            success = False
+            action_taken = None
+            target_description = None
             
-            # Step 2: 截图 (Before)
-            screenshot_bytes = await self.page.screenshot(type="png")
-            screenshot_before_b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
-            result["screenshot_before"] = screenshot_before_b64
-            result["page_url"] = self.page.url
-            result["page_title"] = await self.page.title()
+            history = final_state.get("history", [])
+            if history:
+                last_action = history[-1]
+                if last_action.get("status") == "success":
+                    success = True
+                    act_intent = last_action.get("action", {})
+                    if isinstance(act_intent, dict):
+                        action_taken = act_intent.get("action_type")
+                        target_dict = act_intent.get("target", {})
+                        if isinstance(target_dict, dict):
+                            target_description = target_dict.get("value")
+                    else:
+                        # Fallback for raw object
+                        action_taken = getattr(act_intent, "action_type", "unknown")
+                        
+            # If navigate was successful directly targeting url (early exit from perceive / reason)
+            if not success and final_state.get("action_intent"):
+                intent = final_state["action_intent"]
+                if getattr(intent, "action_type", "") == "navigate":
+                    success = True
+                    action_taken = "navigate"
+                    target_description = url
+                    
+            # Did it hit evaluating error?
+            error_msg = final_state.get("error")
             
-            # Step 3 & 4: Perception & Planning (Visual First, DOM Fallback)
-            id_map = {}
-            action = None
-            
-            try:
-                # 3.1 Try OmniParser -> SoM
-                elements = await self.omni_client.parse_screenshot(screenshot_before_b64)
-                
-                # GRACEFUL DEGRADATION: Check for Element Not Found
-                if not elements:
-                    warning_msg = "AI Vision Agent could not locate the requested target in the current viewport."
-                    logger.warning(f"⚠️ 视觉感知/规划警告: {warning_msg}")
-                    result["warnings"] = [{
-                        "type": "VISION_ELEMENT_NOT_FOUND",
-                        "message": warning_msg,
-                        "details": {"description": description }
-                    }]
-                    # Fallback continues below...
-                loop = asyncio.get_running_loop()
-                annotated_b64, id_map = await loop.run_in_executor(
-                    None, self.som_renderer.draw_som, screenshot_before_b64, elements
-                )
-                som_text_lines = []
-                for k, v in id_map.items():
-                    bbox = v.get('bbox', [0, 0, 0, 0])
-                    w = int(bbox[2] - bbox[0])
-                    h = int(bbox[3] - bbox[1])
-                    som_text_lines.append(f"ID {k}: [{w}x{h}] {v.get('label')} {v.get('content', '')}")
-                som_text = "\n".join(som_text_lines)
-                
-                # BroadCast Live Trace if execution_id is provided
-                if execution_id:
-                    from app.api.v1.endpoints.visual_ui import visual_ws_manager
-                    try:
-                        asyncio.create_task(
-                            visual_ws_manager.broadcast_to_execution(
-                                execution_id,
-                                {
-                                    "event": "live_trace",
-                                    "step_description": description,
-                                    "image_b64": f"data:image/png;base64,{annotated_b64}"
-                                }
-                            )
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to broadcast live trace: {e}")
-                
-                # 4.1 Visual Planning
-                logger.info(f"🧠 [execute_step] 视觉规划: {description}")
-                action = await self.planner.plan_next_step(
-                    description, annotated_b64, som_text, []
-                )
-                
-                # 4.2 Task-aware action correction
-                if action:
-                    action = self._correct_action_type(action, description)
-
-            except Exception as e:
-                logger.warning(f"⚠️ 视觉感知/规划失败: {e}，切换到 DOM Fallback 模式")
-                
-                # 3.2 DOM Perception
-                id_map = {} # Clear ID map as we are in DOM mode
-                dom = await self.dom_service.get_simplified_dom(self.page)
-                
-                # 4.2 DOM Planning
-                logger.info(f"🧠 [execute_step] DOM 兜底规划: {description}")
-                action = await self.planner.plan_fallback_step(
-                    description, dom, screenshot_before_b64
-                )
-                # Fallback mode uses original screenshot
-                annotated_b64 = screenshot_before_b64
-            
-            if not action or action.action_type == "done":
-                result["success"] = True
-                result["action_taken"] = "done"
-                result["target_description"] = "目标已达成"
-                result["screenshot_after"] = screenshot_before_b64
-                return result
-            
-            # Step 5: 执行
-            logger.info(f"🖱️ [execute_step] 执行: {action.action_type} → {action.target}")
-            success = await self.runner.execute(action, id_map)
-            
-            # Step 6: 执行后截图
-            if self.waiter:
-                await self.waiter.wait_until_stable()
-            screenshot_after_bytes = await self.page.screenshot(type="png")
-            screenshot_after_b64 = base64.b64encode(screenshot_after_bytes).decode("utf-8")
-            
-            result["success"] = success
-            result["action_taken"] = action.action_type
-            result["target_description"] = str(action.target) if action.target else description
-            result["screenshot_after"] = screenshot_after_b64
-            result["page_url"] = self.page.url
-            result["page_title"] = await self.page.title()
-            
-            if not success:
-                result["error"] = f"动作 {action.action_type} 执行失败"
-            
-            return result
+            return {
+                "success": success,
+                "action_taken": action_taken,
+                "target_description": target_description,
+                "screenshot_before": final_state.get("current_screenshot"),
+                "screenshot_after": final_state.get("annotated_screenshot") or final_state.get("current_screenshot"),
+                "page_url": self.page.url,
+                "page_title": await self.page.title(),
+                "strategy": "ag_langgraph",
+                "error": error_msg
+            }
             
         except Exception as e:
-            logger.error(f"❌ [execute_step] 错误: {e}")
-            # 尝试捕获错误截图
+            logger.error(f"❌ [execute_step] Graph Execution Error: {e}")
+            import base64
+            err_b64 = None
             try:
                 err_bytes = await self.page.screenshot(type="png")
-                result["screenshot_after"] = base64.b64encode(err_bytes).decode("utf-8")
-                result["page_url"] = self.page.url
-            except Exception:
+                err_b64 = base64.b64encode(err_bytes).decode("utf-8")
+            except:
                 pass
-            result["error"] = str(e)
-            return result
+                
+            return {
+                "success": False,
+                "error": str(e),
+                "strategy": "ag_langgraph",
+                "page_url": self.page.url,
+                "screenshot_after": err_b64
+            }
 
 
     async def run_task(self, prompt: str, url: str) -> List[Dict[str, Any]]:

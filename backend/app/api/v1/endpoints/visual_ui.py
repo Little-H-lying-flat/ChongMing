@@ -114,20 +114,45 @@ async def import_from_design(
 
         visual_steps = []
         for idx, s in enumerate(steps_raw):
-            desc = s if isinstance(s, str) else s.get("description", "")
-            action = map_action(desc)
-            value = None
-            if isinstance(s, dict) and "url" in s and s["url"]:
-                value = s["url"]
-            elif isinstance(s, dict) and "body" in s and s["body"]:
-                value = str(s["body"])
+            if isinstance(s, str):
+                desc = s
+                action = map_action(desc)
+                value = None
+            else:
+                desc = s.get("step", s.get("description", str(s)))
                 
+                explicit_type = s.get("type", s.get("action", desc))
+                action = map_action(str(explicit_type))
+                
+                value = None
+                if action == 'GOTO' and s.get("url"):
+                    value = s.get("url")
+                elif action == 'TYPE':
+                    if "value" in s:
+                        value = s["value"]
+                    else:
+                        import re
+                        m = re.search(r'["“\'‘](.*?)["”\'’]', desc)
+                        if m:
+                            value = m.group(1)
+                elif "value" in s:
+                    value = s["value"]
+                    
+                if "locator" in s:
+                    desc = f"{desc} [Locator: {s['locator']}]"
+
             visual_steps.append({
                 "step_index": idx,
                 "action": action,
                 "target_description": desc,
                 "value": value
             })
+
+        # Try to infer base_url from the first step if not provided
+        if not base_url and visual_steps:
+            first_step = visual_steps[0]
+            if first_step.get("action") == "GOTO" and first_step.get("value"):
+                base_url = first_step.get("value")
 
         # 构建 VisualUseCaseCreate 数据
         from app.schemas.visual_ui import VisualUseCaseCreate

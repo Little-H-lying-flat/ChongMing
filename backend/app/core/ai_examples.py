@@ -14,7 +14,7 @@ async def example_neural_layer():
     
     # 使用神经设计层的意图解析模块 (自动使用 qwen-max)
     response = await manager.invoke(
-        module=AIModule.NEURAL_INTENT_PARSER,
+        module=AIModule.AGENT_NEURAL_ADMIN,
         messages=[
             Message(
                 role="system",
@@ -60,7 +60,7 @@ async def example_phoenix_codegen():
     }
     
     response = await manager.invoke(
-        module=AIModule.PHOENIX_CODE_GEN,
+        module=AIModule.AGENT_NEURAL_API_EXPERT,
         messages=[
             Message(
                 role="system",
@@ -137,7 +137,7 @@ class IntentParser:
     
     async def parse(self, user_input: str) -> dict:
         response = await self.ai.invoke(
-            module=AIModule.NEURAL_INTENT_PARSER,
+            module=AIModule.AGENT_NEURAL_ADMIN,
             messages=[
                 Message(role="system", content=INTENT_SYSTEM_PROMPT),
                 Message(role="user", content=user_input),
@@ -156,7 +156,7 @@ class VisionPlanner:
     
     async def locate_element(self, screenshot_path: str, target: str) -> dict:
         response = await self.ai.invoke_vision(
-            module=AIModule.RIGHT_PUPIL_GROUNDING,
+            module=AIModule.AGENT_RIGHT_VISUAL,
             prompt=f"找到页面中的 '{target}'，返回坐标和选择器",
             image_path=screenshot_path,
         )
@@ -173,7 +173,7 @@ class RootCauseAnalyzer:
     
     async def analyze(self, error_log: str, screenshot: str) -> dict:
         response = await self.ai.invoke_vision(
-            module=AIModule.DEFECT_ROOT_CAUSE,
+            module=AIModule.AGENT_LEFT_SHERLOCK,
             prompt=f"分析以下错误的根因:\n{error_log}",
             image_path=screenshot,
         )

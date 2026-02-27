@@ -26,37 +26,32 @@ import {
 } from "@/services/smartOpsService";
 
 const MODULE_NAMES: Record<string, string> = {
-    // === 神经设计层 (Neural Design) ===
-    "neural.intent_parser": "需求意图解析 (Intent Parser)",
-    "neural.scenario_gen": "业务场景推导 (Scenario Generator)",
-    "neural.critic": "测试用例审核 (Test Case Critic)",
-
-    // === 右瞳引擎 (Right Pupil - Visual UI) ===
-    "right_pupil.planner": "视觉动作规划 (UI Planner)",
-    "right_pupil.grounding": "界面元素定位 (Grounding)",
-    "right_pupil.verify": "视觉结果断言 (UI Verify)",
-
-    // === 左瞳引擎 (Left Pupil - API) ===
-    "left_pupil.chain": "API调用链推导 (API Chain)",
-    "left_pupil.param_gen": "接口参数构造 (Param Gen)",
-
-    // === 凤凰涅槃层 (Phoenix - Code Gen) ===
-    "phoenix.code_gen": "自动化脚本生成 (Code Gen)",
-    "phoenix.assertion": "接口智能断言 (Smart Assertion)",
-
-    // === 缺陷分析与通用层 ===
-    "defect.root_cause": "失败根因分析 (Root Cause)",
-    "defect.fix_suggest": "代码修复建议 (Fix Suggest)",
+    // === 通用 ===
+    // === 通用 ===
     "general.chat": "平台通用对话 (Platform Chat)",
     "general.summary": "长文档摘要归纳 (Doc Summary)",
     "rag.embedding": "知识库文本向量化 (Embedding)",
 
-    // 兼容旧映射代码
-    "planning": "AI规划代理 (AI Planning Agent)",
-    "coding": "AI编码代理 (AI Coding Agent)",
-    "reviewing": "AI审查代理 (AI Review Agent)",
-    "visual": "双瞳视觉解析 (Dual Pupil Visual)",
-    "neural.data_mock": "智能数据构造 (Smart Data Mock)",
+    // === 角色智能体挂载点 (Agent Mount Points) - 神经设计层 ===
+    "agent.neural.admin": "🧠设计层-主协调官 (Admin)",
+    "agent.neural.finder": "🧠设计层-基建检索官 (Finder)",
+    "agent.neural.ui_expert": "🧠设计层-前端体验专家 (UI Expert)",
+    "agent.neural.api_expert": "🧠设计层-后端架构专家 (API Expert)",
+    "agent.neural.merger": "🧠设计层-业务场景架构师 (Merger)",
+
+    // === 角色智能体挂载点 (Agent Mount Points) - API执行引擎 (左瞳) ===
+    "agent.left.sherlock": "🔌左瞳-接口诊断专家 (Sherlock)",
+    "agent.left.healer": "🔌左瞳-自愈修复师 (Healer)",
+    "agent.left.persona": "🔌左瞳-数据拟态师 (Persona)",
+    "agent.left.red_teamer": "🔌左瞳-安全渗透师 (Red Teamer)",
+    "agent.left.janitor": "🔌左瞳-数据清理工 (Janitor)",
+
+    // === 角色智能体挂载点 (Agent Mount Points) - UI执行引擎 (右瞳) ===
+    "agent.right.visual": "👁️右瞳-视觉交互专家 (Visual Expert)",
+    "agent.right.persona": "👁️右瞳-视觉意图拆解 (Persona)",
+    "agent.right.critic": "👁️右瞳-视觉审查官 (Critic)",
+    "agent.right.sherlock": "👁️右瞳-DOM推断专家 (Sherlock)",
+    "agent.right.healer": "👁️右瞳-交互纠偏师 (Healer)",
 };
 
 const getModuleName = (module: string) => MODULE_NAMES[module] || module;

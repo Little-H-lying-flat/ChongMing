@@ -79,6 +79,7 @@ class DesignService:
             "project_id": request.project_id,
             "requirement_text": request.requirement_text,
             "target_type": request.target_type,
+            "target_url": request.target_url or "",
             "context": (request.context or "无额外上下文") + f"\n\n约束:\n{constraint}",
             "extracted_points": [],
             "scenarios": [],
@@ -139,7 +140,7 @@ class DesignService:
             Message(role="user", content=user_content)
         ]
         
-        draft_data = await self._invoke_with_retry(messages, AIModule.NEURAL_INTENT_PARSER)
+        draft_data = await self._invoke_with_retry(messages, AIModule.AGENT_NEURAL_ADMIN)
         
         # 3. Self-Correction (Critic)
         try:
@@ -153,7 +154,7 @@ class DesignService:
             
             logger.info("执行 Critic 自我审查...")
             critic_response = await self.ai.invoke(
-                module=AIModule.NEURAL_INTENT_PARSER, # or CRITIC module
+                module=AIModule.AGENT_NEURAL_ADMIN, # or CRITIC module
                 messages=critic_messages
             )
             

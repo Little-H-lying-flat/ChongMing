@@ -114,17 +114,19 @@ async def analyze_prd(
             default_env = fallback_result.scalar_one_or_none()
         
         env_context = ""
-        base_url = default_env.base_url if default_env and getattr(default_env, "base_url", None) else "http://127.0.0.1:8000"
-        
-        env_context = f"\n\n[系统当前测试环境]\nAPI Base URL: {base_url}\n绝对原则：你生成的所有 API 请求路径必须是完整的绝对路径（即必须以 http:// 或 https:// 开头）。请将此 Base URL 与具体接口路径拼接，绝不能只输出相对路径（如 /health），也绝不能自行编造绝对无效的占位符域名（如 api.example.com）。"
+        if default_env and getattr(default_env, "base_url", None):
+            base_url = default_env.base_url
+            if not getattr(request, "target_url", None):
+                request.target_url = base_url
+            env_context = f"\n\n[系统可选测试环境]\n如果你在需求文档中找不到任何明确的测试目标地址或域名，你可以考虑使用以下备选 Base URL: {base_url}\n(但如果需求文档或 Context INFO 中明确指定了目标网址，请【必须】优先使用文档中提供的网址，忽略此备选地址。)\nAPI 路径拼接原则：你生成的所有 API 请求路径必须是完整的绝对路径，绝不能只输出相对路径（如 /health）。"
         
         request.context = (request.context or "") + env_context
         
         logger.info(f"Design Analysis Request [START]: Project={request.project_id}, Type={request.target_type}, Model={settings.MODEL_NEURAL_SCENARIO}")
         
         logger.info("准备调用大模型 API (via Service)...")
-        # Enforce 120s timeout to allow for long generation times (and retries)
-        scenarios = await asyncio.wait_for(service.analyze_requirement(request), timeout=120.0)
+        # Enforce 300s timeout to allow for long generation times (and retries)
+        scenarios = await asyncio.wait_for(service.analyze_requirement(request), timeout=300.0)
         
         logger.info(f"Design Analysis Request [SUCCESS]: Generated {len(scenarios)} scenarios.")
         return scenarios
@@ -135,13 +137,10 @@ async def analyze_prd(
         raise
         
     except asyncio.TimeoutError:
-        error_detail = "Design Analysis Timed Out (120s limit reached)"
+        error_detail = "Design Analysis Timed Out (300s limit reached)"
         logger.error(error_detail)
         print(f"CRITICAL ERROR: {error_detail}")
-        return JSONResponse(
-            status_code=504,
-            content={"detail": error_detail, "type": "TimeoutError"}
-        )
+        raise HTTPException(status_code=504, detail=error_detail)
 
     except Exception as e:
         import traceback

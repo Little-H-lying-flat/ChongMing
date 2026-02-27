@@ -40,6 +40,9 @@ class Dispatcher:
         self.right_pupil: Optional[RightPupilEngine] = None
         self.left_pupil: Optional[LeftPupilEngine] = None
         self._trace_log: List[dict] = []
+        
+        from app.engines.master_dispatcher.router import MasterRouter
+        self.master_router = MasterRouter()
     
     def attach_engines(
         self,
@@ -186,23 +189,28 @@ class Dispatcher:
     
     async def _execute_step(self, step: dict, mode: ExecutionMode, context: Optional[Dict[str, Any]] = None, downstream_var_names: Optional[List[str]] = None, execution_id: Optional[str] = None) -> dict:
         """执行单个步骤"""
-        logger.debug(f"👀 [Check 1] Dispatcher 接收到的原始 Step: {step.model_dump() if hasattr(step, 'model_dump') else (step.dict() if hasattr(step, 'dict') else dict(step))}")  # type: ignore[union-attr]
+        step_dict = step.model_dump() if hasattr(step, 'model_dump') else (step.dict() if hasattr(step, 'dict') else dict(step))  # type: ignore[union-attr]
+        logger.debug(f"👀 [Check 1] Dispatcher 接收到的原始 Step: {step_dict}")
 
-        # 优先使用 step_type (新架构), 兼容 type (旧架构)
-        step_type = step.get("step_type") or step.get("type") or ("UI" if mode == ExecutionMode.UI else "API")
+        # 如果没有显式指定类型，我们可以为其提供 mode 作为备选推断，不过路由器现在更聪明了
+        if "step_type" not in step_dict and "type" not in step_dict:
+             step_dict["fallback_mode"] = mode.value if hasattr(mode, 'value') else mode
+
+        # 使用全知中枢路由
+        engine_type = await self.master_router.route(step_dict)
         
-        if step_type == "UI":
+        if engine_type == "RIGHT_PUPIL":
             if not self.right_pupil:
                 raise RuntimeError("右瞳引擎未初始化")
             
-            description = step.get("description") or step.get("name") or "UI Step"
-            url = step.get("url") or None
+            description = step_dict.get("description") or step_dict.get("name") or "UI Step"
+            url = step_dict.get("url") or None
             # 空字符串也视为 None
             if url and not url.strip():
                 url = None
                 
             # Fallback: 如果没有 url 但 target 是一个 URL 字符串 (常见于从非标准 IR 转换的情况)
-            target = step.get("target")
+            target = step_dict.get("target")
             if not url and isinstance(target, str) and (target.startswith("http://") or target.startswith("https://")):
                 url = target
                 
@@ -245,13 +253,13 @@ class Dispatcher:
                 },
             }
         
-        elif step_type == "API":
+        elif engine_type == "LEFT_PUPIL":
             if not self.left_pupil:
                 raise RuntimeError("左瞳引擎未初始化")
             
             # 转换断言格式 (RefinedAssertionSpec -> List[Dict])
-            assertion_spec = step.get("assertion", {})
-            assertions_list = step.get("assertions", []) # 兼容直接传递列表的情况
+            assertion_spec = step_dict.get("assertion", {})
+            assertions_list = step_dict.get("assertions", []) # 兼容直接传递列表的情况
             
             if not assertions_list and assertion_spec:
                 # 1. Status Code
@@ -284,14 +292,14 @@ class Dispatcher:
             # --- Runtime Intent Parsing (The Ultimate Patch) ---
             # If assertions are missing, we use a lightweight LLM call to extract them from description
             
-            desc = step.get("description", "")
+            desc = step_dict.get("description", "")
             runtime_status = None
             runtime_json = {}
-            runtime_extract = {}  # ✅ 提前初始化，避免 NameError
+            runtime_extract = {}
             
-            explicit_status = step.get("expected_status_code")
-            explicit_json = step.get("json_assertions")
-            explicit_extract = step.get("extract")
+            explicit_status = step_dict.get("expected_status_code")
+            explicit_json = step_dict.get("json_assertions")
+            explicit_extract = step_dict.get("extract")
             
             # Condition: Missing explicit status code OR missing extract rules, AND we have a description
             if (explicit_status is None or not explicit_extract) and desc:
@@ -309,12 +317,12 @@ class Dispatcher:
 
             # Use EngineAPIIR which has path_params
             api_ir = EngineAPIIR(
-                method=step.get("method", "GET"),
-                url=step.get("url", ""),
-                headers=step.get("headers", {}),
-                query_params=step.get("params", {}),
-                path_params=step.get("path_params", {}),
-                body=step.get("body"),
+                method=step_dict.get("method", "GET"),
+                url=step_dict.get("url", ""),
+                headers=step_dict.get("headers", {}),
+                query_params=step_dict.get("params", step_dict.get("query_params", {})),
+                path_params=step_dict.get("path_params", {}),
+                body=step_dict.get("body", step_dict.get("json_body")),
                 assertions=assertions_list,
                 extract=explicit_extract if explicit_extract else runtime_extract, # Fallback to runtime extraction
                 expected_status_code=explicit_status if explicit_status is not None else runtime_status,
@@ -334,7 +342,7 @@ class Dispatcher:
                 
                 # Enrich Step Result with Geeky Details (Standardized Structure)
                 details = {
-                    "step_name": step.get("description") or step.get("name") or "API Step",
+                    "step_name": step_dict.get("description") or step_dict.get("name") or "API Step",
                     "step_type": "API",
                     "request": {
                         "url": getattr(result.response, "request_url", api_ir.url) if result.response else (api_ir.url or ""),
@@ -375,7 +383,7 @@ class Dispatcher:
                     "assertions_failed": [],
                     "error": str(e),
                     "details": {
-                        "step_name": step.get("description") or step.get("name") or "Error Step",
+                        "step_name": step_dict.get("description") or step_dict.get("name") or "Error Step",
                         "request": {},
                         "response": {},
                         "extracted": {},
@@ -384,7 +392,7 @@ class Dispatcher:
                 }
         
         else:
-            raise ValueError(f"不支持的步骤类型: {step_type}")
+            raise ValueError(f"无法确定执行引擎: {engine_type} / 数据: {step_dict}")
     
     def get_trace_log(self) -> List[dict]:
         """获取执行轨迹"""
@@ -443,7 +451,7 @@ class Dispatcher:
             # Use Design Module or a fast model
             response = await ai_manager.simple_chat(
                 prompt=prompt,
-                module=AIModule.NEURAL_SCENARIO_GENERATOR,
+                module=AIModule.AGENT_NEURAL_MERGER,
                 temperature=0.0 # Strict determinism
             )
             

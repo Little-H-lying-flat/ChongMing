@@ -339,7 +339,9 @@ export default function NeuralDesignPage() {
                                                                     {step.step_type === 'API' ? '🌐 API' : '👁️ UI'}
                                                                 </span>
                                                             )}
-                                                            <span>{step.description || step as string}</span>
+                                                            <span>
+                                                                {step.description || step.name || (typeof step === 'string' ? step : JSON.stringify(step))}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -449,7 +451,11 @@ const SaveTestButton = ({ scenario, projectId }: { scenario: any, projectId: str
         if (saving || saved) return;
         setSaving(true);
         try {
-            const isUI = (scenario.steps || []).some((s: any) => s.step_type === "UI");
+            const isUI = (scenario.steps || []).some((s: any) => {
+                if (s.step_type === "UI") return true;
+                const text = typeof s === 'string' ? s : (s.action || s.description || "");
+                return text.includes('点击') || text.includes('页面') || text.includes('访问') || text.includes('Logo') || text.includes('URL') || text.includes('输入');
+            }) || (scenario.name || "").includes('UI') || (scenario.name || "").includes('页面') || (scenario.description || "").includes('UI');
 
             if (isUI) {
                 // UI Smart Routing -> Visual Use Case

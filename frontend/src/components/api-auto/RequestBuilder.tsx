@@ -34,7 +34,7 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
     const [activeTab, setActiveTab] = useState("params");
 
     const updateRequest = (field: keyof ApiStep['request'], value: any) => {
-        onChange({ ...step, request: { ...step.request, [field]: value } });
+        onChange({ ...step, request: { ...(step.request || {}), [field]: value } });
     };
 
     // Convert Record<string, string> back and forth from KeyValuePair[]
@@ -50,27 +50,27 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
         return record;
     };
 
-    const [queryParams, setQueryParams] = useState(recordToPairs(step.request.query_params));
-    const [headers, setHeaders] = useState(recordToPairs(step.request.headers));
-    const [extraction, setExtraction] = useState(recordToPairs(step.extraction));
+    const [queryParams, setQueryParams] = useState(recordToPairs(step.request?.query_params || {}));
+    const [headers, setHeaders] = useState(recordToPairs(step.request?.headers || {}));
+    const [extraction, setExtraction] = useState(recordToPairs(step.extraction || {}));
     const [jsonAssertions, setJsonAssertions] = useState(recordToPairs(step.assertion?.json_assertions || {}));
 
     // Reset local pairs state when active step changes
     React.useEffect(() => {
-        setQueryParams(recordToPairs(step.request.query_params));
-        setHeaders(recordToPairs(step.request.headers));
-        setExtraction(recordToPairs(step.extraction));
+        setQueryParams(recordToPairs(step.request?.query_params || {}));
+        setHeaders(recordToPairs(step.request?.headers || {}));
+        setExtraction(recordToPairs(step.extraction || {}));
         setJsonAssertions(recordToPairs(step.assertion?.json_assertions || {}));
-    }, [step.id, recordToPairs]);
+    }, [step.id, recordToPairs, step.request, step.extraction, step.assertion]);
 
     return (
         <div className="space-y-4">
             <div className="flex items-center gap-2">
                 <Select
-                    value={step.request.method}
+                    value={step.request?.method || "GET"}
                     onValueChange={(val: any) => updateRequest("method", val)}
                 >
-                    <SelectTrigger className={`w-32 bg-slate-900 border-slate-700 ${METHOD_COLORS[step.request.method]}`}>
+                    <SelectTrigger className={`w-32 bg-slate-900 border-slate-700 ${METHOD_COLORS[step.request?.method || "GET"] || ''}`}>
                         <SelectValue placeholder="Method" />
                     </SelectTrigger>
                     <SelectContent className="bg-slate-900 border-slate-700">
@@ -82,7 +82,7 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
 
                 <div className="flex-1 relative">
                     <Input
-                        value={step.request.url}
+                        value={step.request?.url || ""}
                         onChange={(e) => updateRequest("url", e.target.value)}
                         placeholder="https://api.example.com/v1/users/${user_id}"
                         className="w-full bg-slate-900 border-slate-700 text-slate-100 font-mono text-sm h-10 pr-4"

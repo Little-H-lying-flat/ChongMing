@@ -40,6 +40,7 @@ dependencies = [
     "langchain>=0.1.0",
     "langchain-openai>=0.0.5",
     "langgraph>=0.0.25",
+    "pyautogen>=0.2.0,<0.3.0",
 
     
     # === Browser Automation ===
