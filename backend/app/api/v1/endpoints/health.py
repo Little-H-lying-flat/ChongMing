@@ -6,24 +6,18 @@ from datetime import datetime
 import time as _time
 
 from fastapi import APIRouter, Depends
-from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.services.omniparser_health import probe_omniparser_health
 
 router = APIRouter()
 
 # Simple TTL Cache
 _health_cache: dict = {"data": None, "ts": 0}
 _CACHE_TTL = 5  # seconds
-
-# OmniParser health probe tuning: avoid false negatives when probe latency is ~1.2-1.5s.
-_OMNIPARSER_TOTAL_TIMEOUT = 3.5
-_OMNIPARSER_CONNECT_TIMEOUT = 1.0
-_OMNIPARSER_READ_TIMEOUT = 2.5
-
 
 class HealthResponse(BaseModel):
     """健康检查响应"""
@@ -90,23 +84,7 @@ async def health_check(
             services["redis"] = "unknown"
 
     async def check_omniparser():
-        try:
-            import httpx
-
-            url = f"{settings.OMNIPARSER_URL}/health".replace("localhost", "127.0.0.1")
-            timeout = httpx.Timeout(
-                connect=_OMNIPARSER_CONNECT_TIMEOUT,
-                read=_OMNIPARSER_READ_TIMEOUT,
-                write=_OMNIPARSER_READ_TIMEOUT,
-                pool=_OMNIPARSER_CONNECT_TIMEOUT,
-            )
-            async with asyncio.timeout(_OMNIPARSER_TOTAL_TIMEOUT):
-                async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-                    response = await client.get(url)
-                    services["omniparser"] = "ok" if response.status_code == 200 else "loading"
-        except Exception as exc:
-            logger.warning(f"OmniParser health check failed: {exc}")
-            services["omniparser"] = "down"
+        services["omniparser"] = await probe_omniparser_health(settings.OMNIPARSER_URL)
 
     await asyncio.gather(
         check_db(),

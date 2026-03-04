@@ -7,7 +7,6 @@ import math
 from datetime import UTC, datetime, timedelta
 from typing import List, Optional
 
-import httpx
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select, text
@@ -18,6 +17,7 @@ from app.core.database import get_db
 from app.models.defect import DefectRecord
 from app.models.environment import Environment
 from app.models.execution import Execution, ExecutionStatus
+from app.services.omniparser_health import probe_omniparser_health
 
 router = APIRouter()
 
@@ -90,17 +90,8 @@ def format_time_ago(dt: datetime) -> str:
 
 
 async def check_omni_parser() -> str:
-    try:
-        import asyncio
-
-        url = f"{settings.OMNIPARSER_URL}/health".replace("localhost", "127.0.0.1")
-        timeout = httpx.Timeout(connect=1.0, read=2.5, write=2.5, pool=1.0)
-        async with asyncio.timeout(3.5):
-            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-                resp = await client.get(url)
-                return STATUS_OK if resp.status_code == 200 else STATUS_ERR
-    except Exception:
-        return STATUS_ERR
+    probe_status = await probe_omniparser_health(settings.OMNIPARSER_URL)
+    return STATUS_OK if probe_status == "ok" else STATUS_ERR
 
 
 @router.get("/overview", response_model=DashboardOverviewResponse)
