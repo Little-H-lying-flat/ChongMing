@@ -1,6 +1,17 @@
-
+import sys
+import warnings
 from typing import List, Dict, Any, Optional
 from loguru import logger
+
+# pymilvus currently triggers a Python 3.14 deprecation warning on import.
+# Keep project warnings visible while suppressing this known third-party noise.
+if sys.version_info >= (3, 14):
+    warnings.filterwarnings(
+        "ignore",
+        message=r"'asyncio\.iscoroutinefunction' is deprecated and slated for removal in Python 3\.16; use inspect\.iscoroutinefunction\(\) instead",
+        category=DeprecationWarning,
+    )
+
 from pymilvus import (
     connections,
     utility,
