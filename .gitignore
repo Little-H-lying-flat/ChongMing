@@ -34,6 +34,7 @@ deploy/.env
 
 # Logs / runtime artifacts
 logs/
+backend/logs/
 *.log
 *.out
 *.err
@@ -44,11 +45,26 @@ output/
 *.bak
 *.swp
 local_runtime/
+backend/turbo_workspace/
+backend/tests/e2e/output.txt
+backend/stdout-*.txt
+backend/startup_log.txt
+backend/error_log.txt
+backend/traceback_response.txt
+backend/verify_output.txt
+backend/test_output.txt
+backend/test_utf8.txt
+backend/api_test_out.txt
+backend/crash_logs*.txt
+backend/exec_*.txt
+backend/omnilogs.txt
+backend/err.txt
 
 # Databases / caches / runtime state
 *.db
 backend/.cache/
 backend/mem0_qdrant_db_test/
+mem0_qdrant_db_test/
 deploy/volumes/
 celerybeat-schedule
 

@@ -13,7 +13,9 @@ SUNSET_DATE = "2026-09-30"
 MIGRATION_DOC = "/docs/api-migration-left-pupil.md"
 
 
-def _mark_api_engine_deprecated(response: Response) -> None:
+def _mark_api_engine_deprecated(response: Optional[Response]) -> None:
+    if response is None:
+        return
     response.headers["Deprecation"] = DEPRECATION_NOTICE
     response.headers["Sunset"] = SUNSET_DATE
     response.headers["Link"] = f"<{MIGRATION_DOC}>; rel=\"deprecation\""
@@ -286,11 +288,10 @@ async def parse_swagger(request: SwaggerParseRequest, response: Response):
 async def generate_api_ir_from_swagger(
     swagger_url: str,
     endpoint_path: str,
+    response: Response,
     method: str = "GET",
-    response: Optional[Response] = None,
 ):
-    if response is not None:
-        _mark_api_engine_deprecated(response)
+    _mark_api_engine_deprecated(response)
 
     from app.engines.left_pupil import SwaggerParser
 
