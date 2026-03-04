@@ -3,7 +3,7 @@
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,8 +60,7 @@ class DefectRecordResponse(BaseModel):
     suggested_fix: str
     created_at: Any
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DefectAnalysisResponse(BaseModel):

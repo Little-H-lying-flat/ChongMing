@@ -112,7 +112,7 @@ _SNIFF_SCRIPT = """
         if (el.classList.length > 0) {
             for (let cls of el.classList) {
                 // 忽略动态生成的 class (包含数字或过长)
-                if (/\d/.test(cls) || cls.length > 30) continue;
+                if (/\\d/.test(cls) || cls.length > 30) continue;
                 // 简单组合
                 return `${tag}.${CSS.escape(cls)}`; // 只需要一个稳健的 class
             }

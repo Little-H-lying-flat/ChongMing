@@ -8,9 +8,10 @@
 import sys
 import asyncio
 
-# === Windows AsyncIO Fix (MUST BE FIRST) ===
-# Fixes NotImplementedError in Playwright/Subprocess on Windows
-if sys.platform == "win32":
+# === Windows AsyncIO Compatibility (MUST BE FIRST) ===
+# For Python <3.14, keep explicit Proactor policy to avoid subprocess issues
+# in some Windows environments. Python 3.14+ deprecates set_event_loop_policy.
+if sys.platform == "win32" and sys.version_info < (3, 14):
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from contextlib import asynccontextmanager
