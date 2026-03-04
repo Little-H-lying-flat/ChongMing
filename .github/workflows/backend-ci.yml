@@ -29,6 +29,16 @@ jobs:
         pip install -e ".[dev]"
         pip install respx
 
+    - name: Verify critical test dependencies
+      run: |
+        python - <<'PY'
+        import aiosqlite
+        import respx
+
+        print("aiosqlite:", aiosqlite.__version__)
+        print("respx:", respx.__version__)
+        PY
+
     - name: Run Unit Security/Config Tests
       run: |
         pytest tests/unit/test_config_env_validation.py tests/unit/test_execution_screenshot_path_security.py tests/unit/test_smart_ops_routes.py -v
@@ -70,6 +80,16 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
         pip install respx
+
+    - name: Verify critical test dependencies
+      run: |
+        python - <<'PY'
+        import aiosqlite
+        import respx
+
+        print("aiosqlite:", aiosqlite.__version__)
+        print("respx:", respx.__version__)
+        PY
 
     - name: Run Test Cases Contract Suite
       run: |
