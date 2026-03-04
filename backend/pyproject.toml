@@ -65,6 +65,7 @@ dependencies = [
     "aiofiles>=23.2.1",
     "cryptography>=42.0.0",
     "deepdiff>=6.7.1",
+    "jsonpath-ng>=1.6.1",
     
     # === Data Factory ===
     "faker>=22.0.0",
