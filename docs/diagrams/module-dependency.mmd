@@ -1,0 +1,89 @@
+flowchart LR
+    classDef front fill:#eaf3ff,stroke:#4a78c2,stroke-width:1px,color:#1d2f4d;
+    classDef api fill:#fff4e5,stroke:#d08b2f,stroke-width:1px,color:#4d3412;
+    classDef service fill:#ecfff3,stroke:#2f9f63,stroke-width:1px,color:#113a25;
+    classDef engine fill:#f5ecff,stroke:#7c4bc0,stroke-width:1px,color:#2f1a4f;
+    classDef infra fill:#fff0f0,stroke:#c24a4a,stroke-width:1px,color:#4f1d1d;
+
+    subgraph FE[Frontend Next.js]
+        FEExec["executions/page.tsx"]
+        FEHealth["OmniParserStatus.tsx"]
+        FEDash["dashboardService.ts"]
+    end
+
+    subgraph API[Backend API (FastAPI /api/v1)]
+        APIRouter["router.py"]
+        EPTestCases["endpoints/test_cases.py"]
+        EPExecutions["endpoints/executions.py"]
+        EPHealth["endpoints/health.py"]
+        EPDashboard["endpoints/dashboard.py"]
+    end
+
+    subgraph SVC[Service Layer]
+        STestCase["TestCaseService"]
+        SExecution["ExecutionService"]
+        SEnv["EnvironmentManager"]
+    end
+
+    subgraph TASK[Async Task Layer]
+        TExec["tasks/execution_tasks.py\nexecute_test_cases"]
+        TCelery["Celery Worker\napp/worker.py"]
+    end
+
+    subgraph ENG[Engines]
+        EDispatcher["engines/dispatcher.py"]
+        ERight["RightPupilEngine"]
+        ELeft["LeftPupilEngine(APIExecutor)"]
+        EOmni["OmniClient"]
+    end
+
+    subgraph INFRA[Infra / External]
+        DB[(PostgreSQL / SQLite)]
+        Redis[(Redis)]
+        Broker[(Celery Broker)]
+        Omni["OmniParser Service :7861"]
+        TargetAPI["Target APIs / Websites"]
+        FS[(data/screenshots)]
+    end
+
+    FEExec --> APIRouter
+    FEHealth --> APIRouter
+    FEDash --> APIRouter
+
+    APIRouter --> EPTestCases
+    APIRouter --> EPExecutions
+    APIRouter --> EPHealth
+    APIRouter --> EPDashboard
+
+    EPTestCases --> STestCase
+    EPExecutions --> SExecution
+    EPExecutions --> TExec
+    EPHealth --> DB
+    EPHealth --> Redis
+    EPHealth --> Omni
+    EPDashboard --> DB
+    EPDashboard --> Omni
+
+    STestCase --> DB
+    SExecution --> DB
+    SExecution --> FS
+    TExec --> TCelery
+    TExec --> EDispatcher
+    TExec --> SExecution
+    TExec --> SEnv
+
+    EDispatcher --> ERight
+    EDispatcher --> ELeft
+    ERight --> EOmni
+    EOmni --> Omni
+    ERight --> TargetAPI
+    ELeft --> TargetAPI
+
+    TCelery --> Broker
+    TCelery --> Redis
+
+    class FEExec,FEHealth,FEDash front;
+    class APIRouter,EPTestCases,EPExecutions,EPHealth,EPDashboard api;
+    class STestCase,SExecution,SEnv service;
+    class TExec,TCelery,EDispatcher,ERight,ELeft,EOmni engine;
+    class DB,Redis,Broker,Omni,TargetAPI,FS infra;

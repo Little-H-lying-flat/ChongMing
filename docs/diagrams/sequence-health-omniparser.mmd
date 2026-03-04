@@ -1,0 +1,28 @@
+sequenceDiagram
+    autonumber
+    participant FE as Frontend OmniParserStatus
+    participant API as /api/v1/health
+    participant DB as Database
+    participant R as Redis/Broker
+    participant OP as OmniParser /health
+
+    FE->>API: GET /health (every 10s)
+    alt cache hit (TTL 5s)
+        API-->>FE: cached response
+    else cache miss
+        par DB probe
+            API->>DB: SELECT 1 (timeout 2.0s)
+            DB-->>API: ok/down
+        and Celery/Redis probe
+            API->>R: ping broker redis (timeout 2.0s)
+            R-->>API: ok/down
+        and OmniParser probe
+            API->>OP: GET /health
+            Note right of API: httpx timeout connect=1.0s read=2.5s\nasyncio total timeout=3.5s
+            OP-->>API: 200 -> ok / else loading/down
+        end
+        API->>API: aggregate service states
+        API-->>FE: healthy/degraded + services
+    end
+
+    Note over API,OP: Root cause fixed:\nold probe timeout too tight (~1.0-1.5s latency window)\ncaused false down while direct call still succeeded.

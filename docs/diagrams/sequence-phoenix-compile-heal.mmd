@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant FE as Frontend /phoenix
+    participant API_P as /api/v1/phoenix
+    participant PS as PhoenixService
+    participant AI as AIClientManager
+    participant G as GitManager
+    participant FS as Script Filesystem
+    participant DB as Script table
+
+    U->>FE: Compile trace to script
+    FE->>API_P: POST /phoenix/compile
+    API_P->>PS: compile_trace_to_script(trace_data)
+    PS->>AI: invoke TRACE_TO_SCRIPT prompt
+    AI-->>PS: generated python code
+    PS-->>API_P: script_content
+    API_P->>FS: write scripts/SCRIPT_xxx.py
+    API_P->>G: commit_file(path, message)
+    G-->>API_P: commit_hash
+    API_P->>DB: insert Script record
+    API_P-->>FE: script_id/file_path
+
+    U->>FE: Heal broken script
+    FE->>API_P: POST /phoenix/scripts/{id}/heal
+    API_P->>PS: heal_script(code, error_log)
+    PS->>AI: invoke ERROR_ANALYSIS prompt
+    AI-->>PS: analysis + fix_code(JSON)
+    PS-->>API_P: healing_result
+    API_P-->>FE: fixed_code/analysis

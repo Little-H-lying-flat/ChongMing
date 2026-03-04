@@ -1,0 +1,40 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant FE as Frontend /design
+    participant API_D as /api/v1/design/analyze
+    participant DS as DesignService
+    participant NDG as neural_design_graph
+    participant AI as AIClientManager
+    participant RAG as RagRetriever/KnowledgeRetriever
+    participant API_TC as /api/v1/test-cases
+    participant API_EX as /api/v1/executions
+    participant C as Celery
+    participant W as Worker
+
+    U->>FE: Submit PRD / requirement text
+    FE->>API_D: POST /design/analyze
+    API_D->>DS: analyze_requirement(request)
+    DS->>NDG: ainvoke(initial_state)
+    NDG->>RAG: retrieve API/domain context
+    NDG->>AI: multi-agent reasoning (scenario extraction)
+    AI-->>NDG: scenario list
+    NDG-->>DS: final_state.scenarios
+    DS-->>API_D: scenarios[]
+    API_D-->>FE: analyzed scenarios
+
+    U->>FE: Confirm one scenario
+    FE->>API_D: POST /design/generate
+    API_D->>DS: generate_test_case(scenario, project_id)
+    DS->>RAG: retrieve relevant APIs/knowledge
+    DS->>AI: draft generation + critic refinement
+    AI-->>DS: RefinedTestCase
+    DS-->>API_D: test case payload
+    API_D-->>FE: generated case
+
+    FE->>API_TC: POST /test-cases
+    API_TC-->>FE: TC_ID
+    FE->>API_EX: POST /executions (tc_ids)
+    API_EX->>C: enqueue execute_test_cases
+    C-->>W: task delivered
+    W-->>FE: poll via /executions/{id}

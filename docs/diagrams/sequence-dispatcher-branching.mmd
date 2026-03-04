@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    participant T as execute_test_cases task
+    participant L as TestCaseLoader/DB
+    participant D as Dispatcher.execute
+    participant MR as MasterRouter.route
+    participant RP as RightPupilEngine
+    participant LP as LeftPupilEngine(APIExecutor)
+    participant OP as OmniClient -> OmniParser
+    participant EX as ExecutionService
+    participant DB as DB
+
+    T->>L: load tc_ir
+    T->>D: execute(tc_ir, execution_id, context)
+
+    loop for each step in tc_ir.steps
+        D->>MR: route(step_dict)
+        MR-->>D: RIGHT_PUPIL or LEFT_PUPIL
+
+        alt RIGHT_PUPIL
+            D->>RP: execute_step(description, url, execution_id)
+            RP->>OP: parse_screenshot(base64)
+            OP-->>RP: detected layout elements
+            RP-->>D: UI step result + screenshots
+        else LEFT_PUPIL
+            D->>LP: execute(api_ir, context)
+            LP-->>D: API result (assertions/extract/error)
+        end
+
+        D-->>T: normalized StepResult
+    end
+
+    T->>EX: create_step_result(...)
+    EX->>DB: insert ExecutionStep
+    T->>EX: update_execution_status(final)
+    EX->>DB: update Execution

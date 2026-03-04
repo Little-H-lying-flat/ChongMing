@@ -1,8 +1,9 @@
-﻿"""Application settings management."""
+"""Application settings management."""
 
 from functools import lru_cache
 from typing import List, Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -92,6 +93,29 @@ class Settings(BaseSettings):
     ASSET_DIR: str = "assets"
     SCREENSHOT_DIR: str = "screenshots"
     TRACE_DIR: str = "traces"
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def normalize_debug_bool(cls, value):
+        """Accept common string aliases and coerce DEBUG to bool."""
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+
+        normalized = str(value).strip().lower()
+        true_values = {"1", "true", "t", "yes", "y", "on", "debug", "dev"}
+        false_values = {"0", "false", "f", "no", "n", "off", "release", "prod", "production"}
+
+        if normalized in true_values:
+            return True
+        if normalized in false_values:
+            return False
+
+        raise ValueError(
+            "DEBUG must be boolean-like (e.g. true/false). "
+            f"Unsupported value: {value!r}"
+        )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

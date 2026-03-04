@@ -1,0 +1,62 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant FE as Frontend (Next.js)
+    participant API_TC as /api/v1/test-cases
+    participant API_EX as /api/v1/executions
+    participant SVC as ExecutionService
+    participant DB as Database
+    participant C as Celery Broker/Redis
+    participant W as Celery Worker
+    participant T as execute_test_cases
+    participant D as Dispatcher
+    participant RP as RightPupilEngine
+    participant LP as LeftPupilEngine
+    participant OP as OmniParser
+    participant SVC2 as ExecutionService
+
+    U->>FE: Create test case
+    FE->>API_TC: POST /test-cases
+    API_TC->>DB: insert TestCase
+    DB-->>API_TC: TC_ID
+    API_TC-->>FE: 201 Created
+
+    U->>FE: Run regression (select tc_ids)
+    FE->>API_EX: POST /executions
+    API_EX->>SVC: create_execution(PENDING)
+    SVC->>DB: insert Execution
+    API_EX->>C: publish execute_test_cases task
+    API_EX-->>FE: 202 + execution_id
+
+    loop Poll progress
+        FE->>API_EX: GET /executions/{execution_id}
+        API_EX->>SVC: get_execution_status_dict
+        SVC->>DB: select Execution
+        DB-->>API_EX: status/progress
+        API_EX-->>FE: current status
+    end
+
+    C-->>W: task delivery
+    W->>T: execute_test_cases(execution_id, tc_ids)
+    T->>DB: load test cases / env context
+    T->>D: execute(tc_ir, execution_id)
+
+    alt UI/HYBRID step
+        D->>RP: execute_step(...)
+        RP->>OP: POST /parse (screenshot)
+        OP-->>RP: layout/elements
+        RP-->>D: step result (+ screenshots)
+    else API step
+        D->>LP: execute(api_ir, context)
+        LP->>LP: assert + extract variables
+        LP-->>D: step result
+    end
+
+    T->>SVC2: create_step_result(...)
+    SVC2->>DB: insert ExecutionStep
+    SVC2->>DB: update Execution final status
+
+    FE->>API_EX: GET /executions/{id}/result
+    API_EX->>SVC2: get_execution_result_dict
+    SVC2->>DB: aggregate execution + steps
+    API_EX-->>FE: summary/cases/report_url
