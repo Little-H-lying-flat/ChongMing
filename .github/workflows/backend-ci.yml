@@ -33,9 +33,17 @@ jobs:
       run: |
         pytest tests/unit/test_config_env_validation.py tests/unit/test_execution_screenshot_path_security.py tests/unit/test_smart_ops_routes.py -v
 
+    - name: Run OmniParser Health Regression Tests
+      run: |
+        pytest tests/unit/test_omniparser_health_probe.py tests/integration/test_omniparser_health_consistency.py -v
+
     - name: UTF-8 Guard
       run: |
         python ../scripts/check_utf8.py
+
+    - name: Mermaid Diagram Guard
+      run: |
+        python ../scripts/check_mermaid_diagrams.py
 
   # Contract gate for Test Case Management module.
   # Temporary allow-failure window for "red-to-green" transition.

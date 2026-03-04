@@ -21,3 +21,5 @@ When changing endpoint orchestration, Celery dispatching, engine routing, or hea
 1. Update the impacted `.mmd` file in this folder in the same PR.
 2. Keep node names aligned with actual module/file names.
 3. Ensure sequence steps still match real API contracts.
+4. Run `python scripts/check_mermaid_diagrams.py` before pushing.
+5. CI `Backend CI` also runs Mermaid guard and will fail on invalid diagram syntax/structure.
