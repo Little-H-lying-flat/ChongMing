@@ -1,7 +1,7 @@
 """Application settings management."""
 
 from functools import lru_cache
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     # OmniParser
     OMNIPARSER_URL: str = "http://localhost:7861"
     MOCK_OMNIPARSER: bool = False
+
+    # Mem0
+    MEM0_ENABLED: bool = True
+    MEM0_QDRANT_PATH: Optional[str] = None
 
     # Git
     GIT_REPO_PATH: str = "./test_repo"
