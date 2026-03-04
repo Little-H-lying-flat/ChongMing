@@ -4,6 +4,8 @@
 测试执行的启动、监控和结果查询
 """
 
+from pathlib import Path
+import re
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -14,6 +16,7 @@ from app.services.execution_service import ExecutionService
 from app.tasks.execution_tasks import execute_test_cases, cancel_execution as cancel_task
 
 router = APIRouter(tags=["Flow 3: Execution Dispatcher (任务调度)"])
+_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 # ===================== 数据模型 =====================
@@ -279,6 +282,23 @@ async def get_execution_steps(execution_id: str):
     return await ExecutionService.get_execution_result_dict(execution_id)
 
 
+def _ensure_safe_filename(name: str, field_name: str) -> str:
+    if not name or not _SAFE_FILENAME_RE.fullmatch(name):
+        raise HTTPException(status_code=400, detail=f"Invalid {field_name}")
+    return name
+
+
+def _resolve_safe_screenshot_path(execution_id: str, filename: str) -> Path:
+    safe_execution_id = _ensure_safe_filename(execution_id, "execution_id")
+    safe_filename = _ensure_safe_filename(filename, "filename")
+
+    base_dir = (Path("data") / "screenshots").resolve()
+    target = (base_dir / safe_execution_id / safe_filename).resolve()
+    if not str(target).startswith(str(base_dir)):
+        raise HTTPException(status_code=400, detail="Invalid screenshot path")
+    return target
+
+
 @router.get(
     "/{execution_id}/screenshot/{case_idx}/{step_idx}/{img_type}",
     summary="获取步骤截图 (Get Screenshot)",
@@ -295,7 +315,6 @@ async def get_step_screenshot(
     """
     按需获取截图二进制数据或文件
     """
-    import os
     from fastapi.responses import Response, FileResponse
     import base64
 
@@ -304,8 +323,10 @@ async def get_step_screenshot(
 
     # 1. 尝试从本地磁盘读取 (优化后的架构)
     if tc_id:
-        filepath = os.path.join("data", "screenshots", execution_id, f"{tc_id}_{step_idx}_{img_type}.png")
-        if os.path.exists(filepath):
+        safe_tc_id = _ensure_safe_filename(tc_id, "tc_id")
+        filename = f"{safe_tc_id}_{step_idx}_{img_type}.png"
+        filepath = _resolve_safe_screenshot_path(execution_id, filename)
+        if filepath.exists():
             return FileResponse(filepath, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
     # 2. 从 DB 获取原始数据（兼容历史执行数据）
@@ -332,9 +353,9 @@ async def get_step_screenshot(
 
     # If the marker LOCAL was accidentally kept in DB
     if b64_data.startswith("LOCAL:"):
-        filename = b64_data.replace("LOCAL:", "")
-        filepath = os.path.join("data", "screenshots", execution_id, filename)
-        if os.path.exists(filepath):
+        filename = b64_data.replace("LOCAL:", "", 1)
+        filepath = _resolve_safe_screenshot_path(execution_id, filename)
+        if filepath.exists():
             return FileResponse(filepath, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
         else:
             raise HTTPException(status_code=404, detail="Local screenshot file missing")

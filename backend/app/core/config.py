@@ -1,36 +1,26 @@
-"""
-重明配置管理
-
-使用 Pydantic Settings 管理配置，支持环境变量覆盖
-"""
+﻿"""Application settings management."""
 
 from functools import lru_cache
-from typing import List
+from typing import List, Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-
-import sys
-
 class Settings(BaseSettings):
-    """应用配置"""
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        print(f"DEBUG: Config Loaded. DB={self.DATABASE_URL}, Broker={self.CELERY_BROKER_URL}", file=sys.stderr)
+    """Application settings."""
 
-    
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
-    
-    # === Custom Gemini ===
-    MODEL_CUSTOM_GEMINI: str = "gemini-3-pro-high"
 
-    # === 基础配置 ===
+    # Runtime environment
+    APP_ENV: Literal["dev", "staging", "prod"] = "dev"
+
+    # Core
+    MODEL_CUSTOM_GEMINI: str = "gemini-3-pro-high"
     PROJECT_NAME: str = "ChongMing API"
     VERSION: str = "0.1.1"
     DEBUG: bool = True
@@ -38,91 +28,108 @@ class Settings(BaseSettings):
     PORT: int = 8000
     API_V1_STR: str = "/api/v1"
     SERVER_HOST: str = "http://localhost:8000"
-    
-    # === Security ===
+
+    # Security
     FIRST_SUPERUSER: str = "admin@example.com"
     FIRST_SUPERUSER_PASSWORD: str = "password"
-    
-    # === 数据库 ===
-    # DATABASE_URL: str = "postgresql+asyncpg://postgres:chongming123@localhost:5432/chongming"
+
+    # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./test.db"
-    
-    # === Redis ===
-    # REDIS_URL: str = "redis://127.0.0.1:6379/0"
-    REDIS_URL: str = "redis://127.0.0.1:6379/0" # Keep for code that might rely on it, but we won't have it running
-    
-    # === Celery ===
-    CELERY_BROKER_URL: str = "memory://"
+
+    # Redis/Celery
+    REDIS_URL: str = "redis://127.0.0.1:6379/0"
+    CELERY_BROKER_URL: str = "redis://127.0.0.1:6379/0"
     CELERY_RESULT_BACKEND: str = "db+sqlite:///./celery_results.db"
-    CELERY_TASK_ALWAYS_EAGER: bool = True # Enable for local testing without Redis
-    
-    # === AI/LLM (阿里云 DashScope) ===
+    CELERY_TASK_ALWAYS_EAGER: bool = False
+
+    # AI/LLM
     QWEN_API_KEY: str = "sk-fecda1b83bfe4208892248adffc7cc38"
     QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
-    # === Gemini (Custom OpenAI Provider) ===
     GEMINI_API_KEY: str = "sk-fecda1b83bfe4208892248adffc7cc38"
     GEMINI_BASE_URL: str = "http://127.0.0.1:8045/v1"
-    
-    # 模型配置 - 按功能模块分组
-    # 模型配置 - 按功能模块分组
-    # 神经设计层 (高智能任务) - Updated to use Qwen 3 Max as requested
+
     MODEL_NEURAL_INTENT: str = "qwen3-max"
     MODEL_NEURAL_SCENARIO: str = "qwen3-max"
     MODEL_NEURAL_CRITIC: str = "qwen3-max"
-    
-    # 右瞳引擎 (视觉任务)
+
     MODEL_RIGHT_PUPIL_PLANNER: str = "qwen-plus"
     MODEL_RIGHT_PUPIL_VL: str = "qwen-vl-plus"
-    
-    # 左瞳引擎 (API 推理)
+
     MODEL_LEFT_PUPIL_CHAIN: str = "qwen-plus"
     MODEL_LEFT_PUPIL_PARAM: str = "qwen-turbo"
     QWEN_MODEL_OMNI: str = "qwen-omni-turbo"
-    
-    # 凤凰涅槃层 (代码生成)
+
     MODEL_PHOENIX_CODEGEN: str = "qwen-plus"
-    
-    # 缺陷分析 (推理任务)
+
     MODEL_DEFECT_ANALYSIS: str = "qwen-max"
-    
-    # 通用任务
+
     MODEL_GENERAL_CHAT: str = "qwen-turbo"
     MODEL_GENERAL_LONG: str = "qwen-long"
     MODEL_EMBEDDING: str = "text-embedding-v3"
 
-    
-    # === Milvus (Vector DB) ===
+    # Milvus
     MILVUS_HOST: str = "localhost"
     MILVUS_PORT: str = "19530"
 
-    # === OmniParser ===
+    # OmniParser
     OMNIPARSER_URL: str = "http://localhost:7861"
     MOCK_OMNIPARSER: bool = False
-    
-    # === Git Integration ===
+
+    # Git
     GIT_REPO_PATH: str = "./test_repo"
     GIT_USER_NAME: str = "ChongMing Bot"
     GIT_USER_EMAIL: str = "bot@chongming.ai"
-    
-    # === CORS ===
+
+    # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
-    
-    # === 日志 ===
+
+    # Logging
     LOG_LEVEL: str = "INFO"
     LOG_DIR: str = "logs"
-    
-    # === 测试资产存储 ===
+
+    # Assets
     ASSET_DIR: str = "assets"
     SCREENSHOT_DIR: str = "screenshots"
     TRACE_DIR: str = "traces"
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._apply_env_defaults()
+        self._validate_env_consistency()
+
+    def _apply_env_defaults(self) -> None:
+        """Apply safe defaults by environment."""
+        env = self.APP_ENV.lower()
+        if env in {"staging", "prod"}:
+            self.DEBUG = False
+
+    def _validate_env_consistency(self) -> None:
+        """Fail fast for unsafe non-dev combinations."""
+        env = self.APP_ENV.lower()
+        broker = (self.CELERY_BROKER_URL or "").strip().lower()
+        uses_memory_broker = broker.startswith("memory://")
+
+        if env in {"staging", "prod"}:
+            if uses_memory_broker:
+                raise ValueError(
+                    "Invalid configuration: memory broker is forbidden when APP_ENV is staging/prod."
+                )
+            if self.CELERY_TASK_ALWAYS_EAGER:
+                raise ValueError(
+                    "Invalid configuration: CELERY_TASK_ALWAYS_EAGER must be false when APP_ENV is staging/prod."
+                )
+
+        if env == "dev" and uses_memory_broker and not self.CELERY_TASK_ALWAYS_EAGER:
+            raise ValueError(
+                "Invalid configuration: memory broker in dev requires CELERY_TASK_ALWAYS_EAGER=true."
+            )
+
 
 @lru_cache
 def get_settings() -> Settings:
-    """获取配置单例"""
+    """Return cached settings singleton."""
     return Settings()
 
 
-# 导出配置实例
 settings = get_settings()

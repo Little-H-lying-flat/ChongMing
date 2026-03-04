@@ -1,4 +1,5 @@
 
+import re
 from typing import List, Optional, Dict, Any
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,7 +92,8 @@ class ExecutionService:
                     val = details.get(field)
                     if val and isinstance(val, str) and len(val) > 1000:  # is Base64
                         img_type = field.replace("screenshot_", "")
-                        filename = f"{tc_id}_{step_idx}_{img_type}.png"
+                        safe_tc_id = ExecutionService._safe_filename_component(tc_id)
+                        filename = f"{safe_tc_id}_{step_idx}_{img_type}.png"
                         filepath = os.path.join(screenshot_dir, filename)
                         
                         b64_data = val.split(",", 1)[-1] if val.startswith("data:image") else val
@@ -118,6 +120,12 @@ class ExecutionService:
             
             session.add(step)
             await session.commit()
+
+    @staticmethod
+    def _safe_filename_component(value: str) -> str:
+        """Normalize potentially unsafe filename components before writing to disk."""
+        normalized = re.sub(r"[^A-Za-z0-9._-]", "_", value or "")
+        return normalized or "unknown"
 
     @staticmethod
     async def get_execution(execution_id: str) -> Optional[Execution]:
