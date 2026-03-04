@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant FE as Frontend
+    participant API as /api/v1/executions
+    participant C as Celery
+    participant W as Worker
+    participant D as Dispatcher
+    participant LP as LeftPupil/APIExecutor
+    participant TP as Target API
+    participant EX as ExecutionService
+    participant DB as DB
+
+    U->>FE: Start execution
+    FE->>API: POST /executions
+    API->>C: enqueue task
+    C-->>W: deliver task
+    W->>D: execute(tc_ir)
+    D->>LP: execute(api_ir, context)
+    LP->>TP: HTTP request
+    TP--x LP: timeout / no response
+
+    LP-->>D: result(success=false, error=timeout)
+    D-->>W: StepResult failed
+    W->>EX: create_step_result(status=ERROR, error=timeout)
+    EX->>DB: insert ExecutionStep
+    W->>EX: update_execution_status(FAILED)
+    EX->>DB: update Execution
+
+    loop Poll status
+        FE->>API: GET /executions/{id}
+        API-->>FE: failed / progress=100
+    end
+
+    FE->>API: GET /executions/{id}/result
+    API-->>FE: error details + failed summary

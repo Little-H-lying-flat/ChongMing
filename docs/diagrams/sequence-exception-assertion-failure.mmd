@@ -1,0 +1,34 @@
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant FE as Frontend
+    participant API as /api/v1/executions
+    participant C as Celery
+    participant W as Worker
+    participant D as Dispatcher
+    participant LP as LeftPupil/APIExecutor
+    participant TP as Target API
+    participant A as AssertionEngine
+    participant EX as ExecutionService
+    participant DB as DB
+
+    U->>FE: Run regression
+    FE->>API: POST /executions
+    API->>C: enqueue task
+    C-->>W: deliver task
+    W->>D: execute(tc_ir)
+    D->>LP: execute(api_ir with assertions)
+    LP->>TP: HTTP request
+    TP-->>LP: 200 response body
+    LP->>A: assert_all(response, rules)
+    A-->>LP: passed=false, failed_assertions=[...]
+    LP-->>D: result(success=false, assertions_failed)
+
+    D-->>W: StepResult failed
+    W->>EX: create_step_result(status=FAILED, details.assertions_failed)
+    EX->>DB: insert ExecutionStep
+    W->>EX: update_execution_status(FAILED)
+    EX->>DB: update Execution
+
+    FE->>API: GET /executions/{id}/result
+    API-->>FE: summary.failed + assertions_failed detail

@@ -10,6 +10,9 @@ This folder keeps high-signal architecture diagrams that should be updated when 
 - `sequence-neural-design-to-execution.mmd`: Flow 1 design analysis/generation to Flow 3 execution handoff.
 - `sequence-dispatcher-branching.mmd`: dispatcher routing with UI/API branch execution and persistence.
 - `sequence-phoenix-compile-heal.mmd`: Phoenix trace compile + script healing workflow.
+- `sequence-exception-timeout.mmd`: timeout branch from step execution to failed final status.
+- `sequence-exception-assertion-failure.mmd`: assertion failure branch and result persistence.
+- `sequence-exception-self-heal-fallback.mmd`: UI self-healing failure fallback/abort branch.
 
 ## Maintenance rule
 
