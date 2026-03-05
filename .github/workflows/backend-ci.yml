@@ -41,7 +41,7 @@ jobs:
 
     - name: Run Unit Security/Config Tests
       run: |
-        pytest tests/unit/test_config_env_validation.py tests/unit/test_execution_screenshot_path_security.py tests/unit/test_smart_ops_routes.py -v
+        pytest tests/unit/test_config_env_validation.py tests/unit/test_execution_screenshot_path_security.py tests/unit/test_smart_ops_routes.py tests/unit/test_test_case_model_contract.py -v
 
     - name: Run OmniParser Health Regression Tests
       run: |

@@ -3,8 +3,8 @@
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
-from sqlalchemy import Column, String, Text, JSON, DateTime, Enum
+from typing import Any, Dict, List, Optional
+from sqlalchemy import String, Text, JSON, DateTime, Enum
 from sqlalchemy.orm import Mapped, mapped_column
 import enum
 
@@ -62,12 +62,12 @@ class TestCase(Base):
     )
     
     # 步骤定义 (JSON 存储)
-    steps: Mapped[dict] = mapped_column(JSON, default=list)
+    steps: Mapped[List[Dict[str, Any]]] = mapped_column(JSON, default=list)
     
     # 元数据
     tags: Mapped[List[str]] = mapped_column(JSON, default=list)
     dependencies: Mapped[List[str]] = mapped_column(JSON, default=list)
-    variables: Mapped[dict] = mapped_column(JSON, default=dict)
+    variables: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
     
     # 来源追溯
     source_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -79,7 +79,7 @@ class TestCase(Base):
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
     
-    def to_tcir(self) -> dict:
+    def to_tcir(self) -> Dict[str, Any]:
         """转换为 TC-IR 格式"""
         return {
             "id": self.id,
