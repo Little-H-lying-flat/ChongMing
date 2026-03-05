@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.execution import Execution, ExecutionStatus, ExecutionStep
 
 
 def _payload(name: str = "api-contract-case") -> dict:
@@ -41,10 +44,6 @@ async def test_get_list_with_new_filters_contract(client) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason="Pending implementation: 6-state lifecycle should accept 'review' updates",
-    strict=True,
-)
 async def test_put_should_accept_review_state_after_lifecycle_upgrade(client) -> None:
     created = await client.post("/api/v1/test-cases", json=_payload())
     assert created.status_code == 201
@@ -58,14 +57,32 @@ async def test_put_should_accept_review_state_after_lifecycle_upgrade(client) ->
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason="Pending implementation: delete soft-rule when case is referenced by executions",
-    strict=True,
-)
-async def test_delete_should_block_when_referenced_by_execution(client) -> None:
+async def test_delete_should_block_when_referenced_by_execution(
+    client,
+    db_session: AsyncSession,
+) -> None:
     created = await client.post("/api/v1/test-cases", json=_payload())
     assert created.status_code == 201
     tc_id = created.json()["id"]
+
+    execution_id = "EXEC-CONTRACT-001"
+    db_session.add(
+        Execution(
+            id=execution_id,
+            config={"tc_ids": [tc_id]},
+            status=ExecutionStatus.RUNNING,
+            total_cases=1,
+        )
+    )
+    db_session.add(
+        ExecutionStep(
+            execution_id=execution_id,
+            tc_id=tc_id,
+            status=ExecutionStatus.RUNNING,
+            step_results={"steps": []},
+        )
+    )
+    await db_session.commit()
 
     response = await client.delete(f"/api/v1/test-cases/{tc_id}")
     assert response.status_code == 409

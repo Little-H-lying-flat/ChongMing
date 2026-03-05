@@ -1,11 +1,10 @@
-"""
-测试用例管理端点
+﻿"""Test case management endpoints (TC-IR CRUD)."""
 
-对应 TC-IR 资产的 CRUD 操作
-"""
+from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Query, Depends
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,21 +14,17 @@ from app.services.test_case_service import TestCaseService
 router = APIRouter()
 
 
-# ===================== 数据模型 =====================
-
-
 class TCIRCreate(BaseModel):
-    """创建测试用例请求"""
-    name: str = Field(..., description="用例名称", max_length=200)
-    description: Optional[str] = Field(None, description="用例描述")
-    mode: str = Field("UI", description="执行模式: UI, API, HYBRID")
-    priority: str = Field("P1", description="优先级: P0, P1, P2, P3")
-    steps: List[Dict[str, Any]] = Field(..., description="执行步骤")
-    tags: List[str] = Field(default_factory=list, description="标签")
+    name: str = Field(..., description="Case name", max_length=200)
+    description: Optional[str] = Field(None, description="Case description")
+    mode: str = Field("UI", description="Execution mode: UI, API, HYBRID")
+    priority: str = Field("P1", description="Priority: P0, P1, P2, P3")
+    status: Optional[str] = Field(None, description="Lifecycle state")
+    steps: List[Dict[str, Any]] = Field(..., description="Execution steps")
+    tags: List[str] = Field(default_factory=list, description="Tags")
 
 
 class TCIRResponse(BaseModel):
-    """测试用例响应"""
     id: str
     name: str
     description: Optional[str]
@@ -43,53 +38,45 @@ class TCIRResponse(BaseModel):
 
 
 class TCIRListResponse(BaseModel):
-    """测试用例列表响应"""
     items: List[TCIRResponse]
     total: int
     page: int
     page_size: int
 
 
-# ===================== API 端点 =====================
+def _to_response(item) -> TCIRResponse:
+    mode = item.mode.value if hasattr(item.mode, "value") else item.mode
+    priority = item.priority.value if hasattr(item.priority, "value") else item.priority
+    status = item.status.value if hasattr(item.status, "value") else item.status
+    return TCIRResponse(
+        id=item.id,
+        name=item.name,
+        description=item.description,
+        mode=mode,
+        priority=priority,
+        status=status,
+        steps=item.steps,
+        tags=item.tags,
+        created_at=item.created_at.isoformat(),
+        updated_at=item.updated_at.isoformat(),
+    )
+
 
 @router.get("", response_model=TCIRListResponse)
 async def list_test_cases(
-    page: int = Query(1, ge=1, description="页码"),
-    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-    status: Optional[str] = Query(None, description="状态过滤"),
-    mode: Optional[str] = Query(None, description="模式过滤"),
-    tag: Optional[str] = Query(None, description="标签过滤"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Page size"),
+    status: Optional[str] = Query(None, description="Status filter"),
+    mode: Optional[str] = Query(None, description="Mode filter"),
+    tag: Optional[str] = Query(None, description="Tag filter"),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    获取测试用例列表
-    
-    支持分页和过滤
-    """
     service = TestCaseService(db)
     items = await service.list(page=page, page_size=page_size, status=status, mode=mode, tag=tag)
     total = await service.count(status=status, mode=mode)
-    
-    # Model conversion
-    # Note: DB model fields need to map to Pydantic model
-    # Simple conversion here for MVP
-    response_items = []
-    for item in items:
-        response_items.append(TCIRResponse(
-            id=item.id,
-            name=item.name,
-            description=item.description,
-            mode=item.mode.value,
-            priority=item.priority.value,
-            status=item.status.value,
-            steps=item.steps, # Assumes dict matches Pydantic model
-            tags=item.tags,
-            created_at=item.created_at.isoformat(),
-            updated_at=item.updated_at.isoformat()
-        ))
 
     return TCIRListResponse(
-        items=response_items,
+        items=[_to_response(item) for item in items],
         total=total,
         page=page,
         page_size=page_size,
@@ -98,93 +85,51 @@ async def list_test_cases(
 
 @router.post("", response_model=TCIRResponse, status_code=201)
 async def create_test_case(tc: TCIRCreate, db: AsyncSession = Depends(get_db)):
-    """
-    创建测试用例
-    
-    将 TC-IR 存入资产库
-    """
     service = TestCaseService(db)
-    
-    # Convert Pydantic to Dict
-    tc_data = tc.model_dump()
-    # Pydantic model uses 'steps' as List[TCIRStep], DB uses JSON.
-    # model_dump() conversion is safe for JSON-serializable payloads.
-    # Enum handling: Pydantic 'mode' is string, DB expects Enum? 
-    # Actually DB model uses String Enum, it should digest string values fine if they match.
-    
+    tc_data = tc.model_dump(exclude_none=True)
+
     try:
         created = await service.create(tc_data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create test case: {str(e)}")
-        
-    return TCIRResponse(
-            id=created.id,
-            name=created.name,
-            description=created.description,
-            mode=created.mode.value,
-            priority=created.priority.value,
-            status=created.status.value,
-            steps=created.steps,
-            tags=created.tags,
-            created_at=created.created_at.isoformat(),
-            updated_at=created.updated_at.isoformat()
-    )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to create test case: {exc}")
+
+    return _to_response(created)
 
 
 @router.get("/{tc_id}", response_model=TCIRResponse)
 async def get_test_case(tc_id: str, db: AsyncSession = Depends(get_db)):
-    """
-    获取单个测试用例详情
-    """
     service = TestCaseService(db)
     item = await service.get(tc_id)
     if not item:
-        raise HTTPException(status_code=404, detail=f"测试用例 {tc_id} 不存在")
-        
-    return TCIRResponse(
-            id=item.id,
-            name=item.name,
-            description=item.description,
-            mode=item.mode.value,
-            priority=item.priority.value,
-            status=item.status.value,
-            steps=item.steps,
-            tags=item.tags,
-            created_at=item.created_at.isoformat(),
-            updated_at=item.updated_at.isoformat()
-    )
+        raise HTTPException(status_code=404, detail=f"Test case {tc_id} not found")
+    return _to_response(item)
 
 
 @router.put("/{tc_id}", response_model=TCIRResponse)
 async def update_test_case(tc_id: str, tc: TCIRCreate, db: AsyncSession = Depends(get_db)):
-    """
-    更新测试用例
-    """
     service = TestCaseService(db)
-    item = await service.update(tc_id, tc.model_dump(exclude_unset=True))
+
+    try:
+        item = await service.update(tc_id, tc.model_dump(exclude_unset=True, exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     if not item:
-        raise HTTPException(status_code=404, detail=f"测试用例 {tc_id} 不存在")
-        
-    return TCIRResponse(
-            id=item.id,
-            name=item.name,
-            description=item.description,
-            mode=item.mode.value,
-            priority=item.priority.value,
-            status=item.status.value,
-            steps=item.steps,
-            tags=item.tags,
-            created_at=item.created_at.isoformat(),
-            updated_at=item.updated_at.isoformat()
-    )
+        raise HTTPException(status_code=404, detail=f"Test case {tc_id} not found")
+
+    return _to_response(item)
 
 
 @router.delete("/{tc_id}", status_code=204)
 async def delete_test_case(tc_id: str, db: AsyncSession = Depends(get_db)):
-    """
-    删除测试用例
-    """
     service = TestCaseService(db)
-    deleted = await service.delete(tc_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail=f"测试用例 {tc_id} 不存在")
+    result = await service.delete(tc_id)
+
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail=f"Test case {tc_id} not found")
+    if result == "referenced":
+        raise HTTPException(status_code=409, detail=f"Test case {tc_id} is referenced by executions")
+
+    return None

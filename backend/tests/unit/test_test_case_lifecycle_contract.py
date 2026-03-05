@@ -22,10 +22,6 @@ def _runtime_states() -> set[str]:
     return {member.value for member in TCStatus}
 
 
-@pytest.mark.xfail(
-    reason="Pending lifecycle implementation: runtime model still uses 4 states",
-    strict=True,
-)
 def test_runtime_model_should_match_target_6_state_set() -> None:
     assert _runtime_states() == TARGET_STATES
 
