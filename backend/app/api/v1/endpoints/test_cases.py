@@ -106,9 +106,9 @@ async def create_test_case(tc: TCIRCreate, db: AsyncSession = Depends(get_db)):
     service = TestCaseService(db)
     
     # Convert Pydantic to Dict
-    tc_data = tc.dict()
+    tc_data = tc.model_dump()
     # Pydantic model uses 'steps' as List[TCIRStep], DB uses JSON.
-    # .dict() conversion should be fine for JSON field if compatible.
+    # model_dump() conversion is safe for JSON-serializable payloads.
     # Enum handling: Pydantic 'mode' is string, DB expects Enum? 
     # Actually DB model uses String Enum, it should digest string values fine if they match.
     
@@ -161,7 +161,7 @@ async def update_test_case(tc_id: str, tc: TCIRCreate, db: AsyncSession = Depend
     更新测试用例
     """
     service = TestCaseService(db)
-    item = await service.update(tc_id, tc.dict(exclude_unset=True))
+    item = await service.update(tc_id, tc.model_dump(exclude_unset=True))
     if not item:
         raise HTTPException(status_code=404, detail=f"测试用例 {tc_id} 不存在")
         

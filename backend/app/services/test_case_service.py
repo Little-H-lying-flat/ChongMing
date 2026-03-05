@@ -2,7 +2,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.test_case import TestCase, TCStatus, ExecutionMode, Priority
 
@@ -82,7 +82,7 @@ class TestCaseService:
         query = (
             update(TestCase)
             .where(TestCase.id == tc_id)
-            .values(**tc_data, updated_at=datetime.utcnow())
+            .values(**tc_data, updated_at=datetime.now(timezone.utc))
             .execution_options(synchronize_session="fetch")
         )
         await self.db.execute(query)

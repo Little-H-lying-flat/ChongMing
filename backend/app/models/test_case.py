@@ -2,7 +2,7 @@
 测试用例模型 (TC-IR 持久化)
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import Column, String, Text, JSON, DateTime, Enum
 from sqlalchemy.orm import Mapped, mapped_column
@@ -32,6 +32,10 @@ class TCStatus(str, enum.Enum):
     ACTIVE = "active"
     DISABLED = "disabled"
     ARCHIVED = "archived"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class TestCase(Base):
@@ -70,9 +74,9 @@ class TestCase(Base):
     source_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     
     # 时间戳
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
     
     def to_tcir(self) -> dict:
