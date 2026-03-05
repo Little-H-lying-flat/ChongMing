@@ -2,13 +2,17 @@
 执行记录模型
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import Column, String, Text, JSON, DateTime, Float, Integer, ForeignKey, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 
 from app.models.base import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class ExecutionStatus(str, enum.Enum):
@@ -52,17 +56,17 @@ class Execution(Base):
     skipped_cases: Mapped[int] = mapped_column(Integer, default=0)
     
     # 时间
-    start_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    start_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
     
     # 报告
     report_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     
     # 时间戳
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow
     )
     
     # 关联
@@ -96,8 +100,8 @@ class ExecutionStep(Base):
     step_results: Mapped[dict] = mapped_column(JSON, default=list)
     
     # 时间
-    start_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    start_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_time: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[float] = mapped_column(Float, default=0.0)
     
     # 截图

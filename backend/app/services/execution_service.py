@@ -3,7 +3,7 @@ import re
 from typing import List, Optional, Dict, Any
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.execution import Execution, ExecutionStep, ExecutionStatus
 from app.core.database import get_db_session
@@ -13,6 +13,10 @@ class ExecutionService:
     执行记录服务
     负责 Execution 和 ExecutionStep 的 CRUD
     """
+
+    @staticmethod
+    def _utcnow() -> datetime:
+        return datetime.now(timezone.utc)
 
     @staticmethod
     async def create_execution(
@@ -27,7 +31,7 @@ class ExecutionService:
                 config=config,
                 status=ExecutionStatus.PENDING,
                 total_cases=len(tc_ids),
-                start_time=datetime.utcnow()
+                start_time=ExecutionService._utcnow()
             )
             session.add(execution)
             await session.commit()
@@ -55,7 +59,7 @@ class ExecutionService:
                     # total is set on creation
                 
                 if status in [ExecutionStatus.PASSED, ExecutionStatus.FAILED, ExecutionStatus.ERROR, ExecutionStatus.CANCELLED]:
-                    execution.end_time = datetime.utcnow()
+                    execution.end_time = ExecutionService._utcnow()
                     execution.duration_ms = duration_ms
                 
                 await session.commit()
@@ -113,8 +117,8 @@ class ExecutionService:
                 step_results=result_data_copy, # Stripped results
                 duration_ms=duration_ms,
                 error_message=error,
-                start_time=datetime.utcnow(), 
-                end_time=datetime.utcnow()
+                start_time=ExecutionService._utcnow(),
+                end_time=ExecutionService._utcnow()
             )
             logger.info(f"💾 Saving Step Result for {tc_id}: Details Keys={[(s.get('details') or {}).keys() for s in result_data_copy.get('steps', [])]}")
             
