@@ -24,7 +24,7 @@ def _runtime_states() -> set[str]:
 
 @pytest.mark.xfail(
     reason="Pending lifecycle implementation: runtime model still uses 4 states",
-    strict=False,
+    strict=True,
 )
 def test_runtime_model_should_match_target_6_state_set() -> None:
     assert _runtime_states() == TARGET_STATES
@@ -77,10 +77,6 @@ def test_legacy_response_fields_remain_stable() -> None:
         assert field in data
 
 
-@pytest.mark.xfail(
-    reason="Pending API contract extension for optional compatibility fields",
-    strict=False,
-)
 def test_future_optional_fields_are_accepted_without_breaking_legacy() -> None:
     payload = {
         "id": "TC-NEXT-001",

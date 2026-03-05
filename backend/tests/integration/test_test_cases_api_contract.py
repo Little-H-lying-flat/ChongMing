@@ -29,10 +29,6 @@ async def test_get_list_with_legacy_filters_is_compatible(client) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason="Pending implementation: priority/keyword/owner/time-range filters are contract-only",
-    strict=False,
-)
 async def test_get_list_with_new_filters_contract(client) -> None:
     await client.post("/api/v1/test-cases", json=_payload(name="priority-p0-case"))
 
@@ -47,7 +43,7 @@ async def test_get_list_with_new_filters_contract(client) -> None:
 @pytest.mark.asyncio
 @pytest.mark.xfail(
     reason="Pending implementation: 6-state lifecycle should accept 'review' updates",
-    strict=False,
+    strict=True,
 )
 async def test_put_should_accept_review_state_after_lifecycle_upgrade(client) -> None:
     created = await client.post("/api/v1/test-cases", json=_payload())
@@ -64,7 +60,7 @@ async def test_put_should_accept_review_state_after_lifecycle_upgrade(client) ->
 @pytest.mark.asyncio
 @pytest.mark.xfail(
     reason="Pending implementation: delete soft-rule when case is referenced by executions",
-    strict=False,
+    strict=True,
 )
 async def test_delete_should_block_when_referenced_by_execution(client) -> None:
     created = await client.post("/api/v1/test-cases", json=_payload())

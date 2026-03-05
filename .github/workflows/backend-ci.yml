@@ -56,11 +56,9 @@ jobs:
         python ../scripts/check_mermaid_diagrams.py
 
   # Contract gate for Test Case Management module.
-  # Temporary allow-failure window for "red-to-green" transition.
-  # TODO(2026-03-11): Remove continue-on-error and make this gate mandatory.
+  # Mandatory gate: keeps backward compatibility and migration contract stable.
   test-cases-contract:
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     defaults:
       run:
