@@ -7,6 +7,7 @@ from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
 
 from app.core.config import settings
 from app.utils.json_repair import repair_json
+from app.utils.autogen_runtime import get_autogen_runtime_status
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,10 @@ async def run_scenarist_group_chat(
     from app.core.ai_models import AIModule
     
     logger.info(f"[AutoGen] Starting GroupChat for Target Type: {target_type}")
+    autogen_status = get_autogen_runtime_status()
+    if not autogen_status.available:
+        logger.warning(f"[AutoGen] Skipping scenarist chat: {autogen_status.reason}")
+        return ""
 
     # Helper to build Autogen llm_config
     def build_llm_config(model_config):
@@ -302,12 +307,23 @@ TERMINATE
             
         return "auto"
 
-    group_chat = GroupChat(
-        agents=agents,
-        messages=[],
-        max_round=7, # Admin -> URL_Finder -> UI -> API -> Merger -> TERMINATE (Leaves room for one extra round)
-        speaker_selection_method=custom_speaker_selection,
-    )
+    # Compatibility: some AutoGen versions don't support speaker_selection_method.
+    try:
+        group_chat = GroupChat(
+            agents=agents,
+            messages=[],
+            max_round=7, # Admin -> URL_Finder -> UI -> API -> Merger -> TERMINATE (Leaves room for one extra round)
+            speaker_selection_method=custom_speaker_selection,
+        )
+    except TypeError:
+        logger.warning(
+            "[AutoGen] GroupChat does not support speaker_selection_method in current version; using default turn policy."
+        )
+        group_chat = GroupChat(
+            agents=agents,
+            messages=[],
+            max_round=7,
+        )
 
     manager = GroupChatManager(groupchat=group_chat, llm_config=admin_cfg)
 

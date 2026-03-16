@@ -1,0 +1,19 @@
+{
+  "scenario_count": 3,
+  "scenario_names": [
+    "[Fallback] UI Happy Path Login",
+    "[Fallback] UI Negative Login",
+    "[Fallback] UI Remember Me"
+  ],
+  "imported_ids": [
+    "vuc-2aedfe26",
+    "vuc-150111be",
+    "vuc-f92da21e"
+  ],
+  "new_case_count": 3,
+  "new_case_names": [
+    "[Fallback] UI Remember Me",
+    "[Fallback] UI Negative Login",
+    "[Fallback] UI Happy Path Login"
+  ]
+}

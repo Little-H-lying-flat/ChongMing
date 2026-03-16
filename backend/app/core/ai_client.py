@@ -104,7 +104,12 @@ class DashScopeClient(BaseAIClient):
              if "qwen3.5" in model_config.model_id or "max-2025" in model_config.model_id:
                   extra_body["enable_thinking"] = True
                   
-        print(f"DEBUG PAYLOAD to DashScope ({model_config.model_id}): extra_body={extra_body}, messages={formatted_messages}")
+        logger.debug(
+            "DashScope request prepared: model={}, message_count={}, extra_body_keys={}",
+            model_config.model_id,
+            len(formatted_messages),
+            list(extra_body.keys()),
+        )
         
         response = await self.client.chat.completions.create(
             model=model_config.model_id,

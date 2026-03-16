@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 from app.services.neural_design.service import DesignService
 from app.services.neural_design.models import DesignRequest
 from app.core.ai_client import AIResponse
+from app.services.neural_design import service as service_module
 
 
 @pytest.fixture
@@ -29,17 +30,26 @@ def service(mock_ai, mock_retriever):
 
 @pytest.mark.asyncio
 async def test_analyze_requirement(service, mock_ai):
+    mock_graph = AsyncMock()
+    mock_graph.ainvoke.return_value = {
+        "scenarios": [{"name": "Test Scenario", "description": "Desc", "steps": []}]
+    }
+    original_graph = service_module.neural_design_graph
+    service_module.neural_design_graph = mock_graph
+
     request = DesignRequest(
         project_id="p1", 
         requirement_text="Login feature"
     )
-    
-    # invoke() already returns the correct AIResponse from mock_ai fixture
-    scenarios = await service.analyze_requirement(request)
-    
+
+    try:
+        scenarios = await service.analyze_requirement(request)
+    finally:
+        service_module.neural_design_graph = original_graph
+
     assert len(scenarios) == 1
     assert scenarios[0]["name"] == "Test Scenario"
-    mock_ai.invoke.assert_called_once()
+    mock_graph.ainvoke.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_generate_test_case(service, mock_ai, mock_retriever):

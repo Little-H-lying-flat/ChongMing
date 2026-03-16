@@ -26,6 +26,117 @@ class GraphState(TypedDict):
     is_swagger: bool
     editor_output: str # New field to track the last raw output from the editor
 
+
+def _fallback_scenarios_from_points(
+    extracted_points: List[str], target_type: str, target_url: str = ""
+) -> List[Dict[str, Any]]:
+    """Build minimal usable scenarios when AutoGen dependencies are unavailable."""
+    if not extracted_points:
+        return []
+
+    normalized_target = (target_type or "").upper()
+    base_login_url = (target_url or "").strip() or "https://example.test/login"
+
+    if normalized_target == "UI":
+        def _contains_any(text: str, keywords: List[str]) -> bool:
+            normalized = (text or "").strip().lower()
+            return any(k in normalized for k in keywords)
+
+        def _build_steps(defaults: List[Dict[str, Any]], _hints: List[str]) -> List[Dict[str, Any]]:
+            return [dict(s) for s in defaults]
+
+        remember_keywords = [
+            "remember me", "remember", "prefill", "pre-fill", "autofill", "auto fill",
+            "persist", "cookie", "session restore",
+            "记住我", "回填", "预填", "自动填充", "自动登录",
+        ]
+        negative_keywords = [
+            "invalid", "wrong password", "error", "failed", "unauthorized", "401", "deny",
+            "错误", "失败", "无效", "拒绝", "未授权", "异常",
+        ]
+
+        happy_points: List[str] = []
+        negative_points: List[str] = []
+        remember_points: List[str] = []
+
+        for point in extracted_points:
+            if _contains_any(point, remember_keywords):
+                remember_points.append(point)
+            elif _contains_any(point, negative_keywords):
+                negative_points.append(point)
+            else:
+                happy_points.append(point)
+
+        happy_defaults = [
+            {"step_type": "UI", "action": "goto", "target": "browser", "value": base_login_url, "description": "Open login page"},
+            {"step_type": "UI", "action": "assert", "target": "input[name='username']", "description": "Verify username input is visible"},
+            {"step_type": "UI", "action": "assert", "target": "input[name='password']", "description": "Verify password input is visible"},
+            {"step_type": "UI", "action": "type", "target": "input[name='username']", "value": "${TEST_USERNAME}", "description": "Enter valid username"},
+            {"step_type": "UI", "action": "type", "target": "input[name='password']", "value": "${VALID_PASSWORD}", "description": "Enter valid password"},
+            {"step_type": "UI", "action": "click", "target": "button[type='submit']", "description": "Click login"},
+            {"step_type": "UI", "action": "wait", "target": "[data-testid='home-page']", "description": "Wait for redirect"},
+            {"step_type": "UI", "action": "assert", "target": "location.pathname", "value": "/home", "description": "Verify URL redirected to home"},
+            {"step_type": "UI", "action": "assert", "target": "[data-testid='user-nickname']", "description": "Verify nickname is visible"},
+        ]
+        negative_defaults = [
+            {"step_type": "UI", "action": "goto", "target": "browser", "value": base_login_url, "description": "Open login page"},
+            {"step_type": "UI", "action": "type", "target": "input[name='username']", "value": "${TEST_USERNAME}", "description": "Enter username"},
+            {"step_type": "UI", "action": "type", "target": "input[name='password']", "value": "${INVALID_PASSWORD}", "description": "Enter invalid password"},
+            {"step_type": "UI", "action": "click", "target": "button[type='submit']", "description": "Submit login"},
+            {"step_type": "UI", "action": "wait", "target": "[data-testid='login-form']", "description": "Wait for error render"},
+            {"step_type": "UI", "action": "assert", "target": "[data-testid='login-error']", "value": "Invalid username or password", "description": "Verify invalid password error message"},
+        ]
+        remember_defaults = [
+            {"step_type": "UI", "action": "goto", "target": "browser", "value": base_login_url, "description": "Open login page"},
+            {"step_type": "UI", "action": "assert", "target": "input[name='remember']", "description": "Verify remember-me checkbox is visible"},
+            {"step_type": "UI", "action": "type", "target": "input[name='username']", "value": "${TEST_USERNAME}", "description": "Enter username"},
+            {"step_type": "UI", "action": "type", "target": "input[name='password']", "value": "${VALID_PASSWORD}", "description": "Enter password"},
+            {"step_type": "UI", "action": "click", "target": "input[name='remember']", "description": "Enable remember me"},
+            {"step_type": "UI", "action": "click", "target": "button[type='submit']", "description": "Login"},
+            {"step_type": "UI", "action": "wait", "target": "[data-testid='home-page']", "description": "Wait for home page"},
+            {"step_type": "UI", "action": "click", "target": "[data-testid='logout']", "description": "Logout"},
+            {"step_type": "UI", "action": "wait", "target": "[data-testid='login-form']", "description": "Wait for login page"},
+            {"step_type": "UI", "action": "assert", "target": "input[name='username']", "value": "${TEST_USERNAME}", "description": "Verify username is prefilled"},
+        ]
+
+        return [
+            {
+                "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
+                "name": "UI Happy Path Login",
+                "priority": "P2",
+                "description": "Fallback template for successful login flow",
+                "steps": _build_steps(happy_defaults, happy_points),
+            },
+            {
+                "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
+                "name": "UI Negative Login",
+                "priority": "P2",
+                "description": "Fallback template for invalid credential handling",
+                "steps": _build_steps(negative_defaults, negative_points),
+            },
+            {
+                "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
+                "name": "UI Remember Me",
+                "priority": "P2",
+                "description": "Fallback template for remember-me persistence",
+                "steps": _build_steps(remember_defaults, remember_points),
+            },
+        ]
+
+    steps = []
+    step_type = "API" if normalized_target == "API" else "UI"
+    for point in extracted_points[:8]:
+        steps.append({"step_type": step_type, "description": point})
+
+    return [
+        {
+            "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
+            "name": f"[Fallback] {normalized_target or 'MIXED'} Scenario",
+            "priority": "P1",
+            "description": "Auto-generated fallback scenario when AutoGen path is unavailable",
+            "steps": steps,
+        }
+    ]
 # === Nodes ===
 
 async def node_router(state: GraphState) -> Dict[str, Any]:
@@ -78,9 +189,9 @@ async def node_prd_extractor(state: GraphState) -> Dict[str, Any]:
     project_id = state.get("project_id", "default_proj")
     
     memory_context = memory_base.search_memory(
-        query=f"测试偏好和需求分析经验: {state['requirement_text'][:200]}", 
-        user_id=user_id, 
-        project_id=project_id
+        query=f"test preference and requirement analysis guidance: {state['requirement_text'][:200]}",
+        user_id=user_id,
+        project_id=project_id,
     )
     
     prompt = f"Extract the key business requirements and testing points from this PRD:\n{state['requirement_text']}\n\nTarget Type: {state.get('target_type', 'MIXED')}"
@@ -115,13 +226,18 @@ async def node_scenarist(state: GraphState) -> Dict[str, Any]:
     user_id = state.get("project_id", "default_user")
     project_id = state.get("project_id", "default_proj")
     memory_context = memory_base.search_memory(
-        query="业务场景生成建议和测试用例偏好", 
-        user_id=user_id, 
-        project_id=project_id
+        query="business scenario generation guidance and testcase preferences",
+        user_id=user_id,
+        project_id=project_id,
     )
     
     feedback_str = f"Critical Critic Feedback to address (MUST FIX):\n{state.get('feedback', '')}" if state.get("feedback") else ""
-    full_context = f"【原始需求文档 PRD (Highest Priority)】\n{requirement_text}\n\n【系统约束与上下文】\n{context_info}\n\n{memory_context}\n\n{feedback_str}\n(如果原始需求中指定了测试网址或域名，请优先使用文档中的网址，忽略系统上下文的默认 Base URL)"
+    full_context = (
+        f"[Original PRD - Highest Priority]\n{requirement_text}\n\n"
+        f"[System Constraints and Context]\n{context_info}\n\n"
+        f"{memory_context}\n\n{feedback_str}\n"
+        "(If PRD explicitly specifies target URL/domain, always prioritize PRD URL over default Base URL.)"
+    )
     
     try:
         final_merged_json = await run_scenarist_group_chat(
@@ -143,6 +259,16 @@ async def node_scenarist(state: GraphState) -> Dict[str, Any]:
         return {"scenarios": scenarios}
     except Exception as e:
         logger.error(f"Scenarist Agent Chat failed: {e}")
+        fallback = _fallback_scenarios_from_points(
+            extracted_points=extracted_points,
+            target_type=target,
+            target_url=state.get("target_url", ""),
+        )
+        if fallback:
+            logger.warning(
+                f"[Graph Node] Using fallback scenarios due to AutoGen failure, count={len(fallback)}"
+            )
+            return {"scenarios": fallback}
         return {"scenarios": state.get("scenarios", [])}
 
 async def node_critic(state: GraphState) -> Dict[str, Any]:
@@ -277,3 +403,4 @@ def build_neural_design_graph():
     return builder.compile()
 
 neural_design_graph = build_neural_design_graph()
+

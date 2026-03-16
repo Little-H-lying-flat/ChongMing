@@ -270,9 +270,15 @@ class APIExecutor:
         import autogen
         import asyncio
         from app.engines.left_pupil.agents.api_sherlock import APISherlockAgent
+        from app.utils.autogen_runtime import get_autogen_runtime_status
         
         logger.info("🕵️ Sherlock analyzing error...")
         
+        autogen_status = get_autogen_runtime_status()
+        if not autogen_status.available:
+            logger.warning(f"Skipping AutoGen API Sherlock: {autogen_status.reason}")
+            return {"failure_type": "UNKNOWN_ERROR"}
+
         from app.services.smart_ops.ai_config_service import AIConfigService
         from app.core.ai_models import AIModule
         
@@ -364,8 +370,13 @@ class APIExecutor:
         import asyncio
         from app.engines.left_pupil.agents.api_healer import APIHealerAgent
         from app.engines.left_pupil.agents.data_persona import DataPersonaAgent
+        from app.utils.autogen_runtime import get_autogen_runtime_status
         
         logger.info(f"⚕️ Healer attempting to correct payload (Retry {state.get('retry_count', 0)+1}/{state['max_retries']})")
+        autogen_status = get_autogen_runtime_status()
+        if not autogen_status.available:
+            logger.warning(f"Skipping AutoGen API Healer: {autogen_status.reason}")
+            return {"failure_type": "ABORT"}
         
         from app.services.smart_ops.ai_config_service import AIConfigService
         from app.core.ai_models import AIModule

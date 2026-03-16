@@ -7,6 +7,7 @@ UI Runner (The Hands)
 
 import asyncio
 import logging
+import re
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from playwright.async_api import Page
@@ -25,80 +26,264 @@ class UiRunner:
         self.page = page
         self.dom_service = dom_service
         self.trace_logs: List[Dict[str, Any]] = []
-        
-    async def execute(self, action: VisualActionIR, id_map: Dict[int, Dict[str, Any]] = None) -> bool:
-        """
-        执行单个动作
-        
-        Args:
-            action: AUI-IR 动作对象
-            id_map: 视觉元素 ID 映射表 (from SoMRenderer), 用于 visual 策略
-            
-        Returns:
-            bool: 执行是否成功
-        """
+
+    @staticmethod
+    def _normalize_semantic_hint(value: str) -> str:
+        normalized = re.sub(r"[^a-z0-9]+", " ", (value or "").lower())
+        return re.sub(r"\s+", " ", normalized).strip()
+
+    async def _resolve_semantic_click_target(
+        self,
+        *,
+        x: float,
+        y: float,
+        semantic_hint: str,
+    ) -> Optional[Dict[str, Any]]:
+        hint = self._normalize_semantic_hint(semantic_hint)
+        if not hint:
+            return None
+
         try:
-            logger.info(f"Executing Action: {action.action_type} - {action.id}")
-            
-            # 记录开始时间
-            start_time = datetime.now()
-            trace_entry = {
-                "step_id": action.id,
-                "action_type": action.action_type,
-                "timestamp": start_time.isoformat(),
-                "status": "pending"
-            }
-            
-            # 1. 导航 (Navigate)
-            if action.action_type == "navigate":
-                url = action.params.get("url")
-                if url:
-                    await self.page.goto(url)
-                    trace_entry["details"] = f"Navigated to {url}"
-                else:
-                    raise ValueError("Navigate action missing 'url' param")
+            return await self.page.evaluate(
+                """
+                ({ x, y, semanticHint }) => {
+                    const hint = semanticHint;
+                    if (!hint) return null;
 
-            # 2. 等待 (Wait)
-            elif action.action_type == "wait":
-                seconds = action.params.get("seconds", 1)
-                await asyncio.sleep(seconds)
-                trace_entry["details"] = f"Waited {seconds}s"
+                    function normalize(text) {
+                        return String(text || "")
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, " ")
+                            .replace(/\\s+/g, " ")
+                            .trim();
+                    }
 
-            # 3. 点击 (Click) / 双击 (DblClick) / 输入 (Type)
-            elif action.action_type in ["click", "dblclick", "type", "hover"]:
-                if not action.target:
-                    raise ValueError(f"Action {action.action_type} requires a target")
-                
-                await self._handle_interaction(action, id_map, trace_entry)
+                    function isVisible(element) {
+                        if (!element) return false;
+                        const style = window.getComputedStyle(element);
+                        const rect = element.getBoundingClientRect();
+                        return style.display !== "none" &&
+                            style.visibility !== "hidden" &&
+                            style.opacity !== "0" &&
+                            rect.width > 0 &&
+                            rect.height > 0;
+                    }
 
-            # 4. 截图 (Screenshot)
-            elif action.action_type == "screenshot":
-                path = action.params.get("path", "screenshot.png")
-                await self.page.screenshot(path=path)
-                trace_entry["details"] = f"Screenshot saved to {path}"
-                
-            # 5. 滚动 (Scroll)
-            elif action.action_type == "scroll":
-                x = action.params.get("x", 0)
-                y = action.params.get("y", 0)
-                await self.page.mouse.wheel(x, y)
-                trace_entry["details"] = f"Scrolled {x}, {y}"
+                    function isClickable(element) {
+                        if (!element) return false;
+                        const tag = element.tagName.toLowerCase();
+                        if (["button", "a", "summary"].includes(tag)) return true;
+                        if (tag === "input" && ["button", "submit", "reset"].includes((element.type || "").toLowerCase())) return true;
+                        const role = (element.getAttribute("role") || "").toLowerCase();
+                        if (["button", "link", "menuitem", "tab"].includes(role)) return true;
+                        return false;
+                    }
 
-            trace_entry["status"] = "success"
-            self.trace_logs.append(trace_entry)
-            return True
+                    function clickableRoot(element) {
+                        let current = element;
+                        for (let i = 0; i < 6 && current; i += 1) {
+                            if (isClickable(current)) return current;
+                            current = current.parentElement;
+                        }
+                        return null;
+                    }
 
-        except Exception as e:
-            logger.error(f"Action Execution Failed: {e}")
-            trace_entry["status"] = "failed"
-            trace_entry["error"] = str(e)
-            self.trace_logs.append(trace_entry)
-            return False
+                    function signature(element) {
+                        if (!element) return "";
+                        return normalize(
+                            element.innerText ||
+                            element.getAttribute("aria-label") ||
+                            element.getAttribute("data-test") ||
+                            element.value ||
+                            element.textContent ||
+                            element.tagName
+                        );
+                    }
 
-    async def _handle_interaction(self, action: VisualActionIR, id_map: Dict[int, Dict[str, Any]], trace_entry: Dict):
+                    function contextScore(element) {
+                        let current = element;
+                        for (let depth = 0; depth < 6 && current; depth += 1) {
+                            const text = normalize(
+                                current.getAttribute("aria-label") ||
+                                current.getAttribute("data-test") ||
+                                current.innerText ||
+                                current.textContent
+                            );
+                            if (text.includes(hint)) {
+                                return 200 - depth * 20;
+                            }
+                            current = current.parentElement;
+                        }
+                        return 0;
+                    }
+
+                    const anchor = clickableRoot(document.elementFromPoint(x, y));
+                    const anchorSignature = signature(anchor);
+                    if (!anchor || !anchorSignature) return null;
+
+                    const candidateSet = new Set();
+                    for (const element of document.querySelectorAll("button, a, input[type='button'], input[type='submit'], [role='button'], [role='link'], [role='menuitem'], [role='tab']")) {
+                        const root = clickableRoot(element);
+                        if (root && isVisible(root)) candidateSet.add(root);
+                    }
+
+                    let best = null;
+                    for (const candidate of candidateSet) {
+                        if (signature(candidate) !== anchorSignature) continue;
+
+                        const rect = candidate.getBoundingClientRect();
+                        const cx = rect.left + rect.width / 2;
+                        const cy = rect.top + rect.height / 2;
+                        const distancePenalty = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2) / 10;
+                        const score = contextScore(candidate) - distancePenalty;
+                        if (score <= 0) continue;
+
+                        if (!best || score > best.score) {
+                            best = {
+                                x: cx,
+                                y: cy,
+                                score,
+                            };
+                        }
+                    }
+
+                    return best;
+                }
+                """,
+                {"x": x, "y": y, "semanticHint": hint},
+            )
+        except Exception as exc:
+            logger.warning(f"Semantic click disambiguation failed: {exc}")
+            return None
+
+    async def _resolve_semantic_input_target(
+        self,
+        *,
+        x: float,
+        y: float,
+        field_hint: str,
+    ) -> Optional[Dict[str, Any]]:
+        hint = self._normalize_semantic_hint(field_hint)
+        if not hint:
+            return None
+
+        try:
+            return await self.page.evaluate(
+                """
+                ({ x, y, fieldHint }) => {
+                    const hint = fieldHint;
+                    if (!hint) return null;
+
+                    function normalize(text) {
+                        return String(text || "")
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, " ")
+                            .replace(/\\s+/g, " ")
+                            .trim();
+                    }
+
+                    function isVisible(element) {
+                        if (!element) return false;
+                        const style = window.getComputedStyle(element);
+                        const rect = element.getBoundingClientRect();
+                        return style.display !== "none" &&
+                            style.visibility !== "hidden" &&
+                            style.opacity !== "0" &&
+                            rect.width > 0 &&
+                            rect.height > 0;
+                    }
+
+                    function isEditable(element) {
+                        if (!element) return false;
+                        const tag = element.tagName.toLowerCase();
+                        const role = (element.getAttribute("role") || "").toLowerCase();
+                        return (
+                            (tag === "input" && !["hidden", "submit", "button", "checkbox", "radio", "image"].includes((element.type || "").toLowerCase())) ||
+                            tag === "textarea" ||
+                            element.contentEditable === "true" ||
+                            ["textbox", "searchbox", "combobox"].includes(role)
+                        );
+                    }
+
+                    function editableRoot(element) {
+                        let current = element;
+                        for (let i = 0; i < 6 && current; i += 1) {
+                            if (isEditable(current)) return current;
+                            current = current.parentElement;
+                        }
+                        return null;
+                    }
+
+                    function labelText(element) {
+                        const parts = [];
+                        for (const attr of ["placeholder", "aria-label", "name", "id", "data-test"]) {
+                            const value = element.getAttribute(attr);
+                            if (value) parts.push(value);
+                        }
+                        if (element.labels) {
+                            for (const label of element.labels) {
+                                parts.push(label.innerText || label.textContent || "");
+                            }
+                        }
+                        let current = element.parentElement;
+                        for (let depth = 0; depth < 4 && current; depth += 1) {
+                            parts.push(current.getAttribute("aria-label") || "");
+                            parts.push(current.innerText || current.textContent || "");
+                            current = current.parentElement;
+                        }
+                        return normalize(parts.join(" "));
+                    }
+
+                    const candidates = Array.from(
+                        document.querySelectorAll(
+                            'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="image"]), textarea, [contenteditable="true"], [role="textbox"], [role="searchbox"], [role="combobox"]'
+                        )
+                    ).filter(isVisible);
+
+                    let best = null;
+                    for (const candidate of candidates) {
+                        const labels = labelText(candidate);
+                        const matchScore = labels.includes(hint) ? 300 : 0;
+                        if (!matchScore) continue;
+
+                        const rect = candidate.getBoundingClientRect();
+                        const cx = rect.left + rect.width / 2;
+                        const cy = rect.top + rect.height / 2;
+                        const distancePenalty = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2) / 10;
+                        const score = matchScore - distancePenalty;
+
+                        if (!best || score > best.score) {
+                            best = {
+                                x: cx,
+                                y: cy,
+                                score,
+                            };
+                        }
+                    }
+
+                    if (best) return best;
+
+                    const fallback = editableRoot(document.elementFromPoint(x, y));
+                    if (!fallback || !isVisible(fallback)) return null;
+
+                    const rect = fallback.getBoundingClientRect();
+                    return {
+                        x: rect.left + rect.width / 2,
+                        y: rect.top + rect.height / 2,
+                        score: 0,
+                    };
+```
+                }
+                """,
+                {"x": x, "y": y, "fieldHint": hint},
+            )
+        except Exception as exc:
+            logger.warning(f"Semantic input disambiguation failed: {exc}")
+            return None
         """处理交互逻辑 (Click, Type, etc.)"""
         target = action.target
         strategy = target.strategy
+        semantic_hint = action.params.get("semantic_hint") if isinstance(action.params, dict) else None
         
         x, y = 0, 0
         selector = None
@@ -130,6 +315,25 @@ class UiRunner:
             # 但用户提示词要求： "在点击前调用 sniff_selector... 然后执行 page.mouse.click"
             # 这意味着 sniff 主要是为了记录(trace)和可能的后续恢复，但动作本身是用鼠标坐标。
             
+            if action.action_type in ["click", "dblclick", "hover"] and semantic_hint:
+                resolved_target = await self._resolve_semantic_click_target(
+                    x=x,
+                    y=y,
+                    semantic_hint=semantic_hint,
+                )
+                if resolved_target:
+                    x, y = resolved_target["x"], resolved_target["y"]
+                    trace_entry["semantic_target"] = semantic_hint
+                    trace_entry["semantic_resolution"] = {
+                        "x": x,
+                        "y": y,
+                        "score": resolved_target.get("score"),
+                    }
+                    logger.info(
+                        "Semantic click disambiguation relocated target to "
+                        f"({x:.1f}, {y:.1f}) for hint '{semantic_hint}'"
+                    )
+
             if action.action_type == "click":
                 await self.page.mouse.click(x, y)
             elif action.action_type == "dblclick":
@@ -138,6 +342,25 @@ class UiRunner:
                 await self.page.mouse.move(x, y)
             elif action.action_type == "type":
                 text = action.params.get("text", "")
+                field_hint = action.params.get("field_hint") if isinstance(action.params, dict) else None
+                if field_hint:
+                    resolved_input = await self._resolve_semantic_input_target(
+                        x=x,
+                        y=y,
+                        field_hint=field_hint,
+                    )
+                    if resolved_input:
+                        x, y = resolved_input["x"], resolved_input["y"]
+                        trace_entry["field_hint"] = field_hint
+                        trace_entry["input_resolution"] = {
+                            "x": x,
+                            "y": y,
+                            "score": resolved_input.get("score"),
+                        }
+                        logger.info(
+                            "Semantic input disambiguation relocated target to "
+                            f"({x:.1f}, {y:.1f}) for hint '{field_hint}'"
+                        )
                 
                 # ═══════════════════════════════════════════
                 # Smart Input Focus (Layer 2) — JS-First

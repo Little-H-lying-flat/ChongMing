@@ -1,0 +1,284 @@
+{
+  "project_id": "proj_ui_non_browser_flow_2",
+  "analyze_count": 1,
+  "selected_scenario": {
+    "scenario_id": "SC-508bd7ad",
+    "name": "[Fallback] UI 场景",
+    "priority": "P1",
+    "description": "AutoGen 不可用时由提取点自动聚合生成",
+    "steps": [
+      {
+        "step_type": "UI",
+        "description": "Verify username and password input fields are visible on the login page"
+      },
+      {
+        "step_type": "UI",
+        "description": "Verify redirection to home page occurs after entering valid credentials and clicking Login"
+      },
+      {
+        "step_type": "UI",
+        "description": "Verify user nickname is displayed on the home page after successful login"
+      },
+      {
+        "step_type": "UI",
+        "description": "Verify error text \"Invalid username or password\" appears when entering a wrong password"
+      },
+      {
+        "step_type": "UI",
+        "description": "Verify username is prefilled on login page if Remember Me was previously checked"
+      }
+    ]
+  },
+  "generated_test_case": {
+    "id": "6015e0c0",
+    "name": "UI_Login_Complete_Flow",
+    "description": "Comprehensive test covering login visibility, successful authentication, dashboard verification, logout, and invalid credential error handling based on scenario SC-508bd7ad.",
+    "steps": [
+      {
+        "id": "step1",
+        "name": "Open Login Page",
+        "step_type": "UI",
+        "description": "Navigate to the application login page",
+        "action": "goto",
+        "target": "Browser Address Bar",
+        "value": "https://app.example.com/login",
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step2",
+        "name": "Check Username Field",
+        "step_type": "UI",
+        "description": "Verify username input field is visible on the login page",
+        "action": "assert",
+        "target": "Username Input Field",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step3",
+        "name": "Check Password Field",
+        "step_type": "UI",
+        "description": "Verify password input field is visible on the login page",
+        "action": "assert",
+        "target": "Password Input Field",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step4",
+        "name": "Enter Username",
+        "step_type": "UI",
+        "description": "Input valid test username from environment variable",
+        "action": "type",
+        "target": "Username Input Field",
+        "value": "${TEST_USERNAME}",
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step5",
+        "name": "Enter Password",
+        "step_type": "UI",
+        "description": "Input valid test password from environment variable",
+        "action": "type",
+        "target": "Password Input Field",
+        "value": "${VALID_PASSWORD}",
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step6",
+        "name": "Submit Login",
+        "step_type": "UI",
+        "description": "Click the login button to submit credentials",
+        "action": "click",
+        "target": "Login Button",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step7",
+        "name": "Wait for Redirect",
+        "step_type": "UI",
+        "description": "Wait for page transition to the home page to complete",
+        "action": "wait",
+        "target": "Dashboard Page",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step8",
+        "name": "Verify Home Page",
+        "step_type": "UI",
+        "description": "Verify redirection to home page occurred by checking title text",
+        "action": "assert",
+        "target": "Page Title",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step9",
+        "name": "Verify Nickname",
+        "step_type": "UI",
+        "description": "Verify user nickname is displayed on the home page after successful login",
+        "action": "assert",
+        "target": "User Nickname Display",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step10",
+        "name": "Logout User",
+        "step_type": "UI",
+        "description": "Click logout button to return to login screen",
+        "action": "click",
+        "target": "Logout Button",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step11",
+        "name": "Wait for Login Page",
+        "step_type": "UI",
+        "description": "Wait for login page to reload after logout",
+        "action": "wait",
+        "target": "Login Page",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step12",
+        "name": "Enter Username for Fail",
+        "step_type": "UI",
+        "description": "Input username again for negative test",
+        "action": "type",
+        "target": "Username Input Field",
+        "value": "${TEST_USERNAME}",
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step13",
+        "name": "Enter Wrong Password",
+        "step_type": "UI",
+        "description": "Input incorrect password from environment variable for error verification",
+        "action": "type",
+        "target": "Password Input Field",
+        "value": "${INVALID_PASSWORD}",
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step14",
+        "name": "Submit Failed Login",
+        "step_type": "UI",
+        "description": "Attempt login with wrong credentials",
+        "action": "click",
+        "target": "Login Button",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step15",
+        "name": "Wait for Error",
+        "step_type": "UI",
+        "description": "Wait for error message to render on the page",
+        "action": "wait",
+        "target": "Login Page",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      },
+      {
+        "id": "step16",
+        "name": "Verify Error Message",
+        "step_type": "UI",
+        "description": "Verify error text 'Invalid username or password' appears when entering wrong password",
+        "action": "assert",
+        "target": "Error Message Text",
+        "value": null,
+        "dependencies": [],
+        "metadata": {}
+      }
+    ],
+    "metadata": {
+      "origin": "neural_design"
+    }
+  },
+  "import_result": {
+    "status": "success",
+    "visual_case_id": "vuc-ca7de028"
+  },
+  "before_case_count": 0,
+  "after_case_count": 1,
+  "new_case_count": 1,
+  "new_cases": [
+    {
+      "project_id": "proj_ui_non_browser_flow_2",
+      "name": "[Fallback] UI 场景",
+      "description": "AutoGen 不可用时由提取点自动聚合生成",
+      "status": "draft",
+      "base_url": "https://example.test/login",
+      "id": "vuc-ca7de028",
+      "created_at": "2026-03-05T03:22:43.372607",
+      "updated_at": "2026-03-05T03:22:43.372612",
+      "steps": [
+        {
+          "step_index": 0,
+          "action": "ASSERT",
+          "target_description": "Verify username and password input fields are visible on the login page",
+          "value": null,
+          "screenshot_baseline": null,
+          "id": "vst-c129c3e8",
+          "case_id": "vuc-ca7de028"
+        },
+        {
+          "step_index": 1,
+          "action": "CLICK",
+          "target_description": "Verify redirection to home page occurs after entering valid credentials and clicking Login",
+          "value": null,
+          "screenshot_baseline": null,
+          "id": "vst-dc9a3d18",
+          "case_id": "vuc-ca7de028"
+        },
+        {
+          "step_index": 2,
+          "action": "ASSERT",
+          "target_description": "Verify user nickname is displayed on the home page after successful login",
+          "value": null,
+          "screenshot_baseline": null,
+          "id": "vst-dbd74310",
+          "case_id": "vuc-ca7de028"
+        },
+        {
+          "step_index": 3,
+          "action": "ASSERT",
+          "target_description": "Verify error text \"Invalid username or password\" appears when entering a wrong password",
+          "value": null,
+          "screenshot_baseline": null,
+          "id": "vst-1240bf41",
+          "case_id": "vuc-ca7de028"
+        },
+        {
+          "step_index": 4,
+          "action": "TYPE",
+          "target_description": "Verify username is prefilled on login page if Remember Me was previously checked",
+          "value": null,
+          "screenshot_baseline": null,
+          "id": "vst-82b56564",
+          "case_id": "vuc-ca7de028"
+        }
+      ]
+    }
+  ]
+}

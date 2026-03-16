@@ -1,0 +1,50 @@
+{
+  "count": 3,
+  "names": [
+    "[Fallback] UI Happy Path Login",
+    "[Fallback] UI Negative Login",
+    "[Fallback] UI Remember Me"
+  ],
+  "scenarios": [
+    {
+      "scenario_id": "SC-6730190e",
+      "name": "[Fallback] UI Happy Path Login",
+      "priority": "P1",
+      "description": "Auto-generated fallback scenario for successful login flow",
+      "steps": [
+        {
+          "step_type": "UI",
+          "description": "Verify successful login redirects user to the expected application page."
+        },
+        {
+          "step_type": "UI",
+          "description": "Verify login form UI elements are rendered correctly for interaction."
+        }
+      ]
+    },
+    {
+      "scenario_id": "SC-9625dd41",
+      "name": "[Fallback] UI Negative Login",
+      "priority": "P1",
+      "description": "Auto-generated fallback scenario for invalid credential handling",
+      "steps": [
+        {
+          "step_type": "UI",
+          "description": "Verify system presents an error message for invalid password inputs."
+        }
+      ]
+    },
+    {
+      "scenario_id": "SC-2f1cf980",
+      "name": "[Fallback] UI Remember Me",
+      "priority": "P1",
+      "description": "Auto-generated fallback scenario for remember-me persistence",
+      "steps": [
+        {
+          "step_type": "UI",
+          "description": "Verify login fields are prefilled with stored credentials if 'Remember Me' was enabled."
+        }
+      ]
+    }
+  ]
+}

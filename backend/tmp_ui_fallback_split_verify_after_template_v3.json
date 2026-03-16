@@ -1,0 +1,211 @@
+{
+  "summary": {
+    "count": 3,
+    "names": [
+      "UI Happy Path Login",
+      "UI Negative Login",
+      "UI Remember Me"
+    ],
+    "priorities": [
+      "P2",
+      "P2",
+      "P2"
+    ],
+    "contains_new_browser_session_target": false,
+    "sample_targets": [
+      "browser",
+      "input[name='username']",
+      "input[name='password']",
+      "input[name='username']",
+      "input[name='password']"
+    ]
+  },
+  "scenarios": [
+    {
+      "scenario_id": "SC-b01953a2",
+      "name": "UI Happy Path Login",
+      "priority": "P2",
+      "description": "Fallback template for successful login flow",
+      "steps": [
+        {
+          "step_type": "UI",
+          "action": "goto",
+          "target": "browser",
+          "value": "https://demo.example.com/login",
+          "description": "Open login page"
+        },
+        {
+          "step_type": "UI",
+          "action": "assert",
+          "target": "input[name='username']",
+          "description": "Verify username input is visible"
+        },
+        {
+          "step_type": "UI",
+          "action": "assert",
+          "target": "input[name='password']",
+          "description": "Verify password input is visible"
+        },
+        {
+          "step_type": "UI",
+          "action": "type",
+          "target": "input[name='username']",
+          "value": "${TEST_USERNAME}",
+          "description": "Enter valid username"
+        },
+        {
+          "step_type": "UI",
+          "action": "type",
+          "target": "input[name='password']",
+          "value": "${VALID_PASSWORD}",
+          "description": "Enter valid password"
+        },
+        {
+          "step_type": "UI",
+          "action": "click",
+          "target": "button[type='submit']",
+          "description": "Click login"
+        },
+        {
+          "step_type": "UI",
+          "action": "wait",
+          "target": "[data-testid='home-page']",
+          "description": "Wait for redirect"
+        },
+        {
+          "step_type": "UI",
+          "action": "assert",
+          "target": "location.pathname",
+          "value": "/home",
+          "description": "Verify URL redirected to home"
+        },
+        {
+          "step_type": "UI",
+          "action": "assert",
+          "target": "[data-testid='user-nickname']",
+          "description": "Verify nickname is visible"
+        }
+      ]
+    },
+    {
+      "scenario_id": "SC-a15e7ae4",
+      "name": "UI Negative Login",
+      "priority": "P2",
+      "description": "Fallback template for invalid credential handling",
+      "steps": [
+        {
+          "step_type": "UI",
+          "action": "goto",
+          "target": "browser",
+          "value": "https://demo.example.com/login",
+          "description": "Open login page"
+        },
+        {
+          "step_type": "UI",
+          "action": "type",
+          "target": "input[name='username']",
+          "value": "${TEST_USERNAME}",
+          "description": "Enter username"
+        },
+        {
+          "step_type": "UI",
+          "action": "type",
+          "target": "input[name='password']",
+          "value": "${INVALID_PASSWORD}",
+          "description": "Enter invalid password"
+        },
+        {
+          "step_type": "UI",
+          "action": "click",
+          "target": "button[type='submit']",
+          "description": "Submit login"
+        },
+        {
+          "step_type": "UI",
+          "action": "wait",
+          "target": "[data-testid='login-form']",
+          "description": "Wait for error render"
+        },
+        {
+          "step_type": "UI",
+          "action": "assert",
+          "target": "[data-testid='login-error']",
+          "value": "Invalid username or password",
+          "description": "Verify invalid password error message"
+        }
+      ]
+    },
+    {
+      "scenario_id": "SC-6d143a49",
+      "name": "UI Remember Me",
+      "priority": "P2",
+      "description": "Fallback template for remember-me persistence",
+      "steps": [
+        {
+          "step_type": "UI",
+          "action": "goto",
+          "target": "browser",
+          "value": "https://demo.example.com/login",
+          "description": "Open login page"
+        },
+        {
+          "step_type": "UI",
+          "action": "assert",
+          "target": "input[name='remember']",
+          "description": "Verify remember-me checkbox is visible"
+        },
+        {
+          "step_type": "UI",
+          "action": "type",
+          "target": "input[name='username']",
+          "value": "${TEST_USERNAME}",
+          "description": "Enter username"
+        },
+        {
+          "step_type": "UI",
+          "action": "type",
+          "target": "input[name='password']",
+          "value": "${VALID_PASSWORD}",
+          "description": "Enter password"
+        },
+        {
+          "step_type": "UI",
+          "action": "click",
+          "target": "input[name='remember']",
+          "description": "Enable remember me"
+        },
+        {
+          "step_type": "UI",
+          "action": "click",
+          "target": "button[type='submit']",
+          "description": "Login"
+        },
+        {
+          "step_type": "UI",
+          "action": "wait",
+          "target": "[data-testid='home-page']",
+          "description": "Wait for home page"
+        },
+        {
+          "step_type": "UI",
+          "action": "click",
+          "target": "[data-testid='logout']",
+          "description": "Logout"
+        },
+        {
+          "step_type": "UI",
+          "action": "wait",
+          "target": "[data-testid='login-form']",
+          "description": "Wait for login page"
+        },
+        {
+          "step_type": "UI",
+          "action": "assert",
+          "target": "input[name='username']",
+          "value": "${TEST_USERNAME}",
+          "description": "Verify username is prefilled"
+        }
+      ]
+    }
+  ]
+}

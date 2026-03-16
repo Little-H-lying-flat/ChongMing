@@ -4,6 +4,7 @@ from typing import Optional
 from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
 
 from app.core.config import settings
+from app.utils.autogen_runtime import get_autogen_runtime_status
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,10 @@ async def run_diagnostic_chat(error_msg: str, context: Optional[str] = None) -> 
     Returns a JSON string containing root_cause and suggested_fix.
     """
     logger.info("[Smart Ops] Starting Joint Diagnostic Room (GroupChat)")
+    autogen_status = get_autogen_runtime_status()
+    if not autogen_status.available:
+        logger.warning(f"[Smart Ops] Skipping diagnostic room: {autogen_status.reason}")
+        return ""
 
     # 1. The Coordinator/Admin
     user_proxy = UserProxyAgent(
@@ -95,12 +100,22 @@ async def run_diagnostic_chat(error_msg: str, context: Optional[str] = None) -> 
             
         return "auto"
 
-    group_chat = GroupChat(
-        agents=[user_proxy, frontend_expert, backend_expert, dba_expert, chief_diagnostician],
-        messages=[],
-        max_round=6, # Coordinator -> Frontend -> Backend -> DBA -> Chief -> TERMINATE
-        speaker_selection_method=custom_speaker_selection,
-    )
+    try:
+        group_chat = GroupChat(
+            agents=[user_proxy, frontend_expert, backend_expert, dba_expert, chief_diagnostician],
+            messages=[],
+            max_round=6, # Coordinator -> Frontend -> Backend -> DBA -> Chief -> TERMINATE
+            speaker_selection_method=custom_speaker_selection,
+        )
+    except TypeError:
+        logger.warning(
+            "[Smart Ops] GroupChat does not support speaker_selection_method in current version; using default turn policy."
+        )
+        group_chat = GroupChat(
+            agents=[user_proxy, frontend_expert, backend_expert, dba_expert, chief_diagnostician],
+            messages=[],
+            max_round=6,
+        )
 
     manager = GroupChatManager(groupchat=group_chat, llm_config=llm_config)
 

@@ -221,6 +221,40 @@ class DesignService:
         """
         将草稿 JSON 转换为 RefinedTestCase 对象
         """
+        def _normalize_ui_action(raw_action: str) -> str:
+            action = (raw_action or "").strip().lower()
+            if not action:
+                return "click"
+
+            alias_map = {
+                "open": "goto",
+                "open_page": "goto",
+                "navigate": "goto",
+                "visit": "goto",
+                "tap": "click",
+                "press": "click",
+                "submit": "click",
+                "input": "type",
+                "fill": "type",
+                "enter": "type",
+                "check": "assert",
+                "verify": "assert",
+                "validate": "assert",
+                "assert_visible": "assert",
+                "sleep": "wait",
+                "pause": "wait",
+                "delay": "wait",
+                "resize": "wait",
+                "swipe": "scroll",
+                "drag": "scroll",
+            }
+            normalized = alias_map.get(action, action)
+            allowed = {"goto", "click", "type", "assert", "screenshot", "wait", "scroll", "hover"}
+            if normalized not in allowed:
+                logger.warning(f"Unknown UI action '{raw_action}', fallback to 'click'")
+                return "click"
+            return normalized
+
         steps_data = draft.get("steps", [])
         if not steps_data:
             raise ValueError("生成的测试用例不包含任何步骤")
@@ -237,7 +271,7 @@ class DesignService:
                     name=step.get("intent") or "UI Step",
                     step_type="UI",
                     description=step.get("description", ""),
-                    action=step.get("action", "unknown"),
+                    action=_normalize_ui_action(step.get("action", "click")),
                     target=step.get("target", "unknown"),
                     value=step.get("value"),
                     dependencies=step.get("dependencies", [])

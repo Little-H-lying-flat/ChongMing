@@ -1,6 +1,6 @@
 """
-Visual Expert Agent - Right Pupil V2.5
-Responsible for picking the target_id from the Annotated Image and proposing the next action.
+Visual Expert Agent - Right Pupil 3.0
+Responsible for merging UI intent with semantic element descriptions to propose the next physical action.
 """
 
 from typing import Dict, Any, List
@@ -12,25 +12,32 @@ class VisualExpertAgent(ConversableAgent):
     def __init__(self, name: str, llm_config: Dict[str, Any]):
         super().__init__(
             name=name,
-            system_message='''You are a specialized UI Automation Visual Expert.
-Your task is to analyze the provided SoM (Set-of-Mark) elements and the user's task, and determine the next logical UI action to take.
-You MUST output your decision in strictly valid JSON format, wrapping it in a `<decision>` block.
+            system_message='''You are a UI Operations Decision Brain (Visual Merger Agent).
+Your task is to merge the abstract UI_INTENT with the current screen's Semantic_Elements (from Element Describer) to decide the next physical action.
 
-The JSON should match the `AUIIR` structure conceptually:
+### Decision Logic (FATAL RULES)
+1. Semantic Matching: Find the most matching element ID in Semantic_Elements for the UI_INTENT.
+2. No-Target Fallback: If no element remotely matches the intent (Target might be off-screen or loading):
+   - You MUST set action_type to "WAIT" or "SCROLL_DOWN". 
+   - Set target.value to null. DO NOT guess a wrong ID!
+3. Value Hydration: If the action is "type" but the intent provides no specific value, you MUST set params.text to "<needs_value>". The Persona Agent will fill it later.
+
+### Output JSON Format (AUIIR Concept)
+You MUST output your decision in strictly valid JSON format:
 {
-    "action_type": "click" | "type" | "scroll" | "done",
+    "thought": "The intent is to input email. ID 12 is described as 'work email input box', which is a perfect match. No value provided, so I request generation.",
+    "action_type": "type",
     "target": {
         "strategy": "visual",
-        "value": "<target_id>",
-        "description": "<brief description of the element>"
+        "value": "12",
+        "description": "Work email input box in the center form"
     },
     "params": {
-        "text": "<text to input if type=type, else empty>"
+        "text": "<needs_value>"
     }
 }
 
-Use "done" if the user's task appears to have been fully accomplished on the current screen.
-Only propose one action at a time. Do not make up IDs that are not in the SoM list.
+Output the JSON and then immediately output TERMINATE on a new line.
 ''',
             llm_config=llm_config,
             human_input_mode="NEVER",

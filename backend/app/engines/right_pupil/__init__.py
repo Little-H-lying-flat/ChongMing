@@ -9,6 +9,7 @@ import asyncio
 import logging
 import re
 from typing import List, Dict, Any, Optional
+from urllib.parse import urlparse
 import httpx
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 from playwright_stealth import Stealth
@@ -21,6 +22,7 @@ from .planner import VisualPlanner
 from app.engines.runner.ui_runner import UiRunner
 from app.engines.turbo.synthesizer import DataSynthesizer
 from app.schemas.execution import AUIIR
+from app.utils.autogen_runtime import get_autogen_runtime_status
 from .state import AgentState
 from .graph import create_right_pupil_graph
 
@@ -94,8 +96,386 @@ class RightPupilEngine:
     # ═══════════════════════════════════════════
     # Task-Aware Action Correction (Layer 1)
     # ═══════════════════════════════════════════
-    _INPUT_KEYWORDS = re.compile(r'输入|填写|键入|type|搜索框中|在.*框.*中.*输入|在.*中.*填', re.IGNORECASE)
-    _TEXT_EXTRACT = re.compile(r"['‘’“”\"](.+?)['‘’“”\"]")  # 提取引号内的文本
+    _INPUT_KEYWORDS = re.compile(
+        r"输入|填写|键入|type|搜索框中|在.*框.*中.*输入|在.*中.*填|"
+        r"username|user\s*name|password|email|account|query|search",
+        re.IGNORECASE,
+    )
+    _TEXT_EXTRACT = re.compile(r"""['‘’“”"](.+?)['‘’“”"]""")  # 提取引号内的文本
+
+    @staticmethod
+    def _register_tool_if_supported(
+        autogen_module: Any,
+        *,
+        func: Any,
+        caller: Any,
+        executor: Any,
+        name: str,
+        description: str,
+    ) -> bool:
+        """Register AutoGen tool only when current autogen version supports it."""
+        agentchat = getattr(autogen_module, "agentchat", None)
+        register_fn = getattr(agentchat, "register_function", None) if agentchat else None
+        if callable(register_fn):
+            register_fn(
+                func,
+                caller=caller,
+                executor=executor,
+                name=name,
+                description=description,
+            )
+            return True
+
+        logger.warning(
+            "AutoGen register_function is unavailable in current version; "
+            "continuing without tool registration."
+        )
+        return False
+
+    @staticmethod
+    async def _initiate_chat_async(admin: Any, recipient: Any, prompt: str) -> None:
+        """Run AutoGen chat with async API when available, otherwise sync fallback."""
+        if hasattr(admin, "a_initiate_chat"):
+            try:
+                await admin.a_initiate_chat(recipient, message=prompt)
+                return
+            except TypeError:
+                await admin.a_initiate_chat(recipient, prompt)
+                return
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, admin.initiate_chat, recipient, prompt)
+
+    @staticmethod
+    def _build_groupchat(
+        autogen_module: Any,
+        *,
+        agents: List[Any],
+        messages: List[Dict[str, Any]],
+        max_round: int,
+    ) -> Any:
+        """Build GroupChat with graceful fallback for autogen version differences."""
+        base_kwargs = {
+            "agents": agents,
+            "messages": messages,
+            "max_round": max_round,
+        }
+        try:
+            return autogen_module.GroupChat(
+                **base_kwargs,
+                speaker_selection_method="round_robin",
+                allow_repeat_speaker=False,
+            )
+        except TypeError as exc:
+            logger.warning(
+                f"AutoGen GroupChat kwargs not supported in current version, "
+                f"fallback to default turn policy: {exc}"
+            )
+            return autogen_module.GroupChat(**base_kwargs)
+
+    @staticmethod
+    def _extract_message_text(message: Any) -> str:
+        """Extract best-effort text payload from AutoGen message object."""
+        if isinstance(message, str):
+            return message
+        if isinstance(message, dict):
+            for key in ("content", "message", "text"):
+                value = message.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value
+        return ""
+
+    @staticmethod
+    def _get_agent_messages(user_proxy: Any, agent: Any) -> List[Any]:
+        """Read chat history robustly across AutoGen versions."""
+        chat_messages = getattr(user_proxy, "chat_messages", {}) or {}
+        if not isinstance(chat_messages, dict):
+            return []
+
+        if agent in chat_messages and isinstance(chat_messages[agent], list):
+            return chat_messages[agent]
+
+        agent_name = getattr(agent, "name", None)
+        if agent_name and agent_name in chat_messages and isinstance(chat_messages[agent_name], list):
+            return chat_messages[agent_name]
+
+        for value in chat_messages.values():
+            if isinstance(value, list):
+                return value
+
+        return []
+
+    @staticmethod
+    def _safe_netloc(raw_url: Optional[str]) -> str:
+        """Extract normalized netloc from URL string."""
+        if not raw_url:
+            return ""
+        try:
+            return (urlparse(raw_url).netloc or "").lower().strip()
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _should_bootstrap_navigation(state: AgentState) -> bool:
+        """Navigate to task_url only once at the beginning of a step."""
+        return bool(
+            state.get("task_url")
+            and not state.get("action_intent")
+            and not state.get("history")
+        )
+
+    @staticmethod
+    def _classify_failure_heuristic(error_msg: str) -> str:
+        """Fallback failure classification when Sherlock/LLM path is unavailable."""
+        text = (error_msg or "").lower()
+        if "cross-domain" in text or "redirect" in text:
+            return "ENVIRONMENT_ISSUE"
+        if "omniparser" in text or "perception" in text or "no elements found" in text:
+            return "VISION_FAILED"
+        if "timeout" in text or "execution error" in text:
+            return "RETRYABLE"
+        return "UNKNOWN_ERROR"
+
+    @staticmethod
+    def _infer_input_text(step_description: str) -> Optional[str]:
+        """Infer type action text when LLM omits params.text."""
+        if not step_description:
+            return None
+
+        quoted = RightPupilEngine._TEXT_EXTRACT.search(step_description)
+        if quoted:
+            return quoted.group(1)
+
+        tail_pattern = re.search(
+            r"(?:输入|填写|键入|type)\s*[:：]?\s*(\S+)\s*$",
+            step_description,
+            flags=re.IGNORECASE,
+        )
+        if tail_pattern:
+            return tail_pattern.group(1)
+
+        parts = step_description.strip().split()
+        if len(parts) >= 2:
+            candidate = parts[-1].strip()
+            if candidate and candidate.lower() not in {"输入", "填写", "键入", "type"}:
+                return candidate
+
+        return None
+
+    @staticmethod
+    def _extract_semantic_hint(step_description: str) -> Optional[str]:
+        """Extract the entity name referenced by a click-like action."""
+        if not step_description:
+            return None
+
+        quoted = RightPupilEngine._TEXT_EXTRACT.search(step_description)
+        if quoted:
+            hint = quoted.group(1).strip()
+            return hint or None
+
+        patterns = [
+            r"\bfor\s+([A-Za-z0-9][A-Za-z0-9\s_\-().]+?)(?:\s*(?:button|link|item|card))?\s*$",
+            r"\bnamed\s+([A-Za-z0-9][A-Za-z0-9\s_\-().]+?)\s*$",
+            r"\bcalled\s+([A-Za-z0-9][A-Za-z0-9\s_\-().]+?)\s*$",
+            r"名为\s*[\"“”']?(.+?)[\"“”']?(?:的|\s*$)",
+            r"叫做\s*[\"“”']?(.+?)[\"“”']?(?:的|\s*$)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, step_description, flags=re.IGNORECASE)
+            if not match:
+                continue
+            hint = match.group(1).strip(" .,:;!?")
+            if len(hint) >= 3:
+                return hint
+
+        return None
+
+    @staticmethod
+    def _extract_field_hint(step_description: str) -> Optional[str]:
+        """Extract the semantic field name referenced by a type action."""
+        if not step_description:
+            return None
+
+        patterns = [
+            r"\binto\s+(?:the\s+)?(.+?)\s+(?:input|field|textbox|text box|box)\b",
+            r"\bin\s+(?:the\s+)?(.+?)\s+(?:input|field|textbox|text box|box)\b",
+            r"\bfor\s+(?:the\s+)?(.+?)\s+(?:input|field|textbox|text box|box)\b",
+            r"在\s*(.+?)\s*(?:输入框|字段|文本框|框)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, step_description, flags=re.IGNORECASE)
+            if not match:
+                continue
+            hint = match.group(1).strip(" .,:;!?\"'“”")
+            if len(hint) >= 2:
+                return hint
+
+        return None
+
+    @staticmethod
+    async def _read_input_value_by_hint(
+        page: Page,
+        *,
+        field_hint: Optional[str],
+        fallback_x: Optional[float] = None,
+        fallback_y: Optional[float] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Read the current value of the best-matching editable field."""
+        if not page:
+            return None
+
+        hint = (field_hint or "").strip().lower()
+        try:
+            return await page.evaluate(
+                """
+                ({ fieldHint, fallbackX, fallbackY }) => {
+                    function normalize(text) {
+                        return String(text || "")
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, " ")
+                            .replace(/\\s+/g, " ")
+                            .trim();
+                    }
+
+                    function isVisible(element) {
+                        if (!element) return false;
+                        const style = window.getComputedStyle(element);
+                        const rect = element.getBoundingClientRect();
+                        return style.display !== "none" &&
+                            style.visibility !== "hidden" &&
+                            style.opacity !== "0" &&
+                            rect.width > 0 &&
+                            rect.height > 0;
+                    }
+
+                    function isEditable(element) {
+                        if (!element) return false;
+                        const tag = element.tagName.toLowerCase();
+                        const role = (element.getAttribute("role") || "").toLowerCase();
+                        return (
+                            (tag === "input" && !["hidden", "submit", "button", "checkbox", "radio", "image"].includes((element.type || "").toLowerCase())) ||
+                            tag === "textarea" ||
+                            element.contentEditable === "true" ||
+                            ["textbox", "searchbox", "combobox"].includes(role)
+                        );
+                    }
+
+                    function editableRoot(element) {
+                        let current = element;
+                        for (let i = 0; i < 6 && current; i += 1) {
+                            if (isEditable(current)) return current;
+                            current = current.parentElement;
+                        }
+                        return null;
+                    }
+
+                    function labelText(element) {
+                        const parts = [];
+                        for (const attr of ["placeholder", "aria-label", "name", "id", "data-test"]) {
+                            const value = element.getAttribute(attr);
+                            if (value) parts.push(value);
+                        }
+                        if (element.labels) {
+                            for (const label of element.labels) {
+                                parts.push(label.innerText || label.textContent || "");
+                            }
+                        }
+                        let current = element.parentElement;
+                        for (let depth = 0; depth < 4 && current; depth += 1) {
+                            parts.push(current.getAttribute("aria-label") || "");
+                            parts.push(current.innerText || current.textContent || "");
+                            current = current.parentElement;
+                        }
+                        return normalize(parts.join(" "));
+                    }
+
+                    function currentValue(element) {
+                        if (!element) return "";
+                        if (element.tagName.toLowerCase() === "textarea" || element.tagName.toLowerCase() === "input") {
+                            return element.value || "";
+                        }
+                        if (element.contentEditable === "true") {
+                            return element.innerText || element.textContent || "";
+                        }
+                        return "";
+                    }
+
+                    const hint = normalize(fieldHint);
+                    const candidates = Array.from(
+                        document.querySelectorAll(
+                            'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="image"]), textarea, [contenteditable="true"], [role="textbox"], [role="searchbox"], [role="combobox"]'
+                        )
+                    ).filter(isVisible);
+
+                    let best = null;
+                    if (hint) {
+                        for (const candidate of candidates) {
+                            const labels = labelText(candidate);
+                            if (!labels.includes(hint)) continue;
+                            const rect = candidate.getBoundingClientRect();
+                            const cx = rect.left + rect.width / 2;
+                            const cy = rect.top + rect.height / 2;
+                            const hasPoint = Number.isFinite(fallbackX) && Number.isFinite(fallbackY);
+                            const distancePenalty = hasPoint
+                                ? Math.sqrt((cx - fallbackX) ** 2 + (cy - fallbackY) ** 2) / 10
+                                : 0;
+                            const score = 300 - distancePenalty;
+                            if (!best || score > best.score) {
+                                best = {
+                                    value: currentValue(candidate),
+                                    score,
+                                    matched_by: "hint",
+                                };
+                            }
+                        }
+                    }
+
+                    if (best) return best;
+
+                    if (Number.isFinite(fallbackX) && Number.isFinite(fallbackY)) {
+                        const fallback = editableRoot(document.elementFromPoint(fallbackX, fallbackY));
+                        if (fallback && isVisible(fallback)) {
+                            return {
+                                value: currentValue(fallback),
+                                score: 0,
+                                matched_by: "coords",
+                            };
+                        }
+                    }
+
+                    return null;
+                }
+                """,
+                {
+                    "fieldHint": hint,
+                    "fallbackX": fallback_x,
+                    "fallbackY": fallback_y,
+                },
+            )
+        except Exception as exc:
+            logger.warning(f"Typed value verification failed: {exc}")
+            return None
+
+    def _enrich_action_context(self, action, step_description: str):
+        """Attach generic semantic hints to actions for downstream disambiguation."""
+        if not action:
+            return action
+
+        if not isinstance(getattr(action, "params", None), dict):
+            action.params = {}
+
+        if action.action_type in {"click", "dblclick", "hover"} and not action.params.get("semantic_hint"):
+            hint = self._extract_semantic_hint(step_description)
+            if hint:
+                action.params["semantic_hint"] = hint
+
+        if action.action_type == "type":
+            field_hint = action.params.get("field_hint") or self._extract_field_hint(step_description)
+            if field_hint:
+                action.params["field_hint"] = field_hint
+                action.params.setdefault("semantic_hint", field_hint)
+
+        return action
 
     def _correct_action_type(self, action, step_description: str):
         """
@@ -111,15 +491,17 @@ class RightPupilEngine:
                 f"🔧 Action correction: click → type (description contains input keywords: '{step_description[:60]}')"
             )
             action.action_type = "type"
+            if not isinstance(getattr(action, "params", None), dict):
+                action.params = {}
             
             # 如果 params 中没有 text，尝试从描述中提取引号内容
             if not action.params.get("text"):
-                match = self._TEXT_EXTRACT.search(step_description)
-                if match:
-                    action.params["text"] = match.group(1)
-                    logger.info(f"   Extracted text from description: '{match.group(1)}'")
+                inferred = self._infer_input_text(step_description)
+                if inferred:
+                    action.params["text"] = inferred
+                    logger.info(f"   Extracted text from description: '{inferred}'")
         
-        return action
+        return self._enrich_action_context(action, step_description)
 
     async def execute(self, action: AUIIR) -> Any:
         """
@@ -171,6 +553,17 @@ class RightPupilEngine:
         """
         logger.info("--- [Node: Perceive] ---")
         import base64
+
+        # First step with task_url: let reason node emit deterministic navigate action.
+        if self._should_bootstrap_navigation(state):
+            return {
+                "current_screenshot": None,
+                "annotated_screenshot": None,
+                "id_map": {},
+                "som_text": "",
+                "error": None,
+                "failure_type": None,
+            }
         
         # Step 1: Wait & Screenshot
         if self.waiter:
@@ -213,6 +606,75 @@ class RightPupilEngine:
                 h = int(bbox[3] - bbox[1])
                 som_text_lines.append(f"ID {k}: [{w}x{h}] {v.get('label')} {v.get('content', '')}")
             som_text = "\n".join(som_text_lines)
+
+            # --- Right Pupil 3.0: Hybrid Perception & Semantic Description ---
+            points = []
+            for k, v in id_map.items():
+                bbox = v.get('bbox', [0, 0, 0, 0])
+                cx = (bbox[0] + bbox[2]) / 2.0
+                cy = (bbox[1] + bbox[3]) / 2.0
+                points.append({"x": cx, "y": cy})
+            
+            dom_hints = []
+            if points:
+                try:
+                    dom_hints = await self.dom_service.get_dom_hints_from_points(self.page, points)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch DOM hints: {e}")
+                    dom_hints = [None] * len(points)
+            
+            describer_input = []
+            for j, (k, v) in enumerate(id_map.items()):
+                item = {
+                    "id": int(k),
+                    "bbox": [int(x) for x in v.get("bbox", [0, 0, 0, 0])],
+                    "ocr": v.get("content", "")
+                }
+                if j < len(dom_hints) and dom_hints[j]:
+                    item["dom_hint"] = dom_hints[j]
+                describer_input.append(item)
+                
+            semantic_elements_str = "[]"
+            autogen_status = get_autogen_runtime_status()
+            if autogen_status.available:
+                 try:
+                     import autogen, json, re
+                     from app.engines.right_pupil.agents.element_describer import ElementDescriberAgent
+                     from app.services.smart_ops.ai_config_service import AIConfigService
+                     from app.core.ai_models import AIModule
+                     from app.core.config import settings
+                     
+                     desc_cfg = await AIConfigService.get_model_config(AIModule.AGENT_RIGHT_VISUAL)
+                     desc_llm_config = {
+                          "config_list": [{
+                              "model": desc_cfg.model_id,
+                              "api_key": settings.QWEN_API_KEY,
+                              "base_url": settings.QWEN_BASE_URL
+                          }],
+                          "temperature": 0.1,
+                          "max_tokens": desc_cfg.max_tokens,
+                     }
+                     
+                     describer = ElementDescriberAgent("ElementDescriber", desc_llm_config)
+                     admin = autogen.UserProxyAgent("Admin", human_input_mode="NEVER", code_execution_config=False, max_consecutive_auto_reply=1)
+                     
+                     desc_prompt = f"Please translate the following elements into semantic descriptions:\n{json.dumps(describer_input, ensure_ascii=False)}"
+                     await self._initiate_chat_async(admin, describer, desc_prompt)
+                     
+                     last_msg = self._extract_message_text(describer.last_message())
+                     json_match = re.search(r'```(?:json)?\n(.*)\n```', last_msg, re.DOTALL)
+                     if json_match:
+                         semantic_elements_str = json_match.group(1).strip()
+                     else:
+                         match = re.search(r'(\[.*\])', last_msg, re.DOTALL)
+                         semantic_elements_str = match.group(1).strip() if match else last_msg
+                         
+                     logger.info(f"Element Describer output computed successfully: {len(semantic_elements_str)} chars")
+                 except Exception as e:
+                     logger.error(f"Element Describer Agent failed: {e}. Falling back to RAW JSON.")
+                     semantic_elements_str = json.dumps(describer_input, ensure_ascii=False)
+            else:
+                 semantic_elements_str = json.dumps(describer_input, ensure_ascii=False)
             
             # Live trace broadcast (Optional)
             execution_id = state.get("execution_id")
@@ -235,7 +697,8 @@ class RightPupilEngine:
             updates.update({
                 "annotated_screenshot": annotated_b64,
                 "id_map": id_map,
-                "som_text": som_text
+                "som_text": som_text,
+                "semantic_elements": semantic_elements_str
             })
             
         except Exception as e:
@@ -255,19 +718,53 @@ class RightPupilEngine:
         # If perceive failed, skip reasoning
         if state.get("error"):
             return {}
+
+        # Healer may inject a direct action; keep it and skip a new reasoning pass once.
+        if state.get("use_existing_action") and state.get("action_intent"):
+            return {"use_existing_action": False}
             
         task_desc = state.get("task_description")
         
         # Handle Navigation specifically if initial step has url but no intent yet
-        if state.get("task_url") and not state.get("action_intent"):
+        if self._should_bootstrap_navigation(state):
              # For Phase 1, if we have a URL initially, we navigate first
              from app.schemas.execution import AUIIR
              action = AUIIR(
                  action_type="navigate",
-                 target=type('ActionTarget', (object,), {"strategy": "url", "value": state["task_url"]})(),
-                 params={}
+                 target=None,
+                 params={"url": state["task_url"]},
+                 expected_visual_change=f"Navigate to {state['task_url']}"
              )
              return {"action_intent": action}
+
+        autogen_status = get_autogen_runtime_status()
+        if not autogen_status.available:
+            logger.warning(
+                "Skipping AutoGen reasoning and using VisualPlanner fallback directly: "
+                f"{autogen_status.reason}"
+            )
+            try:
+                fallback_action = await self.planner.plan_next_step(
+                    task=task_desc or "",
+                    screenshot_base64=state.get("current_screenshot") or "",
+                    som_text=state.get("som_text") or "",
+                    history=state.get("history") or [],
+                )
+                if fallback_action:
+                    fallback_action = self._correct_action_type(
+                        fallback_action, task_desc or ""
+                    )
+                    return {
+                        "action_intent": fallback_action,
+                        "error": None,
+                        "failure_type": None,
+                    }
+            except Exception as planner_exc:
+                logger.error(f"Reasoning fallback (VisualPlanner) failed: {planner_exc}")
+                return {
+                    "error": f"Reasoning Error: {autogen_status.reason}",
+                    "failure_type": "PLANNING_FAILED"
+                }
         
         try:
             from app.engines.right_pupil.agents.visual_expert import VisualExpertAgent
@@ -315,28 +812,29 @@ class RightPupilEngine:
             critic = CriticAgent("视觉审查官_Critic", build_cfg(critic_cfg))
             
             from app.engines.right_pupil.agents.librarian import search_knowledge_base
-            autogen.agentchat.register_function(
-                search_knowledge_base,
+            self._register_tool_if_supported(
+                autogen,
+                func=search_knowledge_base,
                 caller=visual_expert,
                 executor=admin,
                 name="search_knowledge_base",
-                description="Search the knowledge base for historical context or element locators."
+                description="Search the knowledge base for historical context or element locators.",
             )
-            autogen.agentchat.register_function(
-                search_knowledge_base,
+            self._register_tool_if_supported(
+                autogen,
+                func=search_knowledge_base,
                 caller=persona,
                 executor=admin,
                 name="search_knowledge_base",
-                description="Search the knowledge base for historical context or synthetic test data examples."
+                description="Search the knowledge base for historical context or synthetic test data examples.",
             )
             
             # 2. Build GroupChat
-            groupchat = autogen.GroupChat(
+            groupchat = self._build_groupchat(
+                autogen,
                 agents=[admin, visual_expert, persona, critic],
                 messages=[],
                 max_round=10,
-                speaker_selection_method="round_robin", # Admin -> Visual -> Persona -> Critic
-                allow_repeat_speaker=False
             )
             
             manager = autogen.GroupChatManager(groupchat=groupchat, llm_config=build_cfg(critic_cfg))
@@ -346,27 +844,24 @@ class RightPupilEngine:
             
 Recent History: {json.dumps(state.get('history')[-3:] if state.get('history') else [])}
 
-OmniParser SoM Elements:
-{state.get('som_text', '')}
+Semantic_Elements (translated from OmniParser & DOM):
+{state.get('semantic_elements', '[]')}
 
 Please propose the next action."""
 
-            # 4. Run GroupChat (Synchronously in executor to not block async loop)
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                admin.initiate_chat,
-                manager,
-                prompt
-            )
+            # 4. Run GroupChat
+            await self._initiate_chat_async(admin, manager, prompt)
 
             # 5. Extract JSON from Critic's last message
             last_msg = None
             # Find the last message from Critic
             for msg in reversed(groupchat.messages):
-                if msg.get("name") == "视觉审查官_Critic":
-                    last_msg = msg.get("content", "")
+                msg_name = str(msg.get("name", "")) if isinstance(msg, dict) else ""
+                if msg_name == critic.name or "Critic" in msg_name:
+                    last_msg = self._extract_message_text(msg)
                     break
+            if not last_msg and groupchat.messages:
+                last_msg = self._extract_message_text(groupchat.messages[-1])
                     
             if not last_msg:
                 raise ValueError("Critic did not provide a final output.")
@@ -396,6 +891,21 @@ Please propose the next action."""
             
         except Exception as e:
             logger.error(f"Reasoning failed (AutoGen): {e}")
+            try:
+                fallback_action = await self.planner.plan_next_step(
+                    task=task_desc or "",
+                    screenshot_base64=state.get("current_screenshot") or "",
+                    som_text=state.get("som_text") or "",
+                    history=state.get("history") or [],
+                )
+                if fallback_action:
+                    fallback_action = self._correct_action_type(
+                        fallback_action, task_desc or ""
+                    )
+                    logger.info("Reasoning fallback: using VisualPlanner output.")
+                    return {"action_intent": fallback_action, "error": None, "failure_type": None}
+            except Exception as planner_exc:
+                logger.error(f"Reasoning fallback (VisualPlanner) failed: {planner_exc}")
             return {
                 "error": f"Reasoning Error: {str(e)}",
                 "failure_type": "PLANNING_FAILED"
@@ -415,12 +925,22 @@ Please propose the next action."""
             return {"error": "No action to execute", "failure_type": "EXECUTION_FAILED"}
             
         if action.action_type == "done":
-            return {"action_result": {"success": True, "details": "Task marked as done by planner"}}
+            return {
+                "action_result": {"success": True, "details": "Task marked as done by planner"},
+                "use_existing_action": False,
+            }
             
         # Execute
         try:
             if action.action_type == "navigate":
-                 await self.page.goto(action.target.value, wait_until="domcontentloaded", timeout=30000)
+                 nav_url = None
+                 if isinstance(getattr(action, "params", None), dict):
+                     nav_url = action.params.get("url")
+                 if not nav_url and getattr(action, "target", None):
+                     nav_url = getattr(action.target, "value", None)
+                 if not nav_url:
+                     raise ValueError("Navigate action missing url in params.url or target.value")
+                 await self.page.goto(nav_url, wait_until="domcontentloaded", timeout=30000)
                  success = True
             else:
                  success = await self.runner.execute(action, state.get("id_map", {}))
@@ -429,8 +949,13 @@ Please propose the next action."""
                 "action_result": {
                     "success": success,
                     "action_type": action.action_type,
-                    "target": action.target.value if hasattr(action.target, 'value') else None
-                }
+                    "target": (
+                        nav_url
+                        if action.action_type == "navigate"
+                        else (action.target.value if hasattr(action.target, "value") else None)
+                    ),
+                },
+                "use_existing_action": False,
             }
         except Exception as e:
             logger.error(f"Action Execution failed: {e}")
@@ -438,6 +963,75 @@ Please propose the next action."""
                 "error": f"Execution Error: {str(e)}",
                 "failure_type": "EXECUTION_FAILED"
             }
+
+    async def _verify_type_action(self, state: AgentState) -> Optional[Dict[str, Any]]:
+        """Verify typed text actually landed in the intended editable field."""
+        intent = state.get("action_intent")
+        if not intent or getattr(intent, "action_type", None) != "type":
+            return None
+
+        params = getattr(intent, "params", {}) or {}
+        if not isinstance(params, dict):
+            params = {}
+
+        expected_text = str(params.get("text", ""))
+        if not expected_text:
+            return None
+
+        selectors = []
+        target = getattr(intent, "target", None)
+        if getattr(target, "strategy", None) == "dom" and getattr(target, "value", None):
+            selectors.append(str(target.value))
+
+        trace_logs = getattr(self.runner, "trace_logs", None) or []
+        last_trace = trace_logs[-1] if trace_logs else {}
+        stable_selector = last_trace.get("stable_selector")
+        if stable_selector and stable_selector not in selectors:
+            selectors.append(stable_selector)
+
+        for selector in selectors:
+            try:
+                locator = self.page.locator(selector).first
+                if await locator.count() < 1:
+                    continue
+                actual_value = await locator.input_value()
+                return {
+                    "passed": actual_value == expected_text,
+                    "actual_value": actual_value,
+                    "expected_value": expected_text,
+                    "matched_by": f"selector:{selector}",
+                }
+            except Exception:
+                continue
+
+        field_hint = params.get("field_hint") or params.get("semantic_hint")
+        fallback = (
+            last_trace.get("input_resolution")
+            or last_trace.get("relocated_to")
+            or last_trace.get("coords")
+            or {}
+        )
+        verification = await self._read_input_value_by_hint(
+            self.page,
+            field_hint=field_hint,
+            fallback_x=fallback.get("x"),
+            fallback_y=fallback.get("y"),
+        )
+        if verification is None:
+            return {
+                "passed": False,
+                "actual_value": None,
+                "expected_value": expected_text,
+                "matched_by": "unresolved",
+            }
+
+        actual_value = verification.get("value")
+        return {
+            "passed": actual_value == expected_text,
+            "actual_value": actual_value,
+            "expected_value": expected_text,
+            "matched_by": verification.get("matched_by", "hint"),
+        }
 
     async def node_evaluate(self, state: AgentState) -> Dict[str, Any]:
         """
@@ -456,6 +1050,38 @@ Please propose the next action."""
                  "error": "Action execution failed in runner",
                  "failure_type": "RETRYABLE"
              }
+
+        # Guard: unexpected cross-domain redirect often means ad/pop-up hijack.
+        intent = state.get("action_intent")
+        intent_type = getattr(intent, "action_type", "") if intent else ""
+        if intent_type not in {"navigate", "done"}:
+            expected_netloc = self._safe_netloc(state.get("task_url"))
+            current_netloc = self._safe_netloc(self.page.url if getattr(self, "page", None) else "")
+            if expected_netloc and current_netloc:
+                same_domain = (
+                    current_netloc.endswith(expected_netloc)
+                    or expected_netloc.endswith(current_netloc)
+                )
+                if not same_domain:
+                    return {
+                        "error": (
+                            f"Unexpected cross-domain navigation: expected '{expected_netloc}', "
+                            f"got '{current_netloc}'"
+                        ),
+                        "failure_type": "ENVIRONMENT_ISSUE",
+                    }
+
+        type_verification = await self._verify_type_action(state)
+        if type_verification and not type_verification.get("passed", False):
+            return {
+                "error": (
+                    "Typed value verification failed: "
+                    f"expected '{type_verification.get('expected_value', '')}', "
+                    f"got '{type_verification.get('actual_value', '')}' "
+                    f"via {type_verification.get('matched_by', 'unknown')}"
+                ),
+                "failure_type": "RETRYABLE",
+            }
              
         # Record history on success
         history = state.get("history", [])
@@ -469,14 +1095,22 @@ Please propose the next action."""
                 "timestamp": __import__('time').time()
             })
             
-        return {"history": history, "error": None, "failure_type": "NONE"}
+        return {"history": history, "error": None, "failure_type": "NONE", "use_existing_action": False}
 
     async def node_sherlock(self, state: AgentState) -> Dict[str, Any]:
         """
         [Node] 根因分析: Call Sherlock to analyze the failure.
         """
         logger.info("--- [Node: Sherlock] ---")
-        
+        autogen_status = get_autogen_runtime_status()
+        if not autogen_status.available:
+            logger.warning(f"Skipping AutoGen Sherlock: {autogen_status.reason}")
+            return {
+                "failure_type": self._classify_failure_heuristic(
+                    state.get("error", "")
+                )
+            }
+
         try:
             import autogen, json, re
             from app.engines.right_pupil.agents.sherlock import SherlockAgent
@@ -504,12 +1138,13 @@ Please propose the next action."""
             )
             
             from app.engines.right_pupil.agents.librarian import search_knowledge_base
-            autogen.agentchat.register_function(
-                search_knowledge_base,
+            self._register_tool_if_supported(
+                autogen,
+                func=search_knowledge_base,
                 caller=sherlock,
                 executor=admin,
                 name="search_knowledge_base",
-                description="Search the knowledge base for root cause of known errors, system bugs, or UI changes."
+                description="Search the knowledge base for root cause of known errors, system bugs, or UI changes.",
             )
             
             error_msg = state.get("error", "Unknown error")
@@ -518,23 +1153,18 @@ Please propose the next action."""
             
             prompt = f"Error: {error_msg}\nLast Action: {json.dumps(last_action)}\nAnalyze the root cause and output strict JSON."
             
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                admin.initiate_chat,
-                sherlock,
-                prompt
-            )
+            await self._initiate_chat_async(admin, sherlock, prompt)
             
             # Extract last reply from sherlock
             last_msg = None
-            for msg in reversed(admin.chat_messages[sherlock]):
-                if msg.get("role") == "assistant": # Sherlock's reply
-                    last_msg = msg.get("content", "")
+            messages = self._get_agent_messages(admin, sherlock)
+            for msg in reversed(messages):
+                if isinstance(msg, dict) and msg.get("role") == "assistant":  # Sherlock's reply
+                    last_msg = self._extract_message_text(msg)
                     break
                     
             if not last_msg:
-                last_msg = sherlock.last_message().get("content", "")
+                last_msg = self._extract_message_text(sherlock.last_message())
                 
             json_match = re.search(r'```(?:json)?\n(.*?)\n```', last_msg, re.DOTALL)
             json_str = json_match.group(1) if json_match else last_msg
@@ -558,7 +1188,11 @@ Please propose the next action."""
             
         except Exception as e:
             logger.error(f"Sherlock failed: {e}")
-            return {"failure_type": "UNKNOWN_ERROR"}
+            return {
+                "failure_type": self._classify_failure_heuristic(
+                    state.get("error", "")
+                )
+            }
 
     async def node_healer(self, state: AgentState) -> Dict[str, Any]:
         """
@@ -567,11 +1201,33 @@ Please propose the next action."""
         logger.info("--- [Node: Healer] ---")
         current_retries = state.get("retry_count", 0)
         max_retries = state.get("max_retries", 1)
+        autogen_status = get_autogen_runtime_status()
+        if not autogen_status.available:
+            logger.warning(f"Skipping AutoGen Healer: {autogen_status.reason}")
+            return {"error": "AutoGen healer unavailable", "failure_type": "ABORT"}
         
         if current_retries >= max_retries:
             logger.warning("Max retries reached. Aborting.")
             # Set failure_type to NONE so the edge defaults to END, stopping the loop
             return {"error": f"Max retries ({max_retries}) reached", "failure_type": "ABORT"}
+
+        # Fast-path recovery for ad/pop-up hijack redirects.
+        if state.get("failure_type") == "ENVIRONMENT_ISSUE" and state.get("task_url"):
+            from app.schemas.execution import AUIIR
+
+            back_action = AUIIR(
+                action_type="navigate",
+                target=None,
+                params={"url": state["task_url"]},
+                expected_visual_change=f"Return to {state['task_url']}",
+            )
+            return {
+                "retry_count": current_retries + 1,
+                "action_intent": back_action,
+                "error": None,
+                "failure_type": None,
+                "use_existing_action": True,
+            }
             
         try:
             import autogen, json, re
@@ -601,12 +1257,13 @@ Please propose the next action."""
             )
             
             from app.engines.right_pupil.agents.librarian import search_knowledge_base
-            autogen.agentchat.register_function(
-                search_knowledge_base,
+            self._register_tool_if_supported(
+                autogen,
+                func=search_knowledge_base,
                 caller=healer,
                 executor=admin,
                 name="search_knowledge_base",
-                description="Search the knowledge base for historical state fixes, known environment issues, and recovery paths."
+                description="Search the knowledge base for historical state fixes, known environment issues, and recovery paths.",
             )
             
             failure_type = state.get("failure_type", "UNKNOWN_ERROR")
@@ -616,23 +1273,18 @@ Please propose the next action."""
             
             prompt = f"Failure Type: {failure_type}\nLast Action: {json.dumps(last_action)}\nCurrent SoM:\n{som_text}\nPlease propose a fixing action in strict JSON."
             
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(
-                None,
-                admin.initiate_chat,
-                healer,
-                prompt
-            )
+            await self._initiate_chat_async(admin, healer, prompt)
             
             # Extract last reply from healer
             last_msg = None
-            for msg in reversed(admin.chat_messages[healer]):
-                if msg.get("role") == "assistant":
-                    last_msg = msg.get("content", "")
+            messages = self._get_agent_messages(admin, healer)
+            for msg in reversed(messages):
+                if isinstance(msg, dict) and msg.get("role") == "assistant":
+                    last_msg = self._extract_message_text(msg)
                     break
                     
             if not last_msg:
-                last_msg = healer.last_message().get("content", "")
+                last_msg = self._extract_message_text(healer.last_message())
                 
             json_match = re.search(r'```(?:json)?\n(.*?)\n```', last_msg, re.DOTALL)
             json_str = json_match.group(1) if json_match else last_msg
@@ -661,7 +1313,8 @@ Please propose the next action."""
                 "retry_count": current_retries + 1,
                 "action_intent": action,
                 "error": None,
-                "failure_type": None
+                "failure_type": None,
+                "use_existing_action": True,
             }
             
         except Exception as e:
@@ -695,6 +1348,7 @@ Please propose the next action."""
             "action_result": None,
             "error": None,
             "failure_type": None,
+            "use_existing_action": False,
             "retry_count": 0,
             "max_retries": 1
         }
@@ -734,14 +1388,21 @@ Please propose the next action."""
             # Did it hit evaluating error?
             error_msg = final_state.get("error")
             
+            page_url = self.page.url if self.page else ""
+            try:
+                page_title = await self.page.title() if self.page else ""
+            except Exception as title_exc:
+                logger.warning(f"Failed to read page title after action: {title_exc}")
+                page_title = ""
+
             return {
                 "success": success,
                 "action_taken": action_taken,
                 "target_description": target_description,
                 "screenshot_before": final_state.get("current_screenshot"),
                 "screenshot_after": final_state.get("annotated_screenshot") or final_state.get("current_screenshot"),
-                "page_url": self.page.url,
-                "page_title": await self.page.title(),
+                "page_url": page_url,
+                "page_title": page_title,
                 "strategy": "ag_langgraph",
                 "error": error_msg
             }
@@ -830,124 +1491,193 @@ Please propose the next action."""
                     h = int(bbox[3] - bbox[1])
                     som_text_lines.append(f"ID {k}: [{w}x{h}] {v.get('label')} {v.get('content', '')}")
                 som_text = "\n".join(som_text_lines)
-                
+
+                # --- Right Pupil 3.0: Hybrid Perception & Semantic Description ---
+                points = []
+                for k, v in id_map.items():
+                    bbox = v.get('bbox', [0, 0, 0, 0])
+                    cx = (bbox[0] + bbox[2]) / 2.0
+                    cy = (bbox[1] + bbox[3]) / 2.0
+                    points.append({"x": cx, "y": cy})
+
+                dom_hints = []
+                if points:
+                    try:
+                        dom_hints = await self.dom_service.get_dom_hints_from_points(self.page, points)
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch DOM hints: {e}")
+                        dom_hints = [None] * len(points)
+
+                describer_input = []
+                for j, (k, v) in enumerate(id_map.items()):
+                    item = {
+                        "id": int(k),
+                        "bbox": [int(x) for x in v.get("bbox", [0, 0, 0, 0])],
+                        "ocr": v.get("content", "")
+                    }
+                    if j < len(dom_hints) and dom_hints[j]:
+                        item["dom_hint"] = dom_hints[j]
+                    describer_input.append(item)
+
+                semantic_elements_str = "[]"
+                autogen_status = get_autogen_runtime_status()
+                if autogen_status.available:
+                     try:
+                         import autogen, json, re
+                         from app.engines.right_pupil.agents.element_describer import ElementDescriberAgent
+                         from app.services.smart_ops.ai_config_service import AIConfigService
+                         from app.core.ai_models import AIModule
+                         from app.core.config import settings
+
+                         desc_cfg = await AIConfigService.get_model_config(AIModule.AGENT_RIGHT_VISUAL)
+                         desc_llm_config = {
+                              "config_list": [{
+                                  "model": desc_cfg.model_id,
+                                  "api_key": settings.QWEN_API_KEY,
+                                  "base_url": settings.QWEN_BASE_URL
+                              }],
+                              "temperature": 0.1,
+                              "max_tokens": desc_cfg.max_tokens,
+                         }
+
+                         describer = ElementDescriberAgent("ElementDescriber", desc_llm_config)
+                         admin = autogen.UserProxyAgent("Admin", human_input_mode="NEVER", code_execution_config=False, max_consecutive_auto_reply=1)
+
+                         desc_prompt = f"Please translate the following elements into semantic descriptions:\n{json.dumps(describer_input, ensure_ascii=False)}"
+                         await self._initiate_chat_async(admin, describer, desc_prompt)
+
+                         last_msg = self._extract_message_text(describer.last_message())
+                         json_match = re.search(r'```(?:json)?\n(.*)\n```', last_msg, re.DOTALL)
+                         if json_match:
+                             semantic_elements_str = json_match.group(1).strip()
+                         else:
+                             match = re.search(r'(\[.*\])', last_msg, re.DOTALL)
+                             semantic_elements_str = match.group(1).strip() if match else last_msg
+
+                         logger.info(f"Element Describer output computed successfully: {len(semantic_elements_str)} chars")
+                     except Exception as e:
+                         logger.error(f"Element Describer Agent failed: {e}. Falling back to RAW JSON.")
+                         semantic_elements_str = json.dumps(describer_input, ensure_ascii=False)
+                else:
+                     semantic_elements_str = json.dumps(describer_input, ensure_ascii=False)
+
                 # 2. Planning
                 action = await self.planner.plan_next_step(prompt, annotated_base64, som_text, history)
-                
+
                 # 2.1 Task-aware action correction
                 if action and action.action_type != "done":
                     action = self._correct_action_type(action, prompt)
-                
-                if not action:
-                    break
-                    
-                if action.action_type == "done":
-                    break
 
-                # 3. Execution with Self-Healing Loop
-                max_retries = 1
-                retry_count = 0
-                step_success = False
-                
-                while retry_count <= max_retries:
-                    success = await self.runner.execute(action, id_map)
-                    
-                    if success:
-                        history.append({"step": step_count, "action": action.model_dump(), "status": "success"})
-                        step_success = True
+                    if not action:
                         break
-                    else:
-                        logger.warning(f"Action failed. Attempting Self-Healing (Retry {retry_count + 1}/{max_retries + 1})...")
-                        retry_count += 1
-                        
-                        # --- Healing Strategy 1: Environment Healing (Popup Killer) ---
-                        # Check if failure might be due to popup (simplistic check: re-sense)
-                        # In a real impl, we'd check error type (ElementIntercepted).
-                        # Here we blindly try to find a "Close" button if action failed.
-                        logger.info("🛡️ Attempting Environment Healing (Popup Killer)...")
-                        
-                        # Re-sense to see popup
-                        screenshot_bytes_h = await self.page.screenshot(type="png")
-                        import base64
-                        screenshot_base64_h = base64.b64encode(screenshot_bytes_h).decode("utf-8")
-                        try:
-                            elements_h = await self.omni_client.parse_screenshot(screenshot_base64_h)
-                            loop = asyncio.get_running_loop()
-                            _, id_map_h = await loop.run_in_executor(
-                                None, self.som_renderer.draw_som, screenshot_base64_h, elements_h
+
+                    if action.action_type == "done":
+                        break
+
+                    # 3. Execution with Self-Healing Loop
+                    max_retries = 1
+                    retry_count = 0
+                    step_success = False
+
+                    while retry_count <= max_retries:
+                        success = await self.runner.execute(action, id_map)
+
+                        if success:
+                            history.append({"step": step_count, "action": action.model_dump(), "status": "success"})
+                            step_success = True
+                            break
+                        else:
+                            logger.warning(f"Action failed. Attempting Self-Healing (Retry {retry_count + 1}/{max_retries + 1})...")
+                            retry_count += 1
+
+                            # --- Healing Strategy 1: Environment Healing (Popup Killer) ---
+                            # Check if failure might be due to popup (simplistic check: re-sense)
+                            # In a real impl, we'd check error type (ElementIntercepted).
+                            # Here we blindly try to find a "Close" button if action failed.
+                            logger.info("🛡️ Attempting Environment Healing (Popup Killer)...")
+
+                            # Re-sense to see popup
+                            screenshot_bytes_h = await self.page.screenshot(type="png")
+                            import base64
+                            screenshot_base64_h = base64.b64encode(screenshot_bytes_h).decode("utf-8")
+                            try:
+                                elements_h = await self.omni_client.parse_screenshot(screenshot_base64_h)
+                                loop = asyncio.get_running_loop()
+                                _, id_map_h = await loop.run_in_executor(
+                                    None, self.som_renderer.draw_som, screenshot_base64_h, elements_h
+                                )
+
+                                # specific logic to find X / Close
+                                # This is a heuristic: look for "close", "cancel", "x" in content or label
+                                popup_close_id = None
+                                for pid, pinfo in id_map_h.items():
+                                    label = pinfo.get('label', '').lower()
+                                    content = pinfo.get('content', '').lower()
+                                    if any(k in label or k in content for k in ['close', '关闭', 'cancel', '取消']):
+                                         # Simple heuristic: usually popups are on top (high z-index), but Omni doesn't give z-index.
+                                         # We just try clicking it.
+                                         popup_close_id = pid
+                                         break
+
+                                if popup_close_id:
+                                    logger.info(f"Found potential popup close button: ID {popup_close_id}")
+                                    # Execute Close
+                                    close_action = action.model_copy(deep=True) # Deep copy to avoid mutating original action
+                                    close_action.action_type = "click"
+                                    close_action.target.strategy = "visual"
+                                    close_action.target.value = str(popup_close_id)
+                                    await self.runner.execute(close_action, id_map_h)
+                                    await asyncio.sleep(1) # Wait for popup to close
+                                    continue # Retry original action loop
+
+                            except Exception as e:
+                                logger.error(f"Environment Healing failed: {e}")
+
+                            # --- Healing Strategy 3: Data Healing (Input Regeneration) ---
+                            if action.action_type == "type":
+                                logger.info("🧪 Attempting Data Healing (Regenerate Value)...")
+                                # Heuristic: use description or locator value as field name hint
+                                field_hint = action.target.description or action.target.value or "input_field"
+                                new_value = self.data_synthesizer.generate_value(field_hint, context="Previous input caused failure")
+
+                                logger.info(f"Regenerated value for {field_hint}: {new_value}")
+
+                                data_action = action.model_copy(deep=True)
+                                data_action.params["text"] = new_value
+                                success_data = await self.runner.execute(data_action, id_map)
+
+                                if success_data:
+                                    history.append({"step": step_count, "action": data_action.model_dump(), "status": "healed_data"})
+                                    step_success = True
+                                    break
+
+                            # --- Healing Strategy 2: Locator Healing (Visual -> DOM Fallback) ---
+                            logger.info("🩹 Attempting Locator Healing (Visual -> DOM)...")
+                            # Capture fresh state for DOM analysis
+                            dom_tree = await self.dom_service.get_clickable_elements(self.page)
+                            fallback_action = await self.planner.plan_fallback_step(
+                                task=prompt,
+                                dom_tree=dom_tree,
+                                screenshot_base64=screenshot_base64 # Reuse original screenshot or new?
                             )
-                            
-                            # specific logic to find X / Close
-                            # This is a heuristic: look for "close", "cancel", "x" in content or label
-                            popup_close_id = None
-                            for pid, pinfo in id_map_h.items():
-                                label = pinfo.get('label', '').lower()
-                                content = pinfo.get('content', '').lower()
-                                if any(k in label or k in content for k in ['close', '关闭', 'cancel', '取消']):
-                                     # Simple heuristic: usually popups are on top (high z-index), but Omni doesn't give z-index.
-                                     # We just try clicking it.
-                                     popup_close_id = pid
-                                     break
-                                     
-                            if popup_close_id:
-                                logger.info(f"Found potential popup close button: ID {popup_close_id}")
-                                # Execute Close
-                                close_action = action.model_copy(deep=True) # Deep copy to avoid mutating original action
-                                close_action.action_type = "click"
-                                close_action.target.strategy = "visual"
-                                close_action.target.value = str(popup_close_id)
-                                await self.runner.execute(close_action, id_map_h)
-                                await asyncio.sleep(1) # Wait for popup to close
-                                continue # Retry original action loop
-                                
-                        except Exception as e:
-                            logger.error(f"Environment Healing failed: {e}")
 
-                        # --- Healing Strategy 3: Data Healing (Input Regeneration) ---
-                        if action.action_type == "type":
-                            logger.info("🧪 Attempting Data Healing (Regenerate Value)...")
-                            # Heuristic: use description or locator value as field name hint
-                            field_hint = action.target.description or action.target.value or "input_field"
-                            new_value = self.data_synthesizer.generate_value(field_hint, context="Previous input caused failure")
-                            
-                            logger.info(f"Regenerated value for {field_hint}: {new_value}")
-                            
-                            data_action = action.model_copy(deep=True)
-                            data_action.params["text"] = new_value
-                            success_data = await self.runner.execute(data_action, id_map)
-                            
-                            if success_data:
-                                history.append({"step": step_count, "action": data_action.model_dump(), "status": "healed_data"})
-                                step_success = True
-                                break
+                            if fallback_action:
+                                logger.info(f"Fallback Plan Generated: {fallback_action.action_type} on {fallback_action.target.value}")
+                                # Execute fallback immediately (it counts as the retry attempt)
+                                success_fb = await self.runner.execute(fallback_action, {}) # DOM doesn't need ID map
+                                if success_fb:
+                                    history.append({"step": step_count, "action": fallback_action.model_dump(), "status": "healed"})
+                                    step_success = True
+                                    break
 
-                        # --- Healing Strategy 2: Locator Healing (Visual -> DOM Fallback) ---
-                        logger.info("🩹 Attempting Locator Healing (Visual -> DOM)...")
-                        # Capture fresh state for DOM analysis
-                        dom_tree = await self.dom_service.get_clickable_elements(self.page)
-                        fallback_action = await self.planner.plan_fallback_step(
-                            task=prompt,
-                            dom_tree=dom_tree,
-                            screenshot_base64=screenshot_base64 # Reuse original screenshot or new?
-                        )
-                        
-                        if fallback_action:
-                            logger.info(f"Fallback Plan Generated: {fallback_action.action_type} on {fallback_action.target.value}")
-                            # Execute fallback immediately (it counts as the retry attempt)
-                            success_fb = await self.runner.execute(fallback_action, {}) # DOM doesn't need ID map
-                            if success_fb:
-                                history.append({"step": step_count, "action": fallback_action.model_dump(), "status": "healed"})
-                                step_success = True
-                                break
-                        
-                        logger.error("All healing attempts failed.")
-                
-                if not step_success:
-                    history.append({"step": step_count, "action": action.model_dump(), "status": "failed"})
-                    break
-                
-                # await asyncio.sleep(2) # Replaced by SmartWait loop start
-                
+                            logger.error("All healing attempts failed.")
+
+                    if not step_success:
+                        history.append({"step": step_count, "action": action.model_dump(), "status": "failed"})
+                        break
+
+                    # await asyncio.sleep(2) # Replaced by SmartWait loop start
+
         except Exception as e:
             logger.error(f"Engine Loop Error: {e}")
         finally:

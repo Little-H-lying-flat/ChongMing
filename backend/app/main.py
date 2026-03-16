@@ -39,9 +39,24 @@ async def lifespan(app: FastAPI):
     # Initialize DB (Create tables if not exist)
     from app.core.database import init_db
     await init_db()
+    from app.services.smart_ops.ai_config_service import AIConfigService
+    await AIConfigService.ensure_schema_ready()
+    from app.utils.autogen_runtime import get_autogen_runtime_status
+    autogen_status = get_autogen_runtime_status()
     
     logger.info(f"🐦 重明 v{settings.VERSION} 启动中...")
     logger.info(f"📡 API 文档: http://localhost:{settings.PORT}/docs")
+    if autogen_status.available:
+        logger.info(
+            f"AutoGen runtime ready: version={autogen_status.version}, "
+            f"speaker_selection={autogen_status.supports_speaker_selection}, "
+            f"register_function={autogen_status.supports_register_function}"
+        )
+    else:
+        logger.warning(
+            f"AutoGen runtime unavailable: version={autogen_status.version}, "
+            f"reason={autogen_status.reason}"
+        )
 
     # 初始化 AI Client Manager (Dependency Injection)
     # 解决 Core <-> Services 循环依赖

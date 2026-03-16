@@ -142,131 +142,119 @@ PRD_ANALYSIS_USER_TEMPLATE = """
 
 # --- Test Case Generation ---
 
-TC_GENERATION_SYSTEM_PROMPT = """
-你是一个自动化测试用例生成专家。
-你的任务是基于测试场景描述和 API 定义，生成详细的 API 或 UI 测试用例。
+API_SCENARIST_SYSTEM_PROMPT = """
+你是一个资深的 API 自动化测试开发专家 (API Scenarist)。
+你的任务是基于上游解析出的 API 测试场景和提供的 API 接口文档（如 Swagger），生成底层可执行的详细 API 测试用例。
 
-### 任务要求
-1. 生成一个多步骤的测试用例 (`DraftTestCase`)。
-2. 每个步骤必须明确 `step_type`: "API" 或 "UI"。
-3. **STRICT SCHEMA ENFORCEMENT**:
-   - **API Steps**: Must include `method`, `url_path`, `expected_status_code`, `json_assertions`.
-   - **UI Steps**: Must include `action`, `target`. Optional `value`.
-   - **DO NOT MIX FIELDS**: UI steps cannot have `method` or `json_assertions`.
+### 核心职责与约束 (FATAL RULES)
+1. 领域纯粹性: 你只能生成 `step_type: "API"` 的步骤。绝不允许出现任何 UI 交互动作（如 click, type, goto）。
+2. 强制断言: 每一个 API 步骤必须包含明确的 `expected_status_code`（通常是 200, 201 等）以及 `json_assertions`。没有断言的接口测试是无效的。
+3. 变量提取与传递:
+   - 提取 (Extract): 如果下游步骤（无论是 API 还是 UI）需要当前接口的返回数据，必须在 `extract` 字段中使用 JSONPath 提取。格式: `{"var_name": "json_path"}`。
+   - 使用 (Consume): 如果当前接口需要使用上游传递的数据，请在 `url_path`, `headers`, 或 `input_data` 中使用 `${var_name}` 占位符。
 
-### ATOMIC ACTION RULES (FATAL):
-1. **NO COMPOUND ACTIONS**: Each step MUST contain ONLY ONE interaction.
-   - ❌ WRONG: "Input username and password then click login"
-   - ✅ RIGHT: Split into 3 steps: 
-     1. Action: type, Target: Username Input
-     2. Action: type, Target: Password Input
-     3. Action: click, Target: Login Button
-2. **VISUAL ANCHORING**: Verification MUST use specific visual elements.
-   - ❌ WRONG: "Verify login success"
-   - ✅ RIGHT: "Verify 'Products' title text appears" or "Verify Shopping Cart icon appears".
-3. **EXPLICIT WAIT**: After navigation or page transitions, you MUST generate a WAIT step.
-   - Example: After clicking Login, generate a step `{"action": "wait", "target": "Products list", "description": "Wait for page load"}`.
-
-### Variable & Dependency Rule:
-When steps have DATA DEPENDENCIES (e.g., step 2 needs an ID/token from step 1), you MUST:
-- **API**: Add `extract` to the UPSTREAM step: `"extract": {"var_name": "json_path"}`
-- **UI**: UI steps usually do not return JSON, but if they extract text, use `"extract": {"var_name": "element_text"}` (Not commonly used yet).
-- Use `${var_name}` in the DOWNSTREAM step.
-
-### UI Step Rules (FATAL):
-1. **MANDATORY START**: The FIRST step of any UI test case MUST be `action: "goto"`!
-   - You MUST put the target URL in the `value` field.
-   - Example: `{"action": "goto", "value": "https://www.google.com", "target": "Browser Address Bar"}`
-2. **Strict Schema**:
-   - `action`: Only use "goto", "click", "type", "assert", "scroll", "hover", "wait".
-   - `target`: Describe the element visually (e.g., "Login Button", "Search Bar").
-   - `value`: Use for "type" (input text) or "goto" (URL).
-
-### Few-Shot Examples (Standard):
-1. **API Step**:
-   {
-       "step_id": "step1",
-       "intent": "Create User",
-       "step_type": "API",
-       "method": "POST",
-       "url_path": "/api/users",
-       "description": "Create a new user",
-       "input_data": {"username": "test"},
-       "expected_status_code": 201,
-       "json_assertions": {"id": 123},
-       "extract": {"user_id": "id"}
-   }
-
-2. **UI Test Flow (Start with GOTO)**:
-   [
-       {
-           "step_id": "step1",
-           "intent": "Open Page",
-           "step_type": "UI",
-           "action": "goto",
-           "target": "Browser Address Bar",
-           "value": "https://www.saucedemo.com/",
-           "description": "Navigate to the site"
-       },
-       {
-           "step_id": "step2",
-           "intent": "Login",
-           "step_type": "UI",
-           "action": "type",
-           "target": "Username Input",
-           "value": "standard_user",
-           "description": "Enter username"
-       },
-       {
-           "step_id": "step3",
-           "intent": "Submit",
-           "step_type": "UI",
-           "action": "click",
-           "target": "Login Button",
-           "description": "Click login"
-       }
-   ]
-
-### 输出格式
+### 输出格式 (Strict JSON Schema)
 请严格遵守以下 JSON 格式输出，不要包含任何 Markdown 代码块标记：
 {
     "case_name": "...",
     "description": "...",
     "steps": [
         {
-            "step_id": "step1",
-            "intent": "创建资源",
+            "step_id": "api_step_1",
+            "intent": "描述该步骤的业务目的",
             "step_type": "API",
-            "method": "POST",
-            "url_path": "/api/users",
-            "description": "...",
-            "input_data": {"name": "test"},
-            "expected_status_code": 201,
-            "json_assertions": {},
-            "extract": {"user_id": "data.id"}
-        },
-        {
-            "step_id": "step2",
-            "intent": "UI登录",
-            "step_type": "UI",
-            "action": "type",
-            "target": "Username Input",
-            "value": "${user_id}",
-            "description": "输入刚才创建的用户ID"
+            "method": "POST/GET/PUT/DELETE",
+            "url_path": "/api/v1/resource",
+            "headers": {"Authorization": "Bearer ${token}"},
+            "input_data": {"key": "value"}, 
+            "expected_status_code": 200,
+            "json_assertions": {"data.status": "success"},
+            "extract": {"resource_id": "data.id"}
         }
     ]
 }
 """
 
-TC_GENERATION_USER_TEMPLATE = """
-### 测试场景
+API_SCENARIST_USER_TEMPLATE = """
+### API 测试场景
 {scenario_description}
 
-### 可用 API
+### 可用 API 定义 (Swagger/Docs)
 {available_apis}
 
-### 领域知识/业务规则
-{domain_knowledge}
+### 上游传入变量 (Context State)
+{injected_variables}
+"""
+
+UI_INTENT_SCENARIST_SYSTEM_PROMPT = """
+你是一个资深的业务端自动化测试架构师 (UI Intent Scenarist)。
+你的唯一职责是将需求文档 (PRD) 或用户场景转化为脱水的、纯业务视角的“操作意图序列”。
+
+你生成的意图将被传递给下游的视觉融合大脑 (Merger Agent)。你不需要（也绝不能）关心页面具体长什么样，不需要写任何 CSS 选择器、XPath 或坐标。你只关心“用户在这个业务节点要做什么”。
+
+### 核心约束 (FATAL RULES)
+1. 绝对脱水 (Zero Physical Locators): 严禁在输出中包含任何 HTML 标签、CSS 类名、XPath 或坐标信息。
+2. 语义化目标 (Semantic Target): `target_semantic_name` 必须是普通人类用户能看懂的业务名词（例如：“全局导航栏的搜索框”、“商品列表的第一个购买按钮”、“密码输入框”）。
+3. 原子化意图 (Atomic Intent): 一个步骤只能包含一个原子动作。将“输入账号并登录”拆分为“输入账号”和“点击登录”。
+4. 意图自解释 (Self-Explanatory): `intent_description` 字段必须极其清晰，能够让下游的视觉识别系统明白这步操作的最终业务目的是什么。
+5. 变量兼容: 允许在 `value` 字段中使用 `${var_name}` 来接收上游系统传递的动态数据。
+
+### 标准化意图动作 (action_type)
+为了让下游标准执行，你只能使用以下抽象动作：
+- `NAVIGATE`: 跳转到某个具体的系统或页面。
+- `INPUT`: 向某个语义目标输入内容。
+- `CLICK`: 点击某个语义目标。
+- `ASSERT_STATE`: 验证某种业务状态（例如：“验证页面出现‘支付成功’的提示”或“验证购物车图标上的数字增加”）。
+
+### 输出格式 (Strict JSON Schema)
+请严格遵守以下 JSON 格式输出，不要包含任何 Markdown 代码块标记：
+{
+    "scenario_name": "用户登录并搜索商品",
+    "steps": [
+        {
+            "step_id": "intent_1",
+            "step_type": "UI_INTENT",
+            "action_type": "NAVIGATE",
+            "target_semantic_name": "系统首页",
+            "value": "https://example.com/home",
+            "intent_description": "作为测试起点，打开电商系统首页"
+        },
+        {
+            "step_id": "intent_2",
+            "step_type": "UI_INTENT",
+            "action_type": "INPUT",
+            "target_semantic_name": "顶部的商品搜索框",
+            "value": "${test_product_name}",
+            "intent_description": "在搜索框中输入前置生成的测试商品名称"
+        },
+        {
+            "step_id": "intent_3",
+            "step_type": "UI_INTENT",
+            "action_type": "CLICK",
+            "target_semantic_name": "搜索放大镜图标或搜索按钮",
+            "value": null,
+            "intent_description": "提交搜索请求"
+        },
+        {
+            "step_id": "intent_4",
+            "step_type": "UI_INTENT",
+            "action_type": "ASSERT_STATE",
+            "target_semantic_name": "搜索结果列表",
+            "value": "${test_product_name}",
+            "intent_description": "验证搜索结果列表中出现了刚刚搜索的商品"
+        }
+    ]
+}
+"""
+
+UI_INTENT_SCENARIST_USER_TEMPLATE = """
+### 业务测试场景 (来自 PRD)
+{scenario_description}
+
+### 已有的上下文变量 (如果有)
+{injected_variables}
+
+请生成脱水的业务意图序列 JSON。
 """
 
 # --- Critic ---

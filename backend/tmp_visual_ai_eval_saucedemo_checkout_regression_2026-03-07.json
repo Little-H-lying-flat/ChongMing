@@ -1,0 +1,453 @@
+{
+  "run_at": "2026-03-07T10:07:07.541660+00:00",
+  "site": "https://www.saucedemo.com/",
+  "credentials": {
+    "username": "standard_user",
+    "password": "secret_sauce"
+  },
+  "test_data": {
+    "first_name": "Codex",
+    "last_name": "Regression",
+    "postal_code": "200000"
+  },
+  "overall_success": true,
+  "summary": {
+    "atomic_total": 12,
+    "atomic_passed": 12,
+    "group_total": 5,
+    "group_passed": 5,
+    "consistency_mismatches": 0,
+    "stopped_early": false
+  },
+  "atomic_results": [
+    {
+      "step_id": "open_login_page",
+      "group_id": "login",
+      "description": "Open the SauceDemo login page",
+      "engine_result": {
+        "success": true,
+        "action_taken": "navigate",
+        "target_description": null,
+        "page_url": "https://www.saucedemo.com/",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 0,
+        "screenshot_after_len": 0
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "page_url": "https://www.saucedemo.com/",
+          "page_title": "Swag Labs",
+          "username_value": "",
+          "password_input_count": 1
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "type_username",
+      "group_id": "login",
+      "description": "Type standard_user into the username input",
+      "engine_result": {
+        "success": true,
+        "action_taken": "type",
+        "target_description": "9",
+        "page_url": "https://www.saucedemo.com/",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 35928,
+        "screenshot_after_len": 38116
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "username_value": "standard_user"
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "type_password",
+      "group_id": "login",
+      "description": "Type secret_sauce into the password input",
+      "engine_result": {
+        "success": true,
+        "action_taken": "type",
+        "target_description": "7",
+        "page_url": "https://www.saucedemo.com/",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 36648,
+        "screenshot_after_len": 38588
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "password_length": 12
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "click_login",
+      "group_id": "login",
+      "description": "Click the Login button",
+      "engine_result": {
+        "success": true,
+        "action_taken": "click",
+        "target_description": "6",
+        "page_url": "https://www.saucedemo.com/inventory.html",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 35512,
+        "screenshot_after_len": 37864
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "page_url": "https://www.saucedemo.com/inventory.html",
+          "logo_text": "Swag Labs",
+          "cart_count": 1,
+          "inventory_list_count": 1
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "add_backpack",
+      "group_id": "add_item",
+      "description": "Click Add to cart for Sauce Labs Backpack",
+      "engine_result": {
+        "success": true,
+        "action_taken": "click",
+        "target_description": "47",
+        "page_url": "https://www.saucedemo.com/inventory.html",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 279192,
+        "screenshot_after_len": 288880
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "remove_button_count": 1,
+          "cart_badge_text": "1",
+          "active_remove_buttons": [
+            "remove-sauce-labs-backpack"
+          ]
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "open_cart",
+      "group_id": "view_cart",
+      "description": "Open the shopping cart",
+      "engine_result": {
+        "success": true,
+        "action_taken": "click",
+        "target_description": "58",
+        "page_url": "https://www.saucedemo.com/cart.html",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 281516,
+        "screenshot_after_len": 291060
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "page_url": "https://www.saucedemo.com/cart.html",
+          "item_names": [
+            "Sauce Labs Backpack"
+          ]
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "click_checkout",
+      "group_id": "checkout_info",
+      "description": "Click the Checkout button",
+      "engine_result": {
+        "success": true,
+        "action_taken": "click",
+        "target_description": "12",
+        "page_url": "https://www.saucedemo.com/checkout-step-one.html",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 52032,
+        "screenshot_after_len": 54204
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "page_url": "https://www.saucedemo.com/checkout-step-one.html",
+          "first_name_input_count": 1
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "type_first_name",
+      "group_id": "checkout_info",
+      "description": "Type Codex into the First Name input",
+      "engine_result": {
+        "success": true,
+        "action_taken": "type",
+        "target_description": "3",
+        "page_url": "https://www.saucedemo.com/checkout-step-one.html",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 24900,
+        "screenshot_after_len": 26828
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "first_name_value": "Codex"
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "type_last_name",
+      "group_id": "checkout_info",
+      "description": "Type Regression into the Last Name input",
+      "engine_result": {
+        "success": true,
+        "action_taken": "type",
+        "target_description": "3",
+        "page_url": "https://www.saucedemo.com/checkout-step-one.html",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 24844,
+        "screenshot_after_len": 26756
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "last_name_value": "Regression"
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "type_postal_code",
+      "group_id": "checkout_info",
+      "description": "Type 200000 into the Postal Code input",
+      "engine_result": {
+        "success": true,
+        "action_taken": "type",
+        "target_description": "4",
+        "page_url": "https://www.saucedemo.com/checkout-step-one.html",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 25484,
+        "screenshot_after_len": 27448
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "postal_code_value": "200000"
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "click_continue",
+      "group_id": "checkout_info",
+      "description": "Click Continue to go to the checkout overview page",
+      "engine_result": {
+        "success": true,
+        "action_taken": "click",
+        "target_description": "2",
+        "page_url": "https://www.saucedemo.com/checkout-step-two.html",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 24624,
+        "screenshot_after_len": 26480
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "page_url": "https://www.saucedemo.com/checkout-step-two.html",
+          "cart_item_count": 1,
+          "summary_total_label": "Total: $32.39"
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    },
+    {
+      "step_id": "click_finish",
+      "group_id": "finish_order",
+      "description": "Click Finish to submit and complete the order",
+      "engine_result": {
+        "success": true,
+        "action_taken": "click",
+        "target_description": "21",
+        "page_url": "https://www.saucedemo.com/checkout-complete.html",
+        "page_title": "Swag Labs",
+        "strategy": "ag_langgraph",
+        "error": null,
+        "screenshot_before_len": 59188,
+        "screenshot_after_len": 60736
+      },
+      "observation": {
+        "passed": true,
+        "details": {
+          "page_url": "https://www.saucedemo.com/checkout-complete.html",
+          "complete_header": "Thank you for your order!"
+        }
+      },
+      "consistency": {
+        "consistent": true,
+        "reason": "engine result matches observed page state"
+      }
+    }
+  ],
+  "group_results": [
+    {
+      "group_id": "login",
+      "name": "1. User login",
+      "acceptance": "Reach inventory page and show Swag Labs logo plus cart icon.",
+      "passed": true,
+      "observation": {
+        "page_url": "https://www.saucedemo.com/inventory.html",
+        "logo_text": "Swag Labs",
+        "cart_count": 1
+      },
+      "notes": "all atomic steps and business assertion were aligned",
+      "atomic_step_ids": [
+        "open_login_page",
+        "type_username",
+        "type_password",
+        "click_login"
+      ]
+    },
+    {
+      "group_id": "add_item",
+      "name": "2. Add product",
+      "acceptance": "Backpack add button changes to remove and cart badge becomes 1.",
+      "passed": true,
+      "observation": {
+        "remove_button_count": 1,
+        "cart_badge_text": "1",
+        "active_remove_buttons": [
+          "remove-sauce-labs-backpack"
+        ]
+      },
+      "notes": "all atomic steps and business assertion were aligned",
+      "atomic_step_ids": [
+        "add_backpack"
+      ]
+    },
+    {
+      "group_id": "view_cart",
+      "name": "3. View cart",
+      "acceptance": "Cart page contains Sauce Labs Backpack.",
+      "passed": true,
+      "observation": {
+        "page_url": "https://www.saucedemo.com/cart.html",
+        "item_names": [
+          "Sauce Labs Backpack"
+        ]
+      },
+      "notes": "all atomic steps and business assertion were aligned",
+      "atomic_step_ids": [
+        "open_cart"
+      ]
+    },
+    {
+      "group_id": "checkout_info",
+      "name": "4. Fill checkout information",
+      "acceptance": "Move to overview page and display order summary with total.",
+      "passed": true,
+      "observation": {
+        "page_url": "https://www.saucedemo.com/checkout-step-two.html",
+        "cart_item_count": 1,
+        "summary_total_label": "Total: $32.39"
+      },
+      "notes": "all atomic steps and business assertion were aligned",
+      "atomic_step_ids": [
+        "click_checkout",
+        "type_first_name",
+        "type_last_name",
+        "type_postal_code",
+        "click_continue"
+      ]
+    },
+    {
+      "group_id": "finish_order",
+      "name": "5. Finish order",
+      "acceptance": "Display the thank-you confirmation message.",
+      "passed": true,
+      "observation": {
+        "page_url": "https://www.saucedemo.com/checkout-complete.html",
+        "complete_header": "Thank you for your order!"
+      },
+      "notes": "all atomic steps and business assertion were aligned",
+      "atomic_step_ids": [
+        "click_finish"
+      ]
+    }
+  ],
+  "final_page": {
+    "url": "https://www.saucedemo.com/checkout-complete.html",
+    "title": "Swag Labs",
+    "thank_you_text": "Thank you for your order!",
+    "cart_badge_text": ""
+  },
+  "findings": [
+    "The end-to-end checkout scenario completed successfully on the real site.",
+    "All atomic engine results matched the observed page state."
+  ],
+  "recommendations": [
+    "Keep this scripted regression in CI or nightly jobs to detect planner drift on a stable public practice site.",
+    "Capture a lightweight DOM snapshot for each atomic step when a mismatch occurs to speed up diagnosis."
+  ]
+}

@@ -1,6 +1,9 @@
 """Application settings management."""
 
+import os
+import tempfile
 from functools import lru_cache
+from pathlib import Path
 from typing import List, Literal, Optional
 
 from pydantic import field_validator
@@ -35,7 +38,10 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_PASSWORD: str = "password"
 
     # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./test.db"
+    DATABASE_URL: str = (
+        "sqlite+aiosqlite:///"
+        f"{(Path(os.getenv('LOCALAPPDATA') or tempfile.gettempdir()) / 'ChongMing' / 'chongming.db').as_posix()}"
+    )
 
     # Redis/Celery
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
@@ -120,6 +126,21 @@ class Settings(BaseSettings):
             "DEBUG must be boolean-like (e.g. true/false). "
             f"Unsupported value: {value!r}"
         )
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value):
+        """Expand environment variables and normalize sqlite paths."""
+        if value is None or str(value).strip() == "":
+            return value
+
+        normalized = os.path.expandvars(str(value).strip())
+        for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
+            if normalized.startswith(prefix):
+                path_part = normalized[len(prefix):].replace("\\", "/")
+                return f"{prefix}{path_part}"
+
+        return normalized
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

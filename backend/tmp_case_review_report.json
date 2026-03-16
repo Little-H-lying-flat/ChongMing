@@ -1,0 +1,254 @@
+{
+  "run_at": "2026-03-05T02:48:49.663132Z",
+  "input_requirement": "??????????????\n?????\n1) ????? GET /orders ??401?\n2) ???????? POST /auth/login ??200???token?\n3) ??token?? GET /orders ?????????????? id/status/amount?\n4) ????????401???? AUTH_INVALID_CREDENTIALS?",
+  "scenario_count": 1,
+  "selected_scenario": {
+    "scenario_id": "SC-a5bef532",
+    "name": "[Fallback] API 场景",
+    "priority": "P1",
+    "description": "AutoGen 不可用时由提取点自动聚合生成",
+    "steps": [
+      {
+        "step_type": "API",
+        "description": "Verify that unauthenticated GET /orders requests return 401 Unauthorized status."
+      },
+      {
+        "step_type": "API",
+        "description": "Verify that POST /auth/login with valid credentials returns 200 OK and includes an authentication token."
+      },
+      {
+        "step_type": "API",
+        "description": "Verify that GET /orders requests with a valid token return 200 OK containing order details (id, status, amount)."
+      },
+      {
+        "step_type": "API",
+        "description": "Verify that POST /auth/login with invalid credentials returns 401 Unauthorized with error code AUTH_INVALID_CREDENTIALS."
+      }
+    ]
+  },
+  "generated_case": {
+    "id": "3fa5e870",
+    "name": "API Authentication Flow Test",
+    "description": "Verify authentication behavior including unauthenticated access, valid login with token usage, and invalid credential rejection.",
+    "steps": [
+      {
+        "id": "step1",
+        "name": "Verify unauthenticated access denial",
+        "step_type": "API",
+        "description": "Check that anonymous requests return 401 Unauthorized",
+        "request": {
+          "method": "GET",
+          "url": "/orders",
+          "headers": {},
+          "body": null,
+          "query_params": {},
+          "timeout_ms": 30000
+        },
+        "dependencies": [],
+        "extract": {},
+        "expected_status_code": 401,
+        "json_assertions": {
+          "error": "Unauthorized"
+        },
+        "metadata": {}
+      },
+      {
+        "id": "step2",
+        "name": "Authenticate with valid credentials",
+        "step_type": "API",
+        "description": "Obtain authentication token using valid credentials",
+        "request": {
+          "method": "POST",
+          "url": "/auth/login",
+          "headers": {},
+          "body": {
+            "username": "${VALID_USERNAME}",
+            "password": "${VALID_PASSWORD}"
+          },
+          "query_params": {},
+          "timeout_ms": 30000
+        },
+        "dependencies": [],
+        "extract": {
+          "auth_token": "access_token"
+        },
+        "expected_status_code": 200,
+        "json_assertions": {
+          "access_token": "string"
+        },
+        "metadata": {}
+      },
+      {
+        "id": "step3",
+        "name": "Access orders with valid token",
+        "step_type": "API",
+        "description": "Retrieve order list using authenticated request",
+        "request": {
+          "method": "GET",
+          "url": "/orders",
+          "headers": {},
+          "body": null,
+          "query_params": {},
+          "timeout_ms": 30000
+        },
+        "dependencies": [],
+        "extract": {},
+        "expected_status_code": 200,
+        "json_assertions": {
+          "orders": [
+            {
+              "id": 1,
+              "status": "string",
+              "amount": 100
+            }
+          ]
+        },
+        "metadata": {}
+      },
+      {
+        "id": "step4",
+        "name": "Verify invalid credentials handling",
+        "step_type": "API",
+        "description": "Ensure system rejects invalid login attempts",
+        "request": {
+          "method": "POST",
+          "url": "/auth/login",
+          "headers": {},
+          "body": {
+            "username": "${INVALID_USERNAME}",
+            "password": "${INVALID_PASSWORD}"
+          },
+          "query_params": {},
+          "timeout_ms": 30000
+        },
+        "dependencies": [],
+        "extract": {},
+        "expected_status_code": 401,
+        "json_assertions": {
+          "error": "AUTH_INVALID_CREDENTIALS"
+        },
+        "metadata": {}
+      }
+    ],
+    "metadata": {
+      "origin": "neural_design"
+    }
+  },
+  "created_test_case": {
+    "id": "TC-66787157",
+    "name": "API Authentication Flow Test",
+    "description": "Verify authentication behavior including unauthenticated access, valid login with token usage, and invalid credential rejection.",
+    "mode": "API",
+    "priority": "P1",
+    "status": "review",
+    "steps": [
+      {
+        "id": "step1",
+        "name": "Verify unauthenticated access denial",
+        "step_type": "API",
+        "description": "Check that anonymous requests return 401 Unauthorized",
+        "request": {
+          "method": "GET",
+          "url": "/orders",
+          "headers": {},
+          "body": null,
+          "query_params": {},
+          "timeout_ms": 30000
+        },
+        "dependencies": [],
+        "extract": {},
+        "expected_status_code": 401,
+        "json_assertions": {
+          "error": "Unauthorized"
+        },
+        "metadata": {}
+      },
+      {
+        "id": "step2",
+        "name": "Authenticate with valid credentials",
+        "step_type": "API",
+        "description": "Obtain authentication token using valid credentials",
+        "request": {
+          "method": "POST",
+          "url": "/auth/login",
+          "headers": {},
+          "body": {
+            "username": "${VALID_USERNAME}",
+            "password": "${VALID_PASSWORD}"
+          },
+          "query_params": {},
+          "timeout_ms": 30000
+        },
+        "dependencies": [],
+        "extract": {
+          "auth_token": "access_token"
+        },
+        "expected_status_code": 200,
+        "json_assertions": {
+          "access_token": "string"
+        },
+        "metadata": {}
+      },
+      {
+        "id": "step3",
+        "name": "Access orders with valid token",
+        "step_type": "API",
+        "description": "Retrieve order list using authenticated request",
+        "request": {
+          "method": "GET",
+          "url": "/orders",
+          "headers": {},
+          "body": null,
+          "query_params": {},
+          "timeout_ms": 30000
+        },
+        "dependencies": [],
+        "extract": {},
+        "expected_status_code": 200,
+        "json_assertions": {
+          "orders": [
+            {
+              "id": 1,
+              "status": "string",
+              "amount": 100
+            }
+          ]
+        },
+        "metadata": {}
+      },
+      {
+        "id": "step4",
+        "name": "Verify invalid credentials handling",
+        "step_type": "API",
+        "description": "Ensure system rejects invalid login attempts",
+        "request": {
+          "method": "POST",
+          "url": "/auth/login",
+          "headers": {},
+          "body": {
+            "username": "${INVALID_USERNAME}",
+            "password": "${INVALID_PASSWORD}"
+          },
+          "query_params": {},
+          "timeout_ms": 30000
+        },
+        "dependencies": [],
+        "extract": {},
+        "expected_status_code": 401,
+        "json_assertions": {
+          "error": "AUTH_INVALID_CREDENTIALS"
+        },
+        "metadata": {}
+      }
+    ],
+    "tags": [
+      "auto-generated",
+      "neural-design",
+      "review-run"
+    ],
+    "created_at": "2026-03-05T02:48:49.647489",
+    "updated_at": "2026-03-05T02:48:49.647492"
+  },
+  "latest_test_case_id": "TC-66787157",
+  "review_findings": []
+}

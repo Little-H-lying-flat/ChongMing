@@ -147,6 +147,40 @@ _SNIFF_SCRIPT = """
         }
 
         return tag; // 兜底
+                // 简单组合
+                return `${tag}.${CSS.escape(cls)}`; // 只需要一个稳健的 class
+            }
+        }
+        
+        // 如果是特定元素
+        if (['button', 'input', 'a'].includes(tag)) {
+             // 尝试通过 text content 定位 (XPath) - 这里只返回 CSS
+             // 如果不行，返回层级结构 (简单版)
+             let path = [];
+             let current = el;
+             while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {
+                 let selector = current.tagName.toLowerCase();
+                 if (current.id) {
+                     selector += `#${CSS.escape(current.id)}`;
+                     path.unshift(selector);
+                     break; 
+                 }
+                 else {
+                     // 计算 nth-of-type
+                     let sibling = current;
+                     let nth = 1;
+                     while (sibling = sibling.previousElementSibling) {
+                         if (sibling.tagName === current.tagName) nth++;
+                     }
+                     if (nth > 1) selector += `:nth-of-type(${nth})`;
+                 }
+                 path.unshift(selector);
+                 current = current.parentNode;
+             }
+             return path.join(" > ");
+        }
+
+        return tag; // 兜底
     }
     
     return generateSelector(element);
@@ -177,3 +211,69 @@ class DomService:
         except Exception as e:
             logger.error(f"选择器嗅探失败 ({x}, {y}): {e}")
             return None
+
+    async def get_dom_hints_from_points(self, page: Page, points: List[Dict[str, float]]) -> List[Dict[str, Any]]:
+        """
+        【Right Pupil 3.0: Hybrid Perception】
+        根据传入的坐标列表，批量获取元素的极简语义特征 (tag, placeholder, aria-label, innerText)。
+        Args:
+            points: [{"x": 100.0, "y": 200.0}, ...]
+        Returns:
+            [{"tag": "input", "placeholder": "Search", ...}, None, ...]
+        """
+        script = """
+        (points) => {
+            return points.map(p => {
+                try {
+                    const el = document.elementFromPoint(p.x, p.y);
+                    if (!el) return null;
+                    
+                    // 向上回溯寻找有意义的交互标签 (最多3层)
+                    let target = el;
+                    let depth = 0;
+                    while (target && depth < 3) {
+                        const tag = target.tagName.toLowerCase();
+                        if (['button', 'a', 'input', 'select', 'textarea'].includes(tag) || target.getAttribute('role') === 'button') {
+                            break;
+                        }
+                        target = target.parentElement;
+                        depth++;
+                    }
+                    if (!target || target === document.body) {
+                        target = el; // 回退
+                    }
+                    
+                    const tag = target.tagName.toLowerCase();
+                    const hint = { tag: tag };
+                    
+                    if (target.placeholder) hint.placeholder = target.placeholder;
+                    if (target.getAttribute('aria-label')) hint['aria-label'] = target.getAttribute('aria-label');
+                    if (target.getAttribute('name')) hint['name'] = target.getAttribute('name');
+                    if (target.getAttribute('type')) hint['type'] = target.getAttribute('type');
+                    
+                    // 获取计算样式以提取颜色信息
+                    const computedStyle = window.getComputedStyle(target);
+                    if (computedStyle.color && computedStyle.color !== 'rgba(0, 0, 0, 0)') {
+                        hint.color = computedStyle.color;
+                    }
+                    if (computedStyle.backgroundColor && computedStyle.backgroundColor !== 'rgba(0, 0, 0, 0)') {
+                        hint.bgcolor = computedStyle.backgroundColor;
+                    }
+                    
+                    // 如果是非常短的纯文本，作为辅助信息 (防超长文本)
+                    const text = target.innerText || target.textContent;
+                    if (text && text.trim().length > 0 && text.trim().length <= 50) {
+                        hint.text = text.trim();
+                    }
+                    return hint;
+                } catch(e) {
+                    return null;
+                }
+            });
+        }
+        """
+        try:
+            return await page.evaluate(script, points)
+        except Exception as e:
+            logger.error(f"批量提取 DOM hints 失败: {e}")
+            return [None] * len(points)

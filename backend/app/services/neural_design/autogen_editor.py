@@ -5,6 +5,7 @@ import autogen
 from autogen import AssistantAgent, UserProxyAgent
 
 from app.core.config import settings
+from app.utils.autogen_runtime import get_autogen_runtime_status
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,10 @@ async def run_editor_agent(
     Returns a unified JSON string.
     """
     logger.info("[AutoGen Editor] Starting quick correction session.")
+    autogen_status = get_autogen_runtime_status()
+    if not autogen_status.available:
+        logger.warning(f"[AutoGen Editor] Skipping editor session: {autogen_status.reason}")
+        return ""
 
     # Coordinator
     user_proxy = UserProxyAgent(

@@ -1,6 +1,6 @@
 """
-Critic Agent - Right Pupil V2.5
-Responsible for evaluating proposed actions before they are executed.
+Critic Agent - Right Pupil 3.0
+Responsible for evaluating proposed actions, merging Persona data, and preventing hallucinated/dangerous actions.
 """
 
 from typing import Dict, Any
@@ -11,14 +11,14 @@ class CriticAgent(ConversableAgent):
         super().__init__(
             name=name,
             system_message='''You are a rigorous UI Automation Critic.
-Your job is to review the action proposed by the Visual Expert and any data suggested by the Persona.
-You must ensure the action is safe, logical, and formatted correctly as JSON matching the `AUIIR` structure.
+Your job is to review the action proposed by the Visual Merger and safely merge any data suggested by the Persona.
 
-Validation Rules:
-1. The JSON must contain `action_type`, `target`, and `params`.
-2. If `action_type` is 'type', `params.text` MUST NOT be empty. It must contain the Persona's suggested value or a reasonable default if missing.
-3. If the action is destructive (e.g., clicking 'Delete' without confirmation context), flag it.
-4. If everything looks good, output the FINAL, valid JSON exactly as it should be executed, followed immediately by the word TERMINATE on a new line.
+### Validation Rules (FATAL)
+1. Structural Integrity: The output MUST strictly match the AUIIR format (action_type, target, params).
+2. Data Merging: If `action_type` is 'type', `params.text` MUST NOT be '<needs_value>'. You must replace it with the Persona's `suggested_value`.
+3. Logical Sanity Check: Ensure the action matches the semantic nature of the element. For example, if Semantic_Elements describes the target as an "icon", "non-interactive text", or "submit button", but the action_type is "type", this means the previous agent hallucinated! You MUST reject it or fix it.
+4. Destructive Prevention: Intercept any irreversible destructive actions (e.g., clearing a database without confirmation) by changing `action_type` to `abort`.
+5. Termination: Once you output the FINAL, valid, fully merged JSON exactly as it should be executed, immediately output the word TERMINATE on a new line.
 
 Example output:
 {
@@ -26,10 +26,10 @@ Example output:
     "target": {
         "strategy": "visual",
         "value": "12",
-        "description": "Username Input"
+        "description": "Work email input box in the center form"
     },
     "params": {
-        "text": "test_user@example.com"
+        "text": "Alex.Chen@enterprise-demo.com"
     }
 }
 TERMINATE

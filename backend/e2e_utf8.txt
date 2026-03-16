@@ -1,0 +1,44 @@
+
+==============================================
+                E2E TEST REPORT                 
+==============================================
+Success:            True
+Action Taken:       navigate
+Target Description: None
+Error Message:      None
+
+=== STDERR ===
+C:\Users\H\AppData\Roaming\Python\Python314\site-packages\langchain_core\_api\deprecation.py:25: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.
+  from pydantic.v1.fields import FieldInfo as FieldInfoV1
+2026-03-13 17:23:18,099 [INFO] E2ETest - === Starting Right Pupil 3.0 E2E Test ===
+2026-03-13 17:23:22.014 | INFO     | app.core.ai_client:_init_clients:286 - DashScope 客户端已初始化
+2026-03-13 17:23:31,123 [INFO] app.engines.right_pupil - \U0001f977 Stealth Mode Activated
+2026-03-13 17:23:31,123 [INFO] app.engines.right_pupil - RightPupil Session Started
+2026-03-13 17:23:31,123 [INFO] E2ETest - Task: 在搜索框中输入 Playwright 然后提交搜索
+2026-03-13 17:23:31,123 [INFO] E2ETest - URL: https://www.bing.com
+2026-03-13 17:23:31,123 [INFO] E2ETest - Navigate to target page...
+2026-03-13 17:23:52,722 [INFO] E2ETest - Navigation completed in 21.60s
+2026-03-13 17:23:52,722 [INFO] E2ETest - Running Execute Step...
+2026-03-13 17:23:52,722 [INFO] app.engines.right_pupil - \U0001f504 [execute_step] Starting LangGraph for: 在搜索框中输入 Playwright 然后提交搜索
+2026-03-13 17:23:52,726 [INFO] app.engines.right_pupil - --- [Node: Perceive] ---
+2026-03-13 17:23:52,727 [INFO] app.engines.right_pupil - --- [Node: Reason] ---
+2026-03-13 17:23:52,727 [INFO] app.engines.right_pupil - --- [Node: Act] ---
+2026-03-13 17:23:53,159 [INFO] app.engines.right_pupil - --- [Node: Evaluate] ---
+2026-03-13 17:23:53,376 [INFO] app.engines.right_pupil - RightPupil Session Stopped
+Traceback (most recent call last):
+  File "D:\project\ChongMing\backend\tests\e2e\test_right_pupil_e2e_timing.py", line 68, in <module>
+    asyncio.run(test_e2e_pipeline())
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "C:\Program Files\Python\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Program Files\Python\Lib\asyncio\base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "D:\project\ChongMing\backend\tests\e2e\test_right_pupil_e2e_timing.py", line 51, in test_e2e_pipeline
+    print("\n--- Timing Metrics \u23f1\ufe0f ---")
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'gbk' codec can't encode character '\u23f1' in position 21: illegal multibyte sequence

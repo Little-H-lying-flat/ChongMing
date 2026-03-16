@@ -62,6 +62,7 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "loguru>=0.7.2",
     "tenacity>=8.2.3",
+    "diskcache>=5.6.3",
     "aiofiles>=23.2.1",
     "cryptography>=42.0.0",
     "deepdiff>=6.7.1",
@@ -121,7 +122,7 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -p no:cacheprovider"
 filterwarnings = [
     "ignore:flaml\\.automl is not available\\..*:UserWarning:flaml",
     "ignore:'asyncio\\.iscoroutinefunction' is deprecated and slated for removal in Python 3\\.16; use inspect\\.iscoroutinefunction\\(\\) instead:DeprecationWarning",
