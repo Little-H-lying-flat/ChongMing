@@ -115,6 +115,86 @@ def _limit_points(points: List[str], max_items: int = 12, max_chars_per_item: in
     return limited
 
 
+def _fallback_scenarios_from_points(points: List[str], target_type: str) -> List[Dict[str, Any]]:
+    limited_points = _limit_points(points)
+    normalized_target = (target_type or "MIXED").upper()
+
+    if normalized_target == "API":
+        return [
+            {
+                "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
+                "name": "[Fallback] API Scenario",
+                "type": "API",
+                "priority": "P2",
+                "metadata": {"origin": "local_fallback"},
+                "steps": [
+                    {
+                        "step_type": "API",
+                        "description": point,
+                        "method": "GET",
+                        "url": "/",
+                        "expected_status_code": 200,
+                        "json_assertions": {},
+                    }
+                    for point in limited_points
+                ],
+            }
+        ]
+
+    def _matches(point: str, keywords: List[str]) -> bool:
+        lowered = point.lower()
+        return any(
+            re.search(rf"\b{re.escape(keyword)}\b", lowered)
+            for keyword in keywords
+        )
+
+    buckets = [
+        ("UI Happy Path Login", ["valid", "visible", "redirect", "home", "success"]),
+        ("UI Negative Login", ["invalid", "error", "fail", "wrong"]),
+        ("UI Remember Me", ["remember", "prefill", "prefilled"]),
+    ]
+    scenarios: List[Dict[str, Any]] = []
+    used_indexes: set[int] = set()
+
+    for name, keywords in buckets:
+        matched_points = [
+            point
+            for index, point in enumerate(limited_points)
+            if index not in used_indexes and _matches(point, keywords)
+        ]
+        for index, point in enumerate(limited_points):
+            if point in matched_points:
+                used_indexes.add(index)
+        if not matched_points and name == "UI Happy Path Login" and limited_points:
+            matched_points = [limited_points[0]]
+            used_indexes.add(0)
+        if not matched_points:
+            continue
+
+        steps = []
+        if name == "UI Happy Path Login":
+            steps.append({"step_type": "UI", "action": "goto", "target": "/", "description": matched_points[0]})
+            steps.append({"step_type": "UI", "action": "input", "target": "input[name='username']", "description": matched_points[0]})
+        elif name == "UI Negative Login":
+            steps.append({"step_type": "UI", "action": "click", "target": "button[type='submit']", "description": matched_points[0]})
+            steps.append({"step_type": "UI", "action": "assert_visible", "target": "[data-testid='login-error']", "description": matched_points[0]})
+        else:
+            steps.append({"step_type": "UI", "action": "click", "target": "input[name='remember']", "description": matched_points[0]})
+
+        scenarios.append(
+            {
+                "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
+                "name": name,
+                "type": "UI",
+                "priority": "P2",
+                "metadata": {"origin": "local_fallback"},
+                "steps": steps,
+            }
+        )
+
+    return scenarios
+
+
 def _build_scenario_summary(
     scenarios: List[Dict[str, Any]],
     *,
