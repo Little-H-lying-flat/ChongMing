@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Brain, FileJson, Layers, Sparkles, Loader2, Play, FileText, AlertCircle, UploadCloud } from "lucide-react";
+import { Brain, Layers, Sparkles, Loader2, FileText, AlertCircle, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { visualUiService } from "@/services/visualUiService";
@@ -10,7 +10,7 @@ import { visualUiService } from "@/services/visualUiService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -34,30 +34,181 @@ interface GeneratedScenario {
     description: string;
     priority: "Critical" | "High" | "Normal";
     name?: string;
+    required_variables?: string[];
     steps: Array<{
         step_type: "API" | "UI";
         description: string;
+        action?: string;
+        target?: string | Record<string, unknown>;
+        value?: string;
         method?: string;
         url?: string;
-        body?: any;
+        url_path?: string;
+        body?: unknown;
+        input_data?: Record<string, unknown>;
+        expected_result?: string;
+        expected_status_code?: number;
+        json_assertions?: Record<string, unknown>;
+        extract?: Record<string, string>;
+        payload?: Record<string, unknown>;
     } | string>; // Backwards compatibility
 }
 
+interface AnalyzeTaskResponse {
+    task_id: string;
+    status: "pending" | "running" | "completed" | "failed" | "cancelled";
+    stage: string;
+    progress: number;
+    status_url: string;
+    result_url: string;
+    created_at: string;
+    updated_at: string;
+    error?: string | null;
+}
+
+interface AnalyzeTaskResultResponse {
+    task_id: string;
+    status: "completed" | "failed" | "pending" | "running";
+    scenarios: GeneratedScenario[];
+    error?: string | null;
+}
+
+interface DefaultEnvironmentResponse {
+    id: string;
+    name: string;
+    variables: Record<string, { value: string; encrypted?: boolean; description?: string }>;
+}
+
+type EnvironmentReadinessState =
+    | { status: "idle"; env: null; error?: undefined }
+    | { status: "loading"; env: null; error?: undefined }
+    | { status: "ready"; env: DefaultEnvironmentResponse; error?: undefined }
+    | { status: "missing"; env: null; error?: undefined }
+    | { status: "error"; env: null; error: string };
+
+interface ScenarioRunReadiness {
+    status: "ready" | "checking" | "missing_env" | "missing_variables" | "error";
+    label: string;
+    missingVariables: string[];
+}
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const VARIABLE_REF_PATTERN = /\$\{([^}]+)\}|\{\{([^}]+)\}\}/g;
+
+const collectRequiredVariables = (value: unknown, bucket: Set<string>) => {
+    if (typeof value === "string") {
+        for (const match of value.matchAll(VARIABLE_REF_PATTERN)) {
+            const variableName = (match[1] || match[2] || "").trim();
+            if (variableName) bucket.add(variableName);
+        }
+        return;
+    }
+
+    if (Array.isArray(value)) {
+        value.forEach((item) => collectRequiredVariables(item, bucket));
+        return;
+    }
+
+    if (value && typeof value === "object") {
+        Object.values(value as Record<string, unknown>).forEach((item) => collectRequiredVariables(item, bucket));
+    }
+};
+
+const getScenarioRequiredVariables = (scenario: GeneratedScenario): string[] => {
+    const required = new Set<string>(scenario.required_variables || []);
+    collectRequiredVariables(scenario.steps, required);
+    return Array.from(required).sort();
+};
+
+const getScenarioRunReadiness = (
+    scenario: GeneratedScenario,
+    envState: EnvironmentReadinessState,
+): ScenarioRunReadiness => {
+    const requiredVariables = getScenarioRequiredVariables(scenario);
+    if (requiredVariables.length === 0) {
+        return { status: "ready", label: "可运行", missingVariables: [] };
+    }
+
+    if (envState.status === "idle" || envState.status === "loading") {
+        return { status: "checking", label: "检查环境中", missingVariables: [] };
+    }
+
+    if (envState.status === "missing") {
+        return { status: "missing_env", label: "未配置默认环境", missingVariables: requiredVariables };
+    }
+
+    if (envState.status === "error") {
+        return { status: "error", label: "环境检查失败", missingVariables: [] };
+    }
+
+    const availableVariables = new Set<string>(Object.keys(envState.env.variables || {}));
+    availableVariables.add("base_url");
+    const missingVariables = requiredVariables.filter((variableName) => !availableVariables.has(variableName));
+    if (missingVariables.length > 0) {
+        return {
+            status: "missing_variables",
+            label: `缺变量: ${missingVariables.join(", ")}`,
+            missingVariables,
+        };
+    }
+
+    return { status: "ready", label: "可运行", missingVariables: [] };
+};
+
 // --- API ---
-const analyzeDesign = async (data: DesignRequest): Promise<GeneratedScenario[]> => {
-    const res = await fetch("/api/v1/design/analyze", {
+const analyzeDesignAsync = async (
+    data: DesignRequest,
+    onTaskUpdate: (task: AnalyzeTaskResponse) => void,
+): Promise<GeneratedScenario[]> => {
+    const createRes = await fetch("/api/v1/design/analyze/async", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
     });
 
-    if (!res.ok) {
-        const errorText = await res.text();
-        console.error("Analysis Failed:", res.status, res.statusText, errorText);
-        throw new Error(`Failed to analyze design: ${res.status} ${res.statusText} - ${errorText.substring(0, 100)}`);
+    if (!createRes.ok) {
+        const errorText = await createRes.text();
+        console.error("Analysis Task Create Failed:", createRes.status, createRes.statusText, errorText);
+        throw new Error(`Failed to create analyze task: ${createRes.status} ${createRes.statusText} - ${errorText.substring(0, 100)}`);
     }
 
-    return res.json();
+    const createdTask: AnalyzeTaskResponse = await createRes.json();
+    onTaskUpdate(createdTask);
+
+    const startedAt = Date.now();
+    const timeoutMs = 5 * 60 * 1000;
+
+    while (Date.now() - startedAt < timeoutMs) {
+        await sleep(1500);
+
+        const statusRes = await fetch(createdTask.status_url, { cache: "no-store" });
+        if (!statusRes.ok) {
+            const errorText = await statusRes.text();
+            throw new Error(`Failed to get analyze task status: ${statusRes.status} ${statusRes.statusText} - ${errorText.substring(0, 100)}`);
+        }
+
+        const taskStatus: AnalyzeTaskResponse = await statusRes.json();
+        onTaskUpdate(taskStatus);
+
+        if (taskStatus.status === "failed" || taskStatus.status === "cancelled") {
+            throw new Error(taskStatus.error || "Analyze task failed");
+        }
+
+        if (taskStatus.status === "completed") {
+            const resultRes = await fetch(createdTask.result_url, { cache: "no-store" });
+            const resultText = await resultRes.text();
+
+            if (!resultRes.ok) {
+                throw new Error(`Failed to fetch analyze result: ${resultRes.status} ${resultRes.statusText} - ${resultText.substring(0, 100)}`);
+            }
+
+            const resultData: AnalyzeTaskResultResponse = JSON.parse(resultText);
+            return resultData.scenarios || [];
+        }
+    }
+
+    throw new Error("Analyze task timed out while polling");
 };
 
 export default function NeuralDesignPage() {
@@ -66,6 +217,11 @@ export default function NeuralDesignPage() {
     const [requirement, setRequirement] = useState("");
     const [targetType, setTargetType] = useState<"API" | "UI" | "MIXED">("MIXED");
     const [uploading, setUploading] = useState(false);
+    const [analysisTask, setAnalysisTask] = useState<AnalyzeTaskResponse | null>(null);
+    const [environmentState, setEnvironmentState] = useState<EnvironmentReadinessState>({
+        status: "idle",
+        env: null,
+    });
 
     // File Upload Handler
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,7 +249,8 @@ export default function NeuralDesignPage() {
             setRequirement(data.extracted_text);
 
             // Auto-switch target type if swagger
-            if (data.file_type === "json" && data.extracted_text.includes("openapi") || data.extracted_text.includes("paths")) {
+            const extractedText = String(data.extracted_text || "").toLowerCase();
+            if (data.file_type === "json" && (extractedText.includes("openapi") || extractedText.includes("paths"))) {
                 setTargetType("API");
             }
 
@@ -112,7 +269,7 @@ export default function NeuralDesignPage() {
 
     // React Query Mutation
     const { mutate, data: scenarios, isPending, isError, error } = useMutation({
-        mutationFn: analyzeDesign,
+        mutationFn: (data: DesignRequest) => analyzeDesignAsync(data, setAnalysisTask),
         onError: (err) => {
             console.error(err);
             // Optional: integration with toast if available
@@ -122,6 +279,8 @@ export default function NeuralDesignPage() {
 
     const handleGenerate = () => {
         if (!requirement.trim()) return;
+        setAnalysisTask(null);
+        setEnvironmentState({ status: "idle", env: null });
         mutate({
             project_id: projectId,
             requirement_text: requirement,
@@ -129,6 +288,62 @@ export default function NeuralDesignPage() {
             target_type: targetType
         });
     };
+
+    useEffect(() => {
+        if (!scenarios || scenarios.length === 0) {
+            setEnvironmentState({ status: "idle", env: null });
+            return;
+        }
+
+        const needsEnvironment = scenarios.some((scenario) => getScenarioRequiredVariables(scenario).length > 0);
+        if (!needsEnvironment) {
+            setEnvironmentState({ status: "idle", env: null });
+            return;
+        }
+
+        let cancelled = false;
+        setEnvironmentState({ status: "loading", env: null });
+
+        const loadDefaultEnvironment = async () => {
+            try {
+                const res = await fetch("/api/v1/environments/default", { cache: "no-store" });
+                if (cancelled) return;
+
+                if (res.ok) {
+                    const envData: DefaultEnvironmentResponse = await res.json();
+                    if (!cancelled) {
+                        setEnvironmentState({ status: "ready", env: envData });
+                    }
+                    return;
+                }
+
+                if (res.status === 404) {
+                    setEnvironmentState({ status: "missing", env: null });
+                    return;
+                }
+
+                const errorText = await res.text();
+                setEnvironmentState({
+                    status: "error",
+                    env: null,
+                    error: errorText.substring(0, 120) || "Failed to load default environment",
+                });
+            } catch (error) {
+                if (!cancelled) {
+                    setEnvironmentState({
+                        status: "error",
+                        env: null,
+                        error: String(error),
+                    });
+                }
+            }
+        };
+
+        void loadDefaultEnvironment();
+        return () => {
+            cancelled = true;
+        };
+    }, [scenarios]);
 
     const getPriorityColor = (p?: string) => {
         if (!p) return "bg-slate-500 hover:bg-slate-600 border-none";
@@ -252,6 +467,11 @@ export default function NeuralDesignPage() {
                     <div className="space-y-4 animate-in fade-in duration-500">
                         <div className="flex items-center gap-2 text-blue-400 mb-6">
                             <Loader2 className="w-4 h-4 animate-spin" />
+                            {analysisTask && (
+                                <span className="text-sm font-mono">
+                                    {`任务 ${analysisTask.task_id} | ${analysisTask.stage} | ${analysisTask.progress}%`}
+                                </span>
+                            )}
                             <span className="text-sm font-mono">深度思考中... (Deep thinking in progress...)</span>
                         </div>
                         {[1, 2, 3].map((i) => (
@@ -284,12 +504,32 @@ export default function NeuralDesignPage() {
                     <ScrollArea className="flex-1 pr-4">
                         <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
                             <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-lg font-semibold text-slate-200">
-                                    生成的场景 (Generated Scenarios)
-                                    <span className="ml-2 text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
-                                        {scenarios.length}
-                                    </span>
-                                </h3>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-200">
+                                        生成的场景 (Generated Scenarios)
+                                        <span className="ml-2 text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
+                                            {scenarios.length}
+                                        </span>
+                                    </h3>
+                                    {environmentState.status === "loading" && (
+                                        <p className="mt-1 text-xs text-slate-400">正在检查默认环境变量...</p>
+                                    )}
+                                    {environmentState.status === "ready" && (
+                                        <p className="mt-1 text-xs text-emerald-400">
+                                            默认环境: {environmentState.env.name}
+                                        </p>
+                                    )}
+                                    {environmentState.status === "missing" && (
+                                        <p className="mt-1 text-xs text-amber-400">
+                                            当前未配置默认环境。依赖变量的场景将无法直接运行。
+                                        </p>
+                                    )}
+                                    {environmentState.status === "error" && (
+                                        <p className="mt-1 text-xs text-rose-400">
+                                            默认环境检查失败: {environmentState.error}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
 
                             <Accordion type="single" collapsible className="w-full space-y-4">
@@ -299,6 +539,10 @@ export default function NeuralDesignPage() {
                                         value={scenario.scenario_id}
                                         className="bg-slate-900 border border-slate-800 rounded-lg px-2 data-[state=open]:border-blue-500/50 transition-all"
                                     >
+                                        {(() => {
+                                            const requiredVariables = getScenarioRequiredVariables(scenario);
+                                            const runReadiness = getScenarioRunReadiness(scenario, environmentState);
+                                            return (
                                         <div className="flex items-center w-full bg-slate-900 border border-slate-800 rounded-lg px-2 hover:bg-slate-900/50 transition-all">
                                             <AccordionTrigger className="px-4 py-3 flex-1 hover:no-underline">
                                                 <div className="flex items-center gap-3 w-full text-left">
@@ -315,17 +559,49 @@ export default function NeuralDesignPage() {
                                                         <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 text-left">
                                                             {scenario.description}
                                                         </p>
+                                                        {requiredVariables.length > 0 && (
+                                                            <div className="mt-1 flex flex-wrap gap-1">
+                                                                {requiredVariables.map((variableName) => (
+                                                                    <span
+                                                                        key={variableName}
+                                                                        className="inline-flex items-center rounded border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-300"
+                                                                    >
+                                                                        {variableName}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        <div className="mt-2">
+                                                            <span
+                                                                className={`inline-flex items-center rounded border px-2 py-0.5 text-[10px] ${
+                                                                    runReadiness.status === "ready"
+                                                                        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
+                                                                        : runReadiness.status === "checking"
+                                                                            ? "border-blue-500/20 bg-blue-500/10 text-blue-300"
+                                                                            : "border-amber-500/20 bg-amber-500/10 text-amber-300"
+                                                                }`}
+                                                            >
+                                                                {runReadiness.label}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </AccordionTrigger>
                                             <div className="pr-4 flex items-center gap-2">
-                                                <SaveTestButton scenario={scenario as any} projectId={projectId} />
-                                                <RunTestButton scenario={scenario as any} router={router} />
+                                                <SaveTestButton scenario={scenario} projectId={projectId} />
+                                                <RunTestButton
+                                                    scenario={scenario}
+                                                    router={router}
+                                                    environmentState={environmentState}
+                                                    runReadiness={runReadiness}
+                                                />
                                             </div>
                                         </div>
+                                            );
+                                        })()}
                                         <AccordionContent className="px-4 pb-4 pt-0">
                                             <div className="pl-4 border-l-2 border-slate-800 ml-1 space-y-2 mt-2">
-                                                {(scenario.steps || []).map((step: any, idx) => (
+                                                {(scenario.steps || []).map((step, idx) => (
                                                     <div key={idx} className="flex gap-3 text-sm text-slate-400 items-start">
                                                         <span className="font-mono text-xs text-slate-600 select-none mt-0.5">
                                                             {(idx + 1).toString().padStart(2, '0')}
@@ -358,30 +634,70 @@ export default function NeuralDesignPage() {
     );
 }
 
-// Helper: Run Test Execution
-const RunTestButton = ({ scenario, router }: { scenario: GeneratedScenario, router: any }) => {
+type AppRouter = ReturnType<typeof useRouter>;
+
+type GeneratedScenarioStep = GeneratedScenario["steps"][number];
+
+const getStepText = (step: GeneratedScenarioStep): string => {
+    if (typeof step === "string") return step;
+    return step.description || step.action || "";
+};
+
+const RunTestButton = ({
+    scenario,
+    router,
+    environmentState,
+    runReadiness,
+}: {
+    scenario: GeneratedScenario;
+    router: AppRouter;
+    environmentState: EnvironmentReadinessState;
+    runReadiness: ScenarioRunReadiness;
+}) => {
     const [loading, setLoading] = useState(false);
 
     const handleRun = async (e: React.MouseEvent) => {
         e.stopPropagation(); // Prevent Accordion toggle
-        if (loading) return;
+        if (loading || runReadiness.status !== "ready") return;
         setLoading(true);
 
         try {
+            const requiredVariables = getScenarioRequiredVariables(scenario);
+            const defaultEnvironment = environmentState.status === "ready" ? environmentState.env : null;
+
+            if (requiredVariables.length > 0 && !defaultEnvironment) {
+                throw new Error("默认环境未就绪，无法运行依赖变量的场景。");
+            }
+
             // Mapping GeneratedScenario to Ad-hoc Case format expected by backend
+            const inferredMode = scenario.steps.some((s) => typeof s !== "string" && s.step_type === "API")
+                ? (scenario.steps.some((s) => typeof s !== "string" && s.step_type === "UI") ? "HYBRID" : "API")
+                : "UI";
+
             const adhocCase = {
                 id: scenario.scenario_id,
                 name: scenario.name || `场景 (Scenario) ${scenario.scenario_id}`,
                 priority: scenario.priority,
-                mode: "UI", // Default to UI for now, or infer from steps
+                required_variables: requiredVariables,
+                mode: inferredMode,
                 steps: scenario.steps.map(s => {
                     if (typeof s === 'string') return { description: s };
                     return {
                         description: s.description,
                         step_type: s.step_type,
-                        method: s.method,        // Pass through
-                        url: s.url,              // Pass through
-                        body: s.body             // Pass through
+                        action: s.action,
+                        target: s.target,
+                        value: s.value,
+                        method: s.method,
+                        url: s.url,
+                        url_path: s.url_path,
+                        body: s.body,
+                        input_data: s.input_data,
+                        expected_result: s.expected_result,
+                        expected_status_code: s.expected_status_code,
+                        json_assertions: s.json_assertions,
+                        extract: s.extract,
+                        payload: s.payload,
                     };
                 }),
                 tags: ["adhoc", "neural-design"]
@@ -394,11 +710,25 @@ const RunTestButton = ({ scenario, router }: { scenario: GeneratedScenario, rout
                     tc_ids: [scenario.scenario_id],
                     mode: "normal",
                     parallel: false,
+                    env: defaultEnvironment?.id,
                     dynamic_payload: [adhocCase] // Pass the full data!
                 })
             });
 
-            if (!res.ok) throw new Error("执行启动失败 (Failed to start execution)");
+            if (!res.ok) {
+                const rawText = await res.text();
+                try {
+                    const parsed = JSON.parse(rawText);
+                    const detail = parsed?.detail;
+                    if (detail?.code === "missing_execution_variables") {
+                        const missing = Array.isArray(detail.missing_variables) ? detail.missing_variables.join(", ") : "";
+                        throw new Error(`执行缺少变量: ${missing}`);
+                    }
+                    throw new Error(detail?.message || rawText || "执行启动失败");
+                } catch {
+                    throw new Error(rawText || "执行启动失败 (Failed to start execution)");
+                }
+            }
 
             const data = await res.json();
 
@@ -425,13 +755,16 @@ const RunTestButton = ({ scenario, router }: { scenario: GeneratedScenario, rout
             size="sm"
             className="h-7 text-xs transition-all border-purple-500/30 bg-purple-500/5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50 shadow-sm shadow-purple-900/10"
             onClick={handleRun}
-            disabled={loading}
+            disabled={loading || runReadiness.status !== "ready"}
+            title={runReadiness.status === "ready" ? "立即运行" : runReadiness.label}
         >
             {loading ? (
                 <>
                     <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                     运行中... (Running...)
                 </>
+            ) : runReadiness.status !== "ready" ? (
+                <>不可运行 (Blocked)</>
             ) : (
                 <>
                     一键运行 (Run)
@@ -442,7 +775,7 @@ const RunTestButton = ({ scenario, router }: { scenario: GeneratedScenario, rout
 };
 
 // Helper: Save Test to DB
-const SaveTestButton = ({ scenario, projectId }: { scenario: any, projectId: string }) => {
+const SaveTestButton = ({ scenario, projectId }: { scenario: GeneratedScenario, projectId: string }) => {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
@@ -451,9 +784,9 @@ const SaveTestButton = ({ scenario, projectId }: { scenario: any, projectId: str
         if (saving || saved) return;
         setSaving(true);
         try {
-            const isUI = (scenario.steps || []).some((s: any) => {
-                if (s.step_type === "UI") return true;
-                const text = typeof s === 'string' ? s : (s.action || s.description || "");
+            const isUI = (scenario.steps || []).some((s) => {
+                if (typeof s !== "string" && s.step_type === "UI") return true;
+                const text = getStepText(s);
                 return text.includes('点击') || text.includes('页面') || text.includes('访问') || text.includes('Logo') || text.includes('URL') || text.includes('输入');
             }) || (scenario.name || "").includes('UI') || (scenario.name || "").includes('页面') || (scenario.description || "").includes('UI');
 
@@ -478,7 +811,7 @@ const SaveTestButton = ({ scenario, projectId }: { scenario: any, projectId: str
                     description: scenario.description || "",
                     mode: "API",
                     priority: scenario.priority?.toUpperCase() || "P1",
-                    steps: (scenario.steps || []).map((s: any) => {
+                    steps: (scenario.steps || []).map((s) => {
                         const desc = typeof s === 'string' ? s : s.description;
                         return {
                             name: desc,
@@ -486,7 +819,9 @@ const SaveTestButton = ({ scenario, projectId }: { scenario: any, projectId: str
                             url: typeof s === 'string' ? desc : (s.url || desc),
                             headers: {},
                             body: typeof s === 'string' ? undefined : (s.body || undefined),
-                            asserts: [{ type: "status", expected: "200" }]
+                            expected_status_code: typeof s === 'string' ? 200 : (s.expected_status_code || 200),
+                            json_assertions: typeof s === 'string' ? {} : (s.json_assertions || {}),
+                            assertions: [{ type: "status_code", expected: typeof s === 'string' ? 200 : (s.expected_status_code || 200) }]
                         };
                     }),
                     tags: ["auto-generated", "neural-design"]

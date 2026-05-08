@@ -1,98 +1,93 @@
 import json
 import logging
-from typing import Dict, Any, List
-import autogen
-from autogen import AssistantAgent, UserProxyAgent
+from typing import Any, Dict, List
 
-from app.core.config import settings
-from app.utils.autogen_runtime import get_autogen_runtime_status
+from app.core.ai_client import Message, get_ai_manager
+from app.core.ai_models import AIModule
 
 logger = logging.getLogger(__name__)
 
-# Single Agent config for the Editor
-llm_config = {
-    "config_list": [
-        {
-            "model": getattr(settings, "MODEL_NEURAL_SCENARIO", "qwen-max"),
-            "api_key": getattr(settings, "QWEN_API_KEY", "mock"),
-            "base_url": getattr(settings, "QWEN_BASE_URL", ""),
-        }
-    ],
-    "temperature": 0.1, # Extremely low temp for precise JSON editing
-}
+
+def _extract_json_object(text: str) -> str:
+    text = (text or "").strip()
+    if not text:
+        return ""
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        return text
+    return text[start:end + 1]
+
 
 async def run_editor_agent(
-    scenarios: List[Dict[str, Any]], 
-    feedback: str, 
-    context: str = ""
+    scenarios: List[Dict[str, Any]],
+    issues: List[str],
+    target_type: str,
 ) -> str:
     """
-    Executes a single AutoGen agent to precisely edit scenarios based on Critic feedback.
-    Returns a unified JSON string.
+    Repair generated scenarios with a single standard LLM call.
+
+    This avoids AutoGen's interactive session management, which is unstable in
+    non-interactive service processes on Windows.
     """
-    logger.info("[AutoGen Editor] Starting quick correction session.")
-    autogen_status = get_autogen_runtime_status()
-    if not autogen_status.available:
-        logger.warning(f"[AutoGen Editor] Skipping editor session: {autogen_status.reason}")
-        return ""
-
-    # Coordinator
-    user_proxy = UserProxyAgent(
-        name="Admin",
-        system_message="A human admin submitting scenarios and critic feedback to the Editor.",
-        code_execution_config=False,
-        human_input_mode="NEVER",
-        max_consecutive_auto_reply=1
-    )
-
-    # The dedicated JSON Editor
-    editor_agent = AssistantAgent(
-        name="JSON_Editor",
-        system_message="""You are a precise JSON Editor and QA Specialist. 
-        Your task is to take the existing list of test scenarios and the Critic's feedback, and carefully modify the JSON to fix ALL issues raised by the Critic.
-        Requirements:
-        1. Ensure every scenario step has a 'url' property as requested.
-        2. Keep titles, descriptions, and steps in Chinese (简体中文).
-        3. Do NOT invent new scenarios unless explicitly told to. Only repair the existing ones.
-        4. YOU MUST Output the final result strictly as a valid JSON object with a single key 'scenarios' containing the updated list.
-        5. Do NOT output markdown text outside the JSON block. Just the raw JSON.""",
-        llm_config=llm_config,
-    )
+    logger.info("[Editor] Starting scenario correction.")
+    ai = get_ai_manager()
 
     scenarios_str = json.dumps(scenarios, ensure_ascii=False, indent=2)
-    
-    prompt = f"""
-    【Context INFO】
-    {context}
-    
-    【Existing Scenarios (JSON)】
-    {scenarios_str}
-    
-    【CRITICAL Critic Feedback - MUST FIX】
-    {feedback}
-    
-    Please provide the corrected JSON.
-    """
+    issues_str = json.dumps(issues or [], ensure_ascii=False, indent=2)
+    messages = [
+        Message(
+            role="system",
+            content="""
+You are a JSON repair editor for QA scenarios.
+
+Task:
+Repair the scenarios so they become executable.
+
+Rules:
+1. Output exactly one valid JSON object with a top-level key `scenarios`.
+2. Do not output markdown or explanations.
+3. Keep the original scenario intent.
+4. Fix only the listed issues.
+5. For UI scenarios, each step should use explicit fields:
+   - step_type
+   - action
+   - target
+   - value
+   - description
+6. For API scenarios, keep method, url, and assertions explicit.
+7. If a field is unknown, keep the step minimal and executable instead of inventing extra business logic.
+8. Field names must stay in English JSON keys, but all user-facing text values should default to Simplified Chinese.
+9. Scenario `name`, scenario `description`, and each step `description` must be in Simplified Chinese unless the input already contains a required product term in English.
+10. Do not translate technical selectors, URLs, methods, payload keys, or assertion paths.
+""".strip(),
+        ),
+        Message(
+            role="user",
+            content=f"""
+Target Type: {target_type}
+
+Issues:
+{issues_str}
+
+Scenarios:
+{scenarios_str}
+
+Return corrected JSON only.
+Default all scenario titles, scenario descriptions, and step descriptions to Simplified Chinese.
+""".strip(),
+        ),
+    ]
 
     try:
-        # Use a_initiate_chat if async supported, else fallback to sync
-        if hasattr(user_proxy, 'a_initiate_chat'):
-             import asyncio
-             loop = asyncio.get_running_loop()
-             await loop.run_in_executor(None, user_proxy.initiate_chat, editor_agent, prompt)
-        else:
-             user_proxy.initiate_chat(editor_agent, message=prompt)
-    except Exception as e:
-        logger.error(f"[AutoGen Editor] Failed to run editor agent: {e}")
-        return ""
-
-    # Extract Results
-    try:
-        last_msg = user_proxy.chat_messages[editor_agent][-1]["content"]
-        # Basic JSON extraction
-        json_str = last_msg[last_msg.find("{"):last_msg.rfind("}")+1]
-        logger.info("[AutoGen Editor] Correction Finished. Extracted final output.")
-        return json_str
-    except Exception as e:
-        logger.error(f"Failed to parse editor output: {e}\nRaw Message: {last_msg}")
+        response = await ai.invoke(
+            module=AIModule.AGENT_NEURAL_ADMIN,
+            messages=messages,
+        )
+        final_output = _extract_json_object(response.content)
+        logger.info("[Editor] Correction finished.")
+        return final_output
+    except Exception as exc:
+        logger.error(f"[Editor] Failed to correct scenarios: {exc}")
         return ""

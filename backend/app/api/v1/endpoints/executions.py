@@ -6,17 +6,100 @@
 
 from pathlib import Path
 import re
-from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from typing import Any, List, Optional
+from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Depends
 from pydantic import BaseModel, Field
 from celery.result import AsyncResult
 import uuid
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db
+from app.services.environment_manager import EnvironmentManager
 from app.services.execution_service import ExecutionService
 from app.tasks.execution_tasks import execute_test_cases, cancel_execution as cancel_task
+from app.core.logging import logger
+from app.worker import celery
 
 router = APIRouter(tags=["Flow 3: Execution Dispatcher (任务调度)"])
 _SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_VARIABLE_REF_PATTERN = re.compile(r"\$\{([^}]+)\}|\{\{([^}]+)\}\}")
+
+
+def _has_active_celery_workers() -> bool:
+    try:
+        inspect = celery.control.inspect(timeout=0.5)
+        ping_result = inspect.ping() if inspect else None
+        return bool(ping_result)
+    except Exception as exc:
+        logger.warning(f"Failed to inspect Celery workers, falling back to local execution: {exc}")
+        return False
+
+
+def _run_execution_locally(
+    execution_id: str,
+    tc_ids: List[str],
+    config: dict,
+    dynamic_payload: Optional[List[dict]] = None,
+) -> None:
+    logger.warning(
+        f"No active Celery worker detected. Running execution {execution_id} in local background mode."
+    )
+    execute_test_cases.run(
+        execution_id=execution_id,
+        tc_ids=tc_ids,
+        config=config,
+        dynamic_payload=dynamic_payload,
+    )
+
+
+def _collect_required_variables(value: Any, bucket: set[str]) -> None:
+    if isinstance(value, str):
+        for match in _VARIABLE_REF_PATTERN.finditer(value):
+            variable_name = (match.group(1) or match.group(2) or "").strip()
+            if variable_name:
+                bucket.add(variable_name)
+        return
+
+    if isinstance(value, dict):
+        for nested in value.values():
+            _collect_required_variables(nested, bucket)
+        return
+
+    if isinstance(value, list):
+        for item in value:
+            _collect_required_variables(item, bucket)
+
+
+def _extract_payload_required_variables(dynamic_payload: Optional[List[dict]]) -> List[str]:
+    required_variables: set[str] = set()
+    for case in dynamic_payload or []:
+        declared = case.get("required_variables")
+        if isinstance(declared, list):
+            for variable_name in declared:
+                if isinstance(variable_name, str) and variable_name.strip():
+                    required_variables.add(variable_name.strip())
+        _collect_required_variables(case.get("steps", []), required_variables)
+    return sorted(required_variables)
+
+
+async def _load_execution_environment_context(
+    env_id: Optional[str],
+    db: AsyncSession,
+) -> tuple[dict, Optional[str], Optional[str]]:
+    manager = EnvironmentManager(db)
+    env = await manager.get(env_id) if env_id else await manager.get_default()
+    if not env:
+        return {}, None, None
+
+    context: dict[str, Any] = {}
+    for key, var in (env.variables or {}).items():
+        value = var.get("value", "")
+        if var.get("encrypted"):
+            value = manager._decrypt(value)
+        context[key] = value
+    context["base_url"] = env.base_url
+    context["env_name"] = env.name
+    return context, env.id, env.name
 
 
 # ===================== 数据模型 =====================
@@ -98,6 +181,7 @@ class DashboardStats(BaseModel):
 async def start_execution(
     request: ExecutionRequest,
     background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     启动测试执行
@@ -112,17 +196,48 @@ async def start_execution(
         "max_workers": request.max_workers,
         "env": request.env
     }
+
+    required_variables = _extract_payload_required_variables(request.dynamic_payload)
+    if required_variables:
+        available_context, resolved_env_id, resolved_env_name = await _load_execution_environment_context(
+            request.env,
+            db,
+        )
+        missing_variables = sorted(
+            variable_name for variable_name in required_variables if variable_name not in available_context
+        )
+        if missing_variables:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "missing_execution_variables",
+                    "message": "Missing required execution variables.",
+                    "missing_variables": missing_variables,
+                    "required_variables": required_variables,
+                    "env_id": resolved_env_id,
+                    "env_name": resolved_env_name,
+                },
+            )
     
     # 3. Synchronous DB Creation (Fixes Race Condition)
     await ExecutionService.create_execution(execution_id, request.tc_ids, config)
     
     # 4. Dispatch Task with existing ID
-    task = execute_test_cases.delay(  # type: ignore[misc]  # Celery task
-        execution_id=execution_id,
-        tc_ids=request.tc_ids,
-        config=config,
-        dynamic_payload=request.dynamic_payload
-    )
+    if _has_active_celery_workers():
+        execute_test_cases.delay(  # type: ignore[misc]  # Celery task
+            execution_id=execution_id,
+            tc_ids=request.tc_ids,
+            config=config,
+            dynamic_payload=request.dynamic_payload
+        )
+    else:
+        background_tasks.add_task(
+            _run_execution_locally,
+            execution_id,
+            request.tc_ids,
+            config,
+            request.dynamic_payload,
+        )
     
     return ExecutionResponse(
         execution_id=execution_id,

@@ -198,28 +198,39 @@ def execute_test_cases(
         # Run Loop
         async def main_loop():
             start_time = asyncio.get_event_loop().time()
+            await _safe_update_execution(
+                ExecutionStatus.RUNNING,
+                {"passed": 0, "failed": 0, "skipped": 0},
+                0.0,
+            )
             
             # 1. Fetch Environment Context
             global_context = {}
             env_id = config.get("env")
-            if env_id:
-                from app.core.database import get_db_session
-                from app.services.environment_manager import EnvironmentManager
-                try:
-                    async with get_db_session() as session:
-                        env_manager = EnvironmentManager(session)
-                        env_record = await env_manager.get(env_id)
-                        if env_record:
-                            for key, var in env_record.variables.items():
-                                val = var.get("value", "")
-                                if var.get("encrypted"):
-                                    val = env_manager._decrypt(val)
-                                global_context[key] = val
-                            global_context["base_url"] = env_record.base_url
-                            global_context["env_name"] = env_record.name
-                            logger.info(f"✅ Loaded Environment Context: {list(global_context.keys())}")
-                except Exception as e:
-                    logger.error(f"Failed to load environment {env_id}: {e}")
+            from app.core.database import get_db_session
+            from app.services.environment_manager import EnvironmentManager
+            try:
+                async with get_db_session() as session:
+                    env_manager = EnvironmentManager(session)
+                    env_record = await env_manager.get(env_id) if env_id else await env_manager.get_default()
+                    if env_record:
+                        for key, var in env_record.variables.items():
+                            val = var.get("value", "")
+                            if var.get("encrypted"):
+                                val = env_manager._decrypt(val)
+                            global_context[key] = val
+                        global_context["base_url"] = env_record.base_url
+                        global_context["env_name"] = env_record.name
+                        logger.info(
+                            f"Loaded Environment Context from {'explicit env' if env_id else 'default env'} "
+                            f"{env_record.id}/{env_record.name}: {list(global_context.keys())}"
+                        )
+                    elif env_id:
+                        logger.warning(f"Configured execution env not found: {env_id}")
+                    else:
+                        logger.warning("No execution env specified and no default env configured.")
+            except Exception as e:
+                logger.error(f"Failed to load execution environment context: {e}")
 
             semaphore = asyncio.Semaphore(max_workers if parallel else 1)
             tasks = [run_single_tc(tid, semaphore, global_context) for tid in tc_ids]

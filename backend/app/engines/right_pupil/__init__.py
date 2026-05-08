@@ -6,6 +6,7 @@ Right Pupil Engine (The Orchestrator)
 """
 
 import asyncio
+import json
 import logging
 import re
 from typing import List, Dict, Any, Optional
@@ -23,6 +24,7 @@ from app.engines.runner.ui_runner import UiRunner
 from app.engines.turbo.synthesizer import DataSynthesizer
 from app.schemas.execution import AUIIR
 from app.utils.autogen_runtime import get_autogen_runtime_status
+from app.utils.json_repair import repair_json
 from .state import AgentState
 from .graph import create_right_pupil_graph
 
@@ -204,6 +206,61 @@ class RightPupilEngine:
                 return value
 
         return []
+
+    @staticmethod
+    def _extract_json_candidates(text: str) -> List[str]:
+        """Collect likely JSON payload candidates from a model reply."""
+        if not text or not text.strip():
+            return []
+
+        candidates: List[str] = [text.strip()]
+        fenced_blocks = re.findall(r"```(?:json)?\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
+        candidates.extend(block.strip() for block in fenced_blocks if block.strip())
+
+        object_matches = re.findall(r"(\{[\s\S]*?\})", text)
+        array_matches = re.findall(r"(\[[\s\S]*?\])", text)
+        candidates.extend(match.strip() for match in object_matches if match.strip())
+        candidates.extend(match.strip() for match in array_matches if match.strip())
+
+        unique_candidates: List[str] = []
+        seen = set()
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            unique_candidates.append(candidate)
+        return unique_candidates
+
+    @staticmethod
+    def _parse_agent_json_response(
+        messages: List[Any],
+        *,
+        required_keys: List[str],
+        fallback_message: str = "",
+    ) -> Dict[str, Any]:
+        """Parse the latest valid assistant JSON reply that contains required keys."""
+        candidate_texts: List[str] = []
+        for message in reversed(messages):
+            if isinstance(message, dict) and message.get("role") != "assistant":
+                continue
+            text = RightPupilEngine._extract_message_text(message)
+            if text:
+                candidate_texts.append(text)
+
+        if fallback_message:
+            candidate_texts.append(fallback_message)
+
+        for text in candidate_texts:
+            for candidate in RightPupilEngine._extract_json_candidates(text):
+                try:
+                    parsed = repair_json(candidate)
+                except Exception:
+                    continue
+
+                if isinstance(parsed, dict) and all(key in parsed for key in required_keys):
+                    return parsed
+
+        raise ValueError(f"No valid JSON reply found with keys: {required_keys}")
 
     @staticmethod
     def _safe_netloc(raw_url: Optional[str]) -> str:
@@ -1112,7 +1169,7 @@ Please propose the next action."""
             }
 
         try:
-            import autogen, json, re
+            import autogen
             from app.engines.right_pupil.agents.sherlock import SherlockAgent
             from app.core.config import settings
             
@@ -1138,14 +1195,14 @@ Please propose the next action."""
             )
             
             from app.engines.right_pupil.agents.librarian import search_knowledge_base
-            self._register_tool_if_supported(
-                autogen,
-                func=search_knowledge_base,
-                caller=sherlock,
-                executor=admin,
-                name="search_knowledge_base",
-                description="Search the knowledge base for root cause of known errors, system bugs, or UI changes.",
-            )
+            # self._register_tool_if_supported(
+            #     autogen,
+            #     func=search_knowledge_base,
+            #     caller=sherlock,
+            #     executor=admin,
+            #     name="search_knowledge_base",
+            #     description="Search the knowledge base for root cause of known errors, system bugs, or UI changes.",
+            # )
             
             error_msg = state.get("error", "Unknown error")
             history = state.get("history", [])
@@ -1155,24 +1212,13 @@ Please propose the next action."""
             
             await self._initiate_chat_async(admin, sherlock, prompt)
             
-            # Extract last reply from sherlock
-            last_msg = None
             messages = self._get_agent_messages(admin, sherlock)
-            for msg in reversed(messages):
-                if isinstance(msg, dict) and msg.get("role") == "assistant":  # Sherlock's reply
-                    last_msg = self._extract_message_text(msg)
-                    break
-                    
-            if not last_msg:
-                last_msg = self._extract_message_text(sherlock.last_message())
-                
-            json_match = re.search(r'```(?:json)?\n(.*?)\n```', last_msg, re.DOTALL)
-            json_str = json_match.group(1) if json_match else last_msg
-            match = re.search(r'(\{.*\})', json_str, re.DOTALL)
-            if match:
-                json_str = match.group(1)
-                
-            res = json.loads(json_str)
+            fallback_message = self._extract_message_text(sherlock.last_message())
+            res = self._parse_agent_json_response(
+                messages,
+                required_keys=["failure_type"],
+                fallback_message=fallback_message,
+            )
             failure_type = res.get("failure_type", "UNKNOWN_ERROR")
             logger.info(f"Sherlock Diagnosis: {failure_type} ({res.get('reasoning', '')})")
             
@@ -1230,7 +1276,7 @@ Please propose the next action."""
             }
             
         try:
-            import autogen, json, re
+            import autogen
             from app.engines.right_pupil.agents.healer import HealerAgent
             from app.schemas.execution import AUIIR
             from app.core.config import settings
@@ -1257,14 +1303,14 @@ Please propose the next action."""
             )
             
             from app.engines.right_pupil.agents.librarian import search_knowledge_base
-            self._register_tool_if_supported(
-                autogen,
-                func=search_knowledge_base,
-                caller=healer,
-                executor=admin,
-                name="search_knowledge_base",
-                description="Search the knowledge base for historical state fixes, known environment issues, and recovery paths.",
-            )
+            # self._register_tool_if_supported(
+            #     autogen,
+            #     func=search_knowledge_base,
+            #     caller=healer,
+            #     executor=admin,
+            #     name="search_knowledge_base",
+            #     description="Search the knowledge base for historical state fixes, known environment issues, and recovery paths.",
+            # )
             
             failure_type = state.get("failure_type", "UNKNOWN_ERROR")
             history = state.get("history", [])
@@ -1275,24 +1321,13 @@ Please propose the next action."""
             
             await self._initiate_chat_async(admin, healer, prompt)
             
-            # Extract last reply from healer
-            last_msg = None
             messages = self._get_agent_messages(admin, healer)
-            for msg in reversed(messages):
-                if isinstance(msg, dict) and msg.get("role") == "assistant":
-                    last_msg = self._extract_message_text(msg)
-                    break
-                    
-            if not last_msg:
-                last_msg = self._extract_message_text(healer.last_message())
-                
-            json_match = re.search(r'```(?:json)?\n(.*?)\n```', last_msg, re.DOTALL)
-            json_str = json_match.group(1) if json_match else last_msg
-            match = re.search(r'(\{.*\})', json_str, re.DOTALL)
-            if match:
-                json_str = match.group(1)
-                
-            res = json.loads(json_str)
+            fallback_message = self._extract_message_text(healer.last_message())
+            res = self._parse_agent_json_response(
+                messages,
+                required_keys=["action_type"],
+                fallback_message=fallback_message,
+            )
             if res.get("action_type") == "abort":
                 return {"retry_count": current_retries + 1, "error": "Healer aborted", "failure_type": "ABORT"}
                 

@@ -4,7 +4,6 @@ import { X, CheckCircle, XCircle, Clock, Terminal, ChevronRight, Activity, Arrow
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Collapsible,
@@ -39,15 +38,15 @@ interface StepDetail {
     request?: {
         url: string;
         method: string;
-        headers: any;
-        body: any;
+        headers: Record<string, unknown>;
+        body: unknown;
     };
     response?: {
         status: number;
-        headers: any;
-        body: any;
+        headers: Record<string, unknown>;
+        body: unknown;
     };
-    extracted?: Record<string, any>;
+    extracted?: Record<string, unknown>;
     assertions_failed?: string[];
     // UI fields
     action_taken?: string;
@@ -61,7 +60,7 @@ interface StepDetail {
     warnings?: {
         type: string;
         message: string;
-        details?: any;
+        details?: unknown;
     }[];
 }
 
@@ -82,7 +81,7 @@ interface CaseResult {
 
     variable_trace?: {
         var_name: string;
-        value: any;
+        value: unknown;
         source_step_index: number;
         source_step_name: string;
     }[];
@@ -105,6 +104,7 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
     const [data, setData] = useState<ExecutionDetail | null>(null);
     const [loading, setLoading] = useState(false);
     const toastedSteps = useRef<Set<string>>(new Set());
+    const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Toast Trigger for Vision Failures
     useEffect(() => {
@@ -129,19 +129,50 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
     const [openStepIndices, setOpenStepIndices] = useState<string[]>([]);
 
     useEffect(() => {
+        const clearPolling = () => {
+            if (pollTimerRef.current) {
+                clearInterval(pollTimerRef.current);
+                pollTimerRef.current = null;
+            }
+        };
+
+        const loadExecution = async () => {
+            if (!executionId) return;
+            try {
+                const res = await fetch(`/api/v1/executions/${executionId}/steps`);
+                if (!res.ok) {
+                    throw new Error(`Failed to fetch execution detail: ${res.status}`);
+                }
+                const payload = await res.json();
+                setData(payload);
+
+                const status = String(payload?.status || "").toLowerCase();
+                if (["passed", "failed", "error", "cancelled"].includes(status)) {
+                    clearPolling();
+                }
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
         if (open && executionId) {
             setLoading(true);
-            fetch(`/api/v1/executions/${executionId}/steps`)
-                .then(res => res.json())
-                .then(data => {
-                    setData(data);
-                })
-                .catch(err => console.error(err))
-                .finally(() => setLoading(false));
+            void loadExecution();
+            clearPolling();
+            pollTimerRef.current = setInterval(() => {
+                void loadExecution();
+            }, 2000);
         } else {
+            clearPolling();
             setData(null);
             setOpenStepIndices([]);
         }
+
+        return () => {
+            clearPolling();
+        };
     }, [open, executionId]);
 
     const toggleStep = (id: string) => {
@@ -179,7 +210,12 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
         return <Badge variant="outline" className={cn("text-[10px] font-mono h-5 uppercase", colors[action] || "text-slate-400")}>{action}</Badge>;
     };
 
-    const JsonViewer = ({ data }: { data: any }) => {
+    const normalizedExecutionStatus = (data?.status || "").toLowerCase();
+    const hasCaseResults = Boolean(data?.cases?.some((tc) => tc.steps?.length > 0));
+    const isActiveExecution = normalizedExecutionStatus === "pending" || normalizedExecutionStatus === "running";
+    const isFailedExecution = normalizedExecutionStatus === "failed" || normalizedExecutionStatus === "error" || normalizedExecutionStatus === "cancelled";
+
+    const JsonViewer = ({ data }: { data: unknown }) => {
         if (!data) return <div className="text-slate-500 text-xs italic">No Content</div>;
         const jsonStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
         return (
@@ -581,10 +617,36 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
                                                 <div className="text-blue-400 mt-2 font-bold">{`[SYSTEM] Completed Test Case Pipeline: ${tc.tc_id} in ${tc.duration_ms}ms`}</div>
                                             </div>
                                         ))}
-                                        <div className="flex items-center gap-2 text-green-500 mt-4">
-                                            <span>{`> Process exited with code 0`}</span>
-                                            <div className="w-2 h-4 bg-green-500 animate-pulse" />
-                                        </div>
+                                        {!hasCaseResults && isActiveExecution && (
+                                            <div className="mt-4 space-y-2 text-amber-400">
+                                                <div>{`> Execution status: ${data?.status || "pending"}`}</div>
+                                                <div className="text-slate-400">{`> Waiting for worker output...`}</div>
+                                            </div>
+                                        )}
+                                        {!hasCaseResults && !isActiveExecution && isFailedExecution && (
+                                            <div className="mt-4 space-y-2 text-red-400">
+                                                <div>{`> Execution status: ${data?.status || "failed"}`}</div>
+                                                <div className="text-slate-400">{`> No step result was persisted for this execution.`}</div>
+                                            </div>
+                                        )}
+                                        {!hasCaseResults && !isActiveExecution && !isFailedExecution && (
+                                            <div className="mt-4 space-y-2 text-slate-400">
+                                                <div>{`> Execution status: ${data?.status || "unknown"}`}</div>
+                                                <div>{`> No detailed step output is available yet.`}</div>
+                                            </div>
+                                        )}
+                                        {hasCaseResults && (
+                                            <div className={cn(
+                                                "flex items-center gap-2 mt-4",
+                                                isFailedExecution ? "text-red-500" : "text-green-500"
+                                            )}>
+                                                <span>{`> Process exited with code ${isFailedExecution ? 1 : 0}`}</span>
+                                                <div className={cn(
+                                                    "w-2 h-4",
+                                                    isFailedExecution ? "bg-red-500" : "bg-green-500 animate-pulse"
+                                                )} />
+                                            </div>
+                                        )}
                                     </div>
                                 </ScrollArea>
                             </TabsContent>
@@ -603,13 +665,13 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
                                                     {s.details?.screenshot_before && (
                                                         <div className="space-y-1.5 flex flex-col items-center">
                                                             <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800">Before</span>
-                                                            <img src={s.details.screenshot_before} className="rounded-md border border-slate-700 w-full object-cover aspect-video hover:scale-[1.02] transition-transform cursor-crosshair shadow-md" loading="lazy" />
+                                                            <img src={s.details.screenshot_before} alt={`${tc.tc_id} step ${s.step_index + 1} before`} className="rounded-md border border-slate-700 w-full object-cover aspect-video hover:scale-[1.02] transition-transform cursor-crosshair shadow-md" loading="lazy" />
                                                         </div>
                                                     )}
                                                     {s.details?.screenshot_after && (
                                                         <div className="space-y-1.5 flex flex-col items-center">
                                                             <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800">After</span>
-                                                            <img src={s.details.screenshot_after} className="rounded-md border border-slate-700 w-full object-cover aspect-video hover:scale-[1.02] transition-transform cursor-crosshair shadow-md" loading="lazy" />
+                                                            <img src={s.details.screenshot_after} alt={`${tc.tc_id} step ${s.step_index + 1} after`} className="rounded-md border border-slate-700 w-full object-cover aspect-video hover:scale-[1.02] transition-transform cursor-crosshair shadow-md" loading="lazy" />
                                                         </div>
                                                     )}
                                                     {s.details?.screenshot_before && s.details?.screenshot_after && (

@@ -1,15 +1,22 @@
-import operator
-from typing import Annotated, Dict, Any, List, Optional
-from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
-import uuid
+import asyncio
 import json
+import re
+import time
+import uuid
+from typing import Any, Dict, List, Optional
 
-from app.core.ai_client import get_ai_manager, Message
+from langgraph.graph import END, START, StateGraph
+from typing_extensions import TypedDict
+
+from app.core.ai_client import Message, get_ai_manager
 from app.core.ai_models import AIModule
-from app.utils.json_repair import repair_json
 from app.core.logging import logger
 from app.core.memory_base import memory_base
+from app.services.neural_design.analysis_progress import report_progress
+from app.services.neural_design.autogen_editor import run_editor_agent
+from app.services.neural_design.autogen_scenarist import run_scenarist_group_chat
+from app.utils.json_repair import repair_json
+
 
 class GraphState(TypedDict):
     project_id: str
@@ -17,134 +24,140 @@ class GraphState(TypedDict):
     target_type: str
     target_url: str
     context: str
-    
-    # Internal state
     extracted_points: List[str]
     scenarios: List[Dict[str, Any]]
     feedback: str
+    issues: List[str]
+    approved: bool
     revision_count: int
     is_swagger: bool
-    editor_output: str # New field to track the last raw output from the editor
+    editor_output: str
+    fallback_reason: str
+    generation_source: str
+    timings: Dict[str, float]
 
 
-def _fallback_scenarios_from_points(
-    extracted_points: List[str], target_type: str, target_url: str = ""
-) -> List[Dict[str, Any]]:
-    """Build minimal usable scenarios when AutoGen dependencies are unavailable."""
-    if not extracted_points:
-        return []
+_URL_PATTERN = re.compile(r"https?://[^\s'\"<>)\]}]+", re.IGNORECASE)
 
-    normalized_target = (target_type or "").upper()
-    base_login_url = (target_url or "").strip() or "https://example.test/login"
 
-    if normalized_target == "UI":
-        def _contains_any(text: str, keywords: List[str]) -> bool:
-            normalized = (text or "").strip().lower()
-            return any(k in normalized for k in keywords)
+def _normalize_critic_issues(data: Dict[str, Any]) -> List[str]:
+    raw_issues = data.get("issues", [])
+    if isinstance(raw_issues, list):
+        issues = [str(issue).strip() for issue in raw_issues if str(issue).strip()]
+        if issues:
+            return issues
 
-        def _build_steps(defaults: List[Dict[str, Any]], _hints: List[str]) -> List[Dict[str, Any]]:
-            return [dict(s) for s in defaults]
+    feedback = str(data.get("feedback", "")).strip()
+    if feedback:
+        return [feedback]
+    return []
 
-        remember_keywords = [
-            "remember me", "remember", "prefill", "pre-fill", "autofill", "auto fill",
-            "persist", "cookie", "session restore",
-            "记住我", "回填", "预填", "自动填充", "自动登录",
-        ]
-        negative_keywords = [
-            "invalid", "wrong password", "error", "failed", "unauthorized", "401", "deny",
-            "错误", "失败", "无效", "拒绝", "未授权", "异常",
-        ]
 
-        happy_points: List[str] = []
-        negative_points: List[str] = []
-        remember_points: List[str] = []
+def _with_timing(state: GraphState, key: str, elapsed_ms: float) -> Dict[str, float]:
+    timings = dict(state.get("timings", {}))
+    timings[key] = round(elapsed_ms, 2)
+    return timings
 
-        for point in extracted_points:
-            if _contains_any(point, remember_keywords):
-                remember_points.append(point)
-            elif _contains_any(point, negative_keywords):
-                negative_points.append(point)
-            else:
-                happy_points.append(point)
 
-        happy_defaults = [
-            {"step_type": "UI", "action": "goto", "target": "browser", "value": base_login_url, "description": "Open login page"},
-            {"step_type": "UI", "action": "assert", "target": "input[name='username']", "description": "Verify username input is visible"},
-            {"step_type": "UI", "action": "assert", "target": "input[name='password']", "description": "Verify password input is visible"},
-            {"step_type": "UI", "action": "type", "target": "input[name='username']", "value": "${TEST_USERNAME}", "description": "Enter valid username"},
-            {"step_type": "UI", "action": "type", "target": "input[name='password']", "value": "${VALID_PASSWORD}", "description": "Enter valid password"},
-            {"step_type": "UI", "action": "click", "target": "button[type='submit']", "description": "Click login"},
-            {"step_type": "UI", "action": "wait", "target": "[data-testid='home-page']", "description": "Wait for redirect"},
-            {"step_type": "UI", "action": "assert", "target": "location.pathname", "value": "/home", "description": "Verify URL redirected to home"},
-            {"step_type": "UI", "action": "assert", "target": "[data-testid='user-nickname']", "description": "Verify nickname is visible"},
-        ]
-        negative_defaults = [
-            {"step_type": "UI", "action": "goto", "target": "browser", "value": base_login_url, "description": "Open login page"},
-            {"step_type": "UI", "action": "type", "target": "input[name='username']", "value": "${TEST_USERNAME}", "description": "Enter username"},
-            {"step_type": "UI", "action": "type", "target": "input[name='password']", "value": "${INVALID_PASSWORD}", "description": "Enter invalid password"},
-            {"step_type": "UI", "action": "click", "target": "button[type='submit']", "description": "Submit login"},
-            {"step_type": "UI", "action": "wait", "target": "[data-testid='login-form']", "description": "Wait for error render"},
-            {"step_type": "UI", "action": "assert", "target": "[data-testid='login-error']", "value": "Invalid username or password", "description": "Verify invalid password error message"},
-        ]
-        remember_defaults = [
-            {"step_type": "UI", "action": "goto", "target": "browser", "value": base_login_url, "description": "Open login page"},
-            {"step_type": "UI", "action": "assert", "target": "input[name='remember']", "description": "Verify remember-me checkbox is visible"},
-            {"step_type": "UI", "action": "type", "target": "input[name='username']", "value": "${TEST_USERNAME}", "description": "Enter username"},
-            {"step_type": "UI", "action": "type", "target": "input[name='password']", "value": "${VALID_PASSWORD}", "description": "Enter password"},
-            {"step_type": "UI", "action": "click", "target": "input[name='remember']", "description": "Enable remember me"},
-            {"step_type": "UI", "action": "click", "target": "button[type='submit']", "description": "Login"},
-            {"step_type": "UI", "action": "wait", "target": "[data-testid='home-page']", "description": "Wait for home page"},
-            {"step_type": "UI", "action": "click", "target": "[data-testid='logout']", "description": "Logout"},
-            {"step_type": "UI", "action": "wait", "target": "[data-testid='login-form']", "description": "Wait for login page"},
-            {"step_type": "UI", "action": "assert", "target": "input[name='username']", "value": "${TEST_USERNAME}", "description": "Verify username is prefilled"},
-        ]
+def _truncate_text(text: str, max_chars: int) -> str:
+    normalized = (text or "").strip()
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[: max_chars - 12].rstrip() + "\n...[truncated]"
 
-        return [
-            {
-                "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
-                "name": "UI Happy Path Login",
-                "priority": "P2",
-                "description": "Fallback template for successful login flow",
-                "steps": _build_steps(happy_defaults, happy_points),
-            },
-            {
-                "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
-                "name": "UI Negative Login",
-                "priority": "P2",
-                "description": "Fallback template for invalid credential handling",
-                "steps": _build_steps(negative_defaults, negative_points),
-            },
-            {
-                "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
-                "name": "UI Remember Me",
-                "priority": "P2",
-                "description": "Fallback template for remember-me persistence",
-                "steps": _build_steps(remember_defaults, remember_points),
-            },
-        ]
 
-    steps = []
-    step_type = "API" if normalized_target == "API" else "UI"
-    for point in extracted_points[:8]:
-        steps.append({"step_type": step_type, "description": point})
+def _trim_memory_context(text: str, max_chars: int = 1200) -> str:
+    if not text:
+        return ""
+    return _truncate_text(text, max_chars)
 
-    return [
-        {
-            "scenario_id": f"SC-{uuid.uuid4().hex[:8]}",
-            "name": f"[Fallback] {normalized_target or 'MIXED'} Scenario",
-            "priority": "P1",
-            "description": "Auto-generated fallback scenario when AutoGen path is unavailable",
-            "steps": steps,
-        }
+
+def _extract_first_url(text: str) -> str:
+    if not text:
+        return ""
+    match = _URL_PATTERN.search(text)
+    if not match:
+        return ""
+    return match.group(0).rstrip(".,;)]}\"'")
+
+
+def _resolve_effective_target_url(
+    target_url: str = "",
+    requirement_text: str = "",
+    context: str = "",
+    extracted_points: Optional[List[str]] = None,
+) -> str:
+    candidates = [
+        target_url,
+        requirement_text,
+        context,
+        "\n".join(extracted_points or []),
     ]
-# === Nodes ===
+    for candidate in candidates:
+        normalized = (candidate or "").strip()
+        if not normalized:
+            continue
+        if normalized.startswith(("http://", "https://")):
+            return normalized.rstrip(".,;)]}\"'")
+
+        inferred = _extract_first_url(normalized)
+        if inferred:
+            return inferred
+    return ""
+
+
+def _limit_points(points: List[str], max_items: int = 12, max_chars_per_item: int = 180) -> List[str]:
+    limited: List[str] = []
+    for point in points[:max_items]:
+        trimmed = _truncate_text(str(point), max_chars_per_item)
+        if trimmed:
+            limited.append(trimmed)
+    return limited
+
+
+def _build_scenario_summary(
+    scenarios: List[Dict[str, Any]],
+    *,
+    max_scenarios: int = 5,
+    max_steps: int = 6,
+) -> List[Dict[str, Any]]:
+    summary: List[Dict[str, Any]] = []
+    for scenario in scenarios[:max_scenarios]:
+        steps = scenario.get("steps", [])
+        step_summaries: List[Dict[str, Any]] = []
+        for step in steps[:max_steps]:
+            step_type = str(step.get("step_type") or scenario.get("type") or "").upper()
+            step_summaries.append(
+                {
+                    "step_type": step_type,
+                    "action": step.get("action"),
+                    "method": step.get("method"),
+                    "target": _truncate_text(str(step.get("target") or ""), 80) if step.get("target") else "",
+                    "url": _truncate_text(str(step.get("url") or step.get("url_path") or ""), 120)
+                    if (step.get("url") or step.get("url_path"))
+                    else "",
+                    "has_value": bool(step.get("value")),
+                    "description": _truncate_text(str(step.get("description") or ""), 100),
+                }
+            )
+
+        summary.append(
+            {
+                "name": scenario.get("name", "Scenario"),
+                "priority": scenario.get("priority", ""),
+                "type": scenario.get("type", ""),
+                "step_count": len(steps),
+                "steps": step_summaries,
+            }
+        )
+    return summary
+
 
 async def node_router(state: GraphState) -> Dict[str, Any]:
-    """Determine if the input is OpenAPI/Swagger or standard PRD"""
+    """Determine if the input is OpenAPI/Swagger or standard PRD."""
     req_text = state.get("requirement_text", "").strip()
     is_swagger = False
-    
-    # Simple heuristic to guess if JSON/Swagger
+
     if req_text.startswith("{") or req_text.startswith("["):
         try:
             data = repair_json(req_text)
@@ -152,55 +165,80 @@ async def node_router(state: GraphState) -> Dict[str, Any]:
                 is_swagger = True
         except Exception:
             pass
-            
+
     logger.info(f"[Graph Router] is_swagger = {is_swagger}")
-    return {"is_swagger": is_swagger, "revision_count": 0}
+    return {"is_swagger": is_swagger, "revision_count": 0, "issues": [], "approved": False}
+
 
 async def node_swagger_parser(state: GraphState) -> Dict[str, Any]:
-    """Parse Swagger JSON into basic API scenarios"""
+    """Parse Swagger JSON into basic API scenarios."""
     logger.info("[Graph Node] Parsing Swagger/OpenAPI...")
     ai = get_ai_manager()
-    prompt = f"Convert the following OpenAPI/Swagger schema into a list of automated API test scenarios. Extract endpoints, methods, and expected statuses.\n\nSchema:\n{state['requirement_text']}"
+    prompt = (
+        "Convert the following OpenAPI/Swagger schema into a list of automated API test "
+        f"scenarios. Extract endpoints, methods, and expected statuses.\n\nSchema:\n{state['requirement_text']}"
+    )
     messages = [
-        Message(role="system", content="You are a senior API testing expert. Output a JSON object with a 'scenarios' list. Each scenario should have 'scenario_id' (string), 'name' (string), 'priority' (P0/P1/P2), 'description' (string), and 'steps' (a list of objects with 'step_type': 'API', 'method': 'GET/POST', 'url': '/api/...', 'description': 'summary')."),
-        Message(role="user", content=prompt)
+        Message(
+            role="system",
+            content=(
+                "You are a senior API testing expert. Output a JSON object with a 'scenarios' list. "
+                "Each scenario should have 'scenario_id' (string), 'name' (string), "
+                "'priority' (P0/P1/P2), 'description' (string), and 'steps' "
+                "(a list of objects with 'step_type': 'API', 'method': 'GET/POST', "
+                "'url': '/api/...', 'description': 'summary')."
+            ),
+        ),
+        Message(role="user", content=prompt),
     ]
     try:
         response = await ai.invoke(AIModule.AGENT_NEURAL_MERGER, messages)
         data = repair_json(response.content)
         scenarios = data.get("scenarios", [])
-        
-        # Ensure scenario_ids
-        for s in scenarios:
-            if "scenario_id" not in s:
-                s["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
-                
+
+        for scenario in scenarios:
+            if "scenario_id" not in scenario:
+                scenario["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
+
         return {"scenarios": scenarios, "extracted_points": ["Parsed from OpenAPI structure directly."]}
-    except Exception as e:
-        logger.error(f"Swagger parse failed: {e}")
-        return {"scenarios": [], "feedback": str(e)}
+    except Exception as exc:
+        logger.error(f"Swagger parse failed: {exc}")
+        return {"scenarios": [], "feedback": str(exc)}
+
 
 async def node_prd_extractor(state: GraphState) -> Dict[str, Any]:
-    """Extract test points from PRD text"""
+    """Extract test points from PRD text."""
     logger.info("[Graph Node] Extracting test points from PRD...")
+    report_progress("extracting_points", 25)
     ai = get_ai_manager()
-    
+    requirement_excerpt = _truncate_text(state.get("requirement_text", ""), 8000)
+
     user_id = state.get("project_id", "default_user")
     project_id = state.get("project_id", "default_proj")
-    
+
     memory_context = memory_base.search_memory(
         query=f"test preference and requirement analysis guidance: {state['requirement_text'][:200]}",
         user_id=user_id,
         project_id=project_id,
     )
-    
-    prompt = f"Extract the key business requirements and testing points from this PRD:\n{state['requirement_text']}\n\nTarget Type: {state.get('target_type', 'MIXED')}"
+    memory_context = _trim_memory_context(memory_context, 1200)
+
+    prompt = (
+        "Extract the key business requirements and testing points from this PRD excerpt:\n"
+        f"{requirement_excerpt}\n\nTarget Type: {state.get('target_type', 'MIXED')}"
+    )
     if memory_context:
-        prompt = f"{memory_context}\n\n{prompt}"
-        
+        prompt = f"[Memory Hints]\n{memory_context}\n\n{prompt}"
+
     messages = [
-        Message(role="system", content="You are a strict QA requirement analyzer. Output ONLY clear, concise testing points as a JSON list of strings under the key 'points'. DO NOT add markdown markers outside the JSON."),
-        Message(role="user", content=prompt)
+        Message(
+            role="system",
+            content=(
+                "You are a strict QA requirement analyzer. Output ONLY clear, concise testing points "
+                "as a JSON list of strings under the key 'points'. DO NOT add markdown markers outside the JSON."
+            ),
+        ),
+        Message(role="user", content=prompt),
     ]
     try:
         response = await ai.invoke(AIModule.AGENT_NEURAL_MERGER, messages)
@@ -208,21 +246,28 @@ async def node_prd_extractor(state: GraphState) -> Dict[str, Any]:
         points = data.get("points", [])
         logger.info(f"[Graph Node] Extracted {len(points)} points.")
         return {"extracted_points": points}
-    except Exception as e:
-        logger.error(f"PRD extraction failed: {e}")
+    except Exception as exc:
+        logger.error(f"PRD extraction failed: {exc}")
         return {"extracted_points": []}
 
-from app.services.neural_design.autogen_scenarist import run_scenarist_group_chat
 
 async def node_scenarist(state: GraphState) -> Dict[str, Any]:
-    """Generate test scenarios from extracted points via AutoGen Group Chat"""
+    """Generate test scenarios from extracted points via AutoGen Group Chat."""
     logger.info("[Graph Node] Entering AutoGen Multi-Agent Discussion Room...")
-    
-    extracted_points = state.get("extracted_points", [])
-    requirement_text = state.get("requirement_text", "")
+    report_progress("generating_scenarios", 60)
+    started_at = time.perf_counter()
+
+    extracted_points = _limit_points(state.get("extracted_points", []), max_items=12, max_chars_per_item=180)
+    requirement_excerpt = _truncate_text(state.get("requirement_text", ""), 1200)
     target = state.get("target_type", "MIXED")
-    context_info = state.get("context", "")
-    
+    context_info = _truncate_text(state.get("context", ""), 2000)
+    effective_target_url = _resolve_effective_target_url(
+        target_url=state.get("target_url", ""),
+        requirement_text=state.get("requirement_text", ""),
+        context=state.get("context", ""),
+        extracted_points=extracted_points,
+    )
+
     user_id = state.get("project_id", "default_user")
     project_id = state.get("project_id", "default_proj")
     memory_context = memory_base.search_memory(
@@ -230,177 +275,285 @@ async def node_scenarist(state: GraphState) -> Dict[str, Any]:
         user_id=user_id,
         project_id=project_id,
     )
-    
-    feedback_str = f"Critical Critic Feedback to address (MUST FIX):\n{state.get('feedback', '')}" if state.get("feedback") else ""
-    full_context = (
-        f"[Original PRD - Highest Priority]\n{requirement_text}\n\n"
-        f"[System Constraints and Context]\n{context_info}\n\n"
-        f"{memory_context}\n\n{feedback_str}\n"
-        "(If PRD explicitly specifies target URL/domain, always prioritize PRD URL over default Base URL.)"
+    memory_context = _trim_memory_context(memory_context, 1200)
+
+    feedback_text = _truncate_text(state.get("feedback", ""), 600) if state.get("feedback") else ""
+    context_sections: List[str] = [
+        f"[Target Type]\n{target}",
+        f"[Target URL]\n{effective_target_url or 'N/A'}",
+        "[Rule]\nIf the PRD specifies a target URL/domain, always prioritize that over any default base URL.",
+    ]
+    if requirement_excerpt:
+        context_sections.append(f"[PRD Excerpt]\n{requirement_excerpt}")
+    if context_info:
+        context_sections.append(f"[Context Summary]\n{context_info}")
+    if memory_context:
+        context_sections.append(f"[Memory Hints]\n{memory_context}")
+    if feedback_text:
+        context_sections.append(f"[Critic Issues]\n{feedback_text}")
+    full_context = "\n\n".join(context_sections)
+
+    logger.info(
+        f"[Graph Node] Scenarist input compressed: points={len(extracted_points)}, "
+        f"context_chars={len(full_context)}, memory_chars={len(memory_context)}"
     )
-    
+
     try:
         final_merged_json = await run_scenarist_group_chat(
             extracted_points=extracted_points,
             target_type=target,
-            target_url=state.get("target_url", ""),
-            context=full_context
+            target_url=effective_target_url,
+            context=full_context,
         )
-        
+
         data = repair_json(final_merged_json)
         scenarios = data.get("scenarios", [])
-        
-        for s in scenarios:
-            if "scenario_id" not in s:
-                s["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
-            if "[AutoGen-Merged]" not in s.get("name", ""):
-                s["name"] = "[AutoGen-Merged] " + s.get("name", "Scenario")
-                
-        return {"scenarios": scenarios}
-    except Exception as e:
-        logger.error(f"Scenarist Agent Chat failed: {e}")
-        fallback = _fallback_scenarios_from_points(
-            extracted_points=extracted_points,
-            target_type=target,
-            target_url=state.get("target_url", ""),
-        )
-        if fallback:
-            logger.warning(
-                f"[Graph Node] Using fallback scenarios due to AutoGen failure, count={len(fallback)}"
-            )
-            return {"scenarios": fallback}
-        return {"scenarios": state.get("scenarios", [])}
+        elapsed_ms = (time.perf_counter() - started_at) * 1000
+
+        for scenario in scenarios:
+            if "scenario_id" not in scenario:
+                scenario["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
+            if "[AutoGen-Merged]" not in scenario.get("name", ""):
+                scenario["name"] = "[AutoGen-Merged] " + scenario.get("name", "Scenario")
+
+        logger.info(f"[Graph Node] Scenarist produced {len(scenarios)} scenarios in {elapsed_ms:.2f}ms.")
+        return {
+            "scenarios": scenarios,
+            "generation_source": "autogen_scenarist",
+            "fallback_reason": "",
+            "timings": _with_timing(state, "scenarist_ms", elapsed_ms),
+        }
+    except ValueError as exc:
+        logger.error(f"Scenarist output parsing failed: {exc}")
+        raise RuntimeError("scenarist_invalid_json") from exc
+    except Exception as exc:
+        logger.error(f"Scenarist Agent Chat failed: {exc}")
+        raise RuntimeError("scenarist_exception") from exc
+
 
 async def node_critic(state: GraphState) -> Dict[str, Any]:
-    """Criticize generated scenarios"""
+    """Criticize generated scenarios."""
     logger.info(f"[Graph Node] Critic reviewing scenarios... (Revision {state.get('revision_count', 0)})")
-    
-    if not state.get("scenarios"):
-        return {"feedback": "No scenarios were generated. Please extract points and try again.", "revision_count": state.get("revision_count", 0) + 1}
-        
+    report_progress("validating_schema", 75)
+
+    scenarios = state.get("scenarios", [])
+    target_type = (state.get("target_type") or "").upper()
+
+    if not scenarios:
+        issues = ["No scenarios were generated. Please extract points and try again."]
+        return {
+            "feedback": "\n".join(issues),
+            "issues": issues,
+            "approved": False,
+            "revision_count": state.get("revision_count", 0) + 1,
+        }
+
     ai = get_ai_manager()
-    prompt = f"Review the generated test scenarios for quality and completeness:\n{json.dumps(state['scenarios'], ensure_ascii=False)}\n\nAre they logically sound? Do they match the Target Type '{state.get('target_type')}'? Output a JSON object with boolean 'approved'. If false, provide detailed string 'feedback' on what to fix."
-    
+    report_progress("reviewing", 90)
+    scenario_summary = _build_scenario_summary(scenarios)
     messages = [
-        Message(role="system", content="You are a strict QA QA Lead Critic. Output a JSON object. If approved, set 'approved': true. If rejected, set 'approved': false and provide 'feedback' explaining what needs to be fixed."),
-        Message(role="user", content=prompt)
+        Message(
+            role="system",
+            content="""
+You are a QA execution critic.
+
+Your job is to check whether the scenarios are directly executable.
+
+Check only these rules:
+1. Every scenario matches the target type.
+2. Every step has the minimum required execution fields.
+3. Steps are unambiguous enough for automation.
+4. Do not judge writing style or business completeness unless it blocks execution.
+
+Output JSON only:
+{
+  "approved": true,
+  "issues": []
+}
+
+or
+
+{
+  "approved": false,
+  "issues": [
+    "short issue 1",
+    "short issue 2"
+  ]
+}
+
+Rules:
+- Keep issues short and concrete.
+- No markdown.
+- No long explanations.
+- If executable, return approved=true and issues=[].
+- Assume all human-facing fields should default to Simplified Chinese:
+  scenario name, scenario description, and step description.
+- If those fields are mainly English without a clear product-term exception,
+  add an issue asking to rewrite them in Simplified Chinese.
+""".strip(),
+        ),
+        Message(
+            role="user",
+            content=(
+                f"Target Type: {target_type or state.get('target_type')}\n\n"
+                "Language Rule: titles, descriptions, and step descriptions should default to "
+                "Simplified Chinese. Keep JSON keys and technical fields in English.\n\n"
+                f"Scenario Summary:\n{json.dumps(scenario_summary, ensure_ascii=False)}"
+            ),
+        ),
     ]
-    
+
     try:
         response = await ai.invoke(AIModule.AGENT_NEURAL_MERGER, messages)
         data = repair_json(response.content)
-        
+
         is_approved = data.get("approved", False)
-        feedback = data.get("feedback", "")
-        
+        issues = _normalize_critic_issues(data)
+        feedback = "\n".join(issues)
+
         if is_approved:
             logger.info("[Graph Node] Critic APPROVED.")
-            return {"feedback": ""} # Cleared, meaning success
-        else:
-            logger.info(f"[Graph Node] Critic REJECTED. Feedback: {feedback}")
-            return {"feedback": feedback, "revision_count": state.get("revision_count", 0) + 1}
-    except Exception as e:
-        logger.error(f"Critic failed: {e}")
-        return {"feedback": ""} # Pass if critic breaks
+            return {"feedback": "", "issues": [], "approved": True}
 
-from app.services.neural_design.autogen_editor import run_editor_agent
+        logger.info(f"[Graph Node] Critic REJECTED. Issues: {issues}")
+        return {
+            "feedback": feedback,
+            "issues": issues,
+            "approved": False,
+            "revision_count": state.get("revision_count", 0) + 1,
+        }
+    except Exception as exc:
+        logger.error(f"Critic failed: {exc}")
+        raise RuntimeError("critic_exception") from exc
+
 
 async def node_editor(state: GraphState) -> Dict[str, Any]:
-    """Execute single-agent Editor to fix scenarios based on Critic feedback"""
+    """Execute single-agent Editor to fix scenarios based on Critic feedback."""
     logger.info(f"[Graph Node] Editor Agent fixing scenarios... (Revision {state.get('revision_count', 0)})")
-    
+
     scenarios = state.get("scenarios", [])
-    feedback = state.get("feedback", "")
-    context_info = state.get("context", "")
-    
-    if not scenarios or not feedback:
-        return {} # Nothing to do
-        
+    issues = state.get("issues", [])
+    target_type = (state.get("target_type") or "").upper()
+
+    if not scenarios or not issues:
+        return {}
+
     try:
         final_merged_json = await run_editor_agent(
             scenarios=scenarios,
-            feedback=feedback,
-            context=context_info
+            issues=issues,
+            target_type=target_type or "MIXED",
         )
-        
+
+        if not final_merged_json.strip():
+            logger.warning("[Graph Node] Editor returned empty output, keeping current scenarios and ending revision loop.")
+            return {
+                "feedback": "",
+                "issues": [],
+                "approved": True,
+                "editor_output": "",
+            }
+
         data = repair_json(final_merged_json)
         updated_scenarios = data.get("scenarios", [])
-        
-        # Ensure we don't lose all our scenarios if editor breaks completely
+
         if not updated_scenarios:
-            logger.warning("[Graph Node] Editor returned empty scenarios, retaining old ones.")
-            return {"editor_output": final_merged_json}
-            
-        for s in updated_scenarios:
-            if "scenario_id" not in s:
-                s["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
-            if "[Edited]" not in s.get("name", ""):
-                 s["name"] = "[Edited] " + s.get("name", "Scenario")
-                 
-        return {"scenarios": updated_scenarios, "editor_output": final_merged_json}
-    except Exception as e:
-        logger.error(f"Editor Agent failed: {e}")
-        return {}
+            logger.warning("[Graph Node] Editor returned empty scenarios, keeping current scenarios and ending revision loop.")
+            return {
+                "feedback": "",
+                "issues": [],
+                "approved": True,
+                "editor_output": final_merged_json,
+            }
+
+        for scenario in updated_scenarios:
+            if "scenario_id" not in scenario:
+                scenario["scenario_id"] = f"SC-{uuid.uuid4().hex[:8]}"
+            if "[Edited]" not in scenario.get("name", ""):
+                scenario["name"] = "[Edited] " + scenario.get("name", "Scenario")
+
+        return {
+            "scenarios": updated_scenarios,
+            "feedback": "",
+            "issues": [],
+            "approved": True,
+            "editor_output": final_merged_json,
+        }
+    except Exception as exc:
+        logger.error(f"Editor Agent failed: {exc}")
+        raise RuntimeError("editor_exception") from exc
 
 
-# === Edges ===
 def route_after_router(state: GraphState) -> str:
     if state.get("is_swagger"):
         return "swagger_parser"
     return "prd_extractor"
 
+
 def route_after_critic(state: GraphState) -> str:
-    # If approved (feedback is empty) or max revisions reached, end
+    approved = state.get("approved", False)
     feedback = state.get("feedback")
     rev_count = state.get("revision_count", 0)
-    
-    if not feedback:
+
+    if approved or not feedback:
         return END
     if rev_count >= 2:
         logger.warning("[Graph Router] Max revisions reached. Forcing END.")
         return END
-        
+
     return "editor"
 
-# === Build Graph ===
+
+def route_after_editor(state: GraphState) -> str:
+    if state.get("editor_output"):
+        return "critic"
+    return END
+
+
 def build_neural_design_graph():
     builder = StateGraph(GraphState)
-    
+
     builder.add_node("router", node_router)
     builder.add_node("swagger_parser", node_swagger_parser)
     builder.add_node("prd_extractor", node_prd_extractor)
     builder.add_node("scenarist", node_scenarist)
     builder.add_node("critic", node_critic)
     builder.add_node("editor", node_editor)
-    
+
     builder.add_edge(START, "router")
-    
+
     builder.add_conditional_edges(
         "router",
         route_after_router,
         {
             "swagger_parser": "swagger_parser",
-            "prd_extractor": "prd_extractor"
-        }
+            "prd_extractor": "prd_extractor",
+        },
     )
-    
+
     builder.add_edge("swagger_parser", "critic")
-    
     builder.add_edge("prd_extractor", "scenarist")
     builder.add_edge("scenarist", "critic")
-    
+
     builder.add_conditional_edges(
         "critic",
         route_after_critic,
         {
             END: END,
-            "editor": "editor"
-        }
+            "editor": "editor",
+        },
     )
-    
-    builder.add_edge("editor", "critic")
-    
+
+    builder.add_conditional_edges(
+        "editor",
+        route_after_editor,
+        {
+            "critic": "critic",
+            END: END,
+        },
+    )
+
     return builder.compile()
 
-neural_design_graph = build_neural_design_graph()
 
+neural_design_graph = build_neural_design_graph()

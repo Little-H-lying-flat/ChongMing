@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     # Mem0
     MEM0_ENABLED: bool = True
     MEM0_QDRANT_PATH: Optional[str] = None
+    MEM0_EMBEDDING_DIMS: int = 1024
 
     # Git
     GIT_REPO_PATH: str = "./test_repo"

@@ -70,6 +70,9 @@ class MemoryBase:
 
         db_path = self._build_db_path()
         Path(db_path).mkdir(parents=True, exist_ok=True)
+        embedding_model = settings.MODEL_EMBEDDING
+        embedding_dims = settings.MEM0_EMBEDDING_DIMS
+        collection_name = f"chongming_mem0_{embedding_dims}"
 
         config = {
             "llm": {
@@ -84,14 +87,16 @@ class MemoryBase:
                 "provider": "openai",
                 "config": {
                     "api_key": settings.QWEN_API_KEY,
-                    "model": "text-embedding-v3",
+                    "model": embedding_model,
+                    "embedding_dims": embedding_dims,
                     "openai_base_url": settings.QWEN_BASE_URL,
                 },
             },
             "vector_store": {
                 "provider": "qdrant",
                 "config": {
-                    "collection_name": "chongming_mem0",
+                    "collection_name": collection_name,
+                    "embedding_model_dims": embedding_dims,
                     "path": db_path,
                 },
             },
@@ -182,4 +187,3 @@ class MemoryBase:
 
 # Global singleton
 memory_base = MemoryBase()
-

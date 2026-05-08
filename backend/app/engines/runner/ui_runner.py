@@ -1,27 +1,27 @@
 """
-UI Runner (The Hands)
-右瞳引擎执行器
+UI Runner.
 
-负责执行基于视觉或 DOM 的操作指令。
+Responsible for executing low-level browser actions for Right Pupil.
 """
 
 import asyncio
 import logging
 import re
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
 from playwright.async_api import Page
 
-from app.schemas.aui_ir import VisualActionIR, VisualLocator
 from app.engines.vision.dom_service import DomService
+from app.schemas.aui_ir import VisualActionIR
+
 
 logger = logging.getLogger(__name__)
 
+
 class UiRunner:
-    """
-    UI 动作执行器
-    """
-    
+    """Execute UI actions against the current Playwright page."""
+
     def __init__(self, page: Page, dom_service: DomService):
         self.page = page
         self.dom_service = dom_service
@@ -31,6 +31,42 @@ class UiRunner:
     def _normalize_semantic_hint(value: str) -> str:
         normalized = re.sub(r"[^a-z0-9]+", " ", (value or "").lower())
         return re.sub(r"\s+", " ", normalized).strip()
+
+    @staticmethod
+    def _center_from_bbox(bbox: List[float]) -> Tuple[float, float]:
+        return (bbox[0] + bbox[2]) / 2.0, (bbox[1] + bbox[3]) / 2.0
+
+    async def _resolve_visual_target(
+        self,
+        action: VisualActionIR,
+        id_map: Dict[int, Dict[str, Any]],
+        trace_entry: Dict[str, Any],
+    ) -> Tuple[float, float, Optional[str]]:
+        target = action.target
+        if not target or target.value is None:
+            raise ValueError("Visual strategy requires target.value")
+
+        try:
+            visual_id = int(str(target.value))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Visual strategy requires integer ID, got {target.value}") from exc
+
+        if visual_id not in id_map:
+            raise ValueError(f"Visual ID {visual_id} not found in current frame")
+
+        element_info = id_map[visual_id]
+        if "center" in element_info:
+            x, y = element_info["center"]
+        elif "bbox" in element_info and len(element_info["bbox"]) == 4:
+            x, y = self._center_from_bbox(element_info["bbox"])
+        else:
+            raise ValueError(f"Visual target {visual_id} missing center/bbox")
+
+        selector = await self.dom_service.sniff_selector(self.page, x, y)
+        trace_entry["coords"] = {"x": x, "y": y}
+        if selector:
+            trace_entry["stable_selector"] = selector
+        return x, y, selector
 
     async def _resolve_semantic_click_target(
         self,
@@ -75,8 +111,7 @@ class UiRunner:
                         if (["button", "a", "summary"].includes(tag)) return true;
                         if (tag === "input" && ["button", "submit", "reset"].includes((element.type || "").toLowerCase())) return true;
                         const role = (element.getAttribute("role") || "").toLowerCase();
-                        if (["button", "link", "menuitem", "tab"].includes(role)) return true;
-                        return false;
+                        return ["button", "link", "menuitem", "tab"].includes(role);
                     }
 
                     function clickableRoot(element) {
@@ -109,9 +144,7 @@ class UiRunner:
                                 current.innerText ||
                                 current.textContent
                             );
-                            if (text.includes(hint)) {
-                                return 200 - depth * 20;
-                            }
+                            if (text.includes(hint)) return 200 - depth * 20;
                             current = current.parentElement;
                         }
                         return 0;
@@ -130,20 +163,14 @@ class UiRunner:
                     let best = null;
                     for (const candidate of candidateSet) {
                         if (signature(candidate) !== anchorSignature) continue;
-
                         const rect = candidate.getBoundingClientRect();
                         const cx = rect.left + rect.width / 2;
                         const cy = rect.top + rect.height / 2;
                         const distancePenalty = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2) / 10;
                         const score = contextScore(candidate) - distancePenalty;
                         if (score <= 0) continue;
-
                         if (!best || score > best.score) {
-                            best = {
-                                x: cx,
-                                y: cy,
-                                score,
-                            };
+                            best = { x: cx, y: cy, score };
                         }
                     }
 
@@ -193,27 +220,6 @@ class UiRunner:
                             rect.height > 0;
                     }
 
-                    function isEditable(element) {
-                        if (!element) return false;
-                        const tag = element.tagName.toLowerCase();
-                        const role = (element.getAttribute("role") || "").toLowerCase();
-                        return (
-                            (tag === "input" && !["hidden", "submit", "button", "checkbox", "radio", "image"].includes((element.type || "").toLowerCase())) ||
-                            tag === "textarea" ||
-                            element.contentEditable === "true" ||
-                            ["textbox", "searchbox", "combobox"].includes(role)
-                        );
-                    }
-
-                    function editableRoot(element) {
-                        let current = element;
-                        for (let i = 0; i < 6 && current; i += 1) {
-                            if (isEditable(current)) return current;
-                            current = current.parentElement;
-                        }
-                        return null;
-                    }
-
                     function labelText(element) {
                         const parts = [];
                         for (const attr of ["placeholder", "aria-label", "name", "id", "data-test"]) {
@@ -251,28 +257,12 @@ class UiRunner:
                         const cy = rect.top + rect.height / 2;
                         const distancePenalty = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2) / 10;
                         const score = matchScore - distancePenalty;
-
                         if (!best || score > best.score) {
-                            best = {
-                                x: cx,
-                                y: cy,
-                                score,
-                            };
+                            best = { x: cx, y: cy, score };
                         }
                     }
 
-                    if (best) return best;
-
-                    const fallback = editableRoot(document.elementFromPoint(x, y));
-                    if (!fallback || !isVisible(fallback)) return null;
-
-                    const rect = fallback.getBoundingClientRect();
-                    return {
-                        x: rect.left + rect.width / 2,
-                        y: rect.top + rect.height / 2,
-                        score: 0,
-                    };
-```
+                    return best;
                 }
                 """,
                 {"x": x, "y": y, "fieldHint": hint},
@@ -280,323 +270,275 @@ class UiRunner:
         except Exception as exc:
             logger.warning(f"Semantic input disambiguation failed: {exc}")
             return None
-        """处理交互逻辑 (Click, Type, etc.)"""
-        target = action.target
-        strategy = target.strategy
-        semantic_hint = action.params.get("semantic_hint") if isinstance(action.params, dict) else None
-        
-        x, y = 0, 0
-        selector = None
-        
-        # A. Visual Strategy (通过 ID Map 获取坐标)
-        if strategy == "visual":
-            # value 应为 SoM ID (string or int)
-            try:
-                visual_id = int(target.value)
-            except (ValueError, TypeError):
-                 raise ValueError(f"Visual strategy requires integer ID, got {target.value}")
 
-            if not id_map or visual_id not in id_map:
-                raise ValueError(f"Visual ID {visual_id} not found in current frame")
-            
-            element_info = id_map[visual_id]
-            x, y = element_info["center"]
-            trace_entry["coords"] = {"x": x, "y": y}
-            
-            # 关键：嗅探 Selector 以增强稳定性
-            selector = await self.dom_service.sniff_selector(self.page, x, y)
-            if selector:
-                trace_entry["stable_selector"] = selector
-                logger.info(f"Sniffed selector for visual element {visual_id}: {selector}")
-            
-            # 执行动作 (优先使用 Playwright 的 locator 如果嗅探成功，否则用坐标)
-            # 策略：为了模拟最真实的视觉操作，且 OmniParser 坐标通常即见即所得，
-            # 我们优先使用坐标点击。如果失败再考虑 selector。
-            # 但用户提示词要求： "在点击前调用 sniff_selector... 然后执行 page.mouse.click"
-            # 这意味着 sniff 主要是为了记录(trace)和可能的后续恢复，但动作本身是用鼠标坐标。
-            
-            if action.action_type in ["click", "dblclick", "hover"] and semantic_hint:
-                resolved_target = await self._resolve_semantic_click_target(
+    async def _focus_and_type_by_point(self, x: float, y: float, text: str) -> None:
+        focus_result = await self.page.evaluate(
+            """
+            ({x, y}) => {
+                function isEditable(e) {
+                    if (!e) return false;
+                    const tag = e.tagName.toLowerCase();
+                    const role = (e.getAttribute("role") || "").toLowerCase();
+                    return (
+                        (tag === "input" && !["hidden","submit","button","checkbox","radio","image"].includes((e.type || "").toLowerCase())) ||
+                        tag === "textarea" ||
+                        e.contentEditable === "true" ||
+                        ["textbox", "searchbox", "combobox"].includes(role)
+                    );
+                }
+
+                const el = document.elementFromPoint(x, y);
+                let target = el;
+                for (let i = 0; i < 5 && target; i += 1) {
+                    if (isEditable(target)) break;
+                    target = target.parentElement;
+                }
+
+                if (!target || !isEditable(target)) {
+                    const candidates = document.querySelectorAll(
+                        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="image"]), textarea, [contenteditable="true"], [role="textbox"], [role="searchbox"], [role="combobox"]'
+                    );
+                    let nearest = null;
+                    let minDist = Infinity;
+                    for (const candidate of candidates) {
+                        const r = candidate.getBoundingClientRect();
+                        if (r.width === 0 || r.height === 0) continue;
+                        const cx = r.left + r.width / 2;
+                        const cy = r.top + r.height / 2;
+                        const dist = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2);
+                        if (dist < 400 && dist < minDist) {
+                            minDist = dist;
+                            nearest = candidate;
+                        }
+                    }
+                    target = nearest;
+                }
+
+                if (!target || !isEditable(target)) return { success: false };
+                target.focus();
+                if (target.select) target.select();
+                const rect = target.getBoundingClientRect();
+                return {
+                    success: true,
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2,
+                };
+            }
+            """,
+            {"x": x, "y": y},
+        )
+
+        if not focus_result or not focus_result.get("success"):
+            raise ValueError("Unable to focus editable field near target point")
+
+        await asyncio.sleep(0.15)
+        await self.page.keyboard.press("Control+a")
+        await asyncio.sleep(0.05)
+        await self.page.keyboard.type(text, delay=35)
+
+    async def _execute_visual_action(
+        self,
+        action: VisualActionIR,
+        id_map: Dict[int, Dict[str, Any]],
+        trace_entry: Dict[str, Any],
+    ) -> None:
+        x, y, selector = await self._resolve_visual_target(action, id_map, trace_entry)
+        params = action.params or {}
+
+        if action.action_type in {"click", "dblclick", "hover"}:
+            semantic_hint = params.get("semantic_hint")
+            if semantic_hint:
+                resolved = await self._resolve_semantic_click_target(
                     x=x,
                     y=y,
-                    semantic_hint=semantic_hint,
+                    semantic_hint=str(semantic_hint),
                 )
-                if resolved_target:
-                    x, y = resolved_target["x"], resolved_target["y"]
-                    trace_entry["semantic_target"] = semantic_hint
-                    trace_entry["semantic_resolution"] = {
-                        "x": x,
-                        "y": y,
-                        "score": resolved_target.get("score"),
-                    }
-                    logger.info(
-                        "Semantic click disambiguation relocated target to "
-                        f"({x:.1f}, {y:.1f}) for hint '{semantic_hint}'"
-                    )
+                if resolved:
+                    x, y = resolved["x"], resolved["y"]
+                    trace_entry["semantic_resolution"] = resolved
 
             if action.action_type == "click":
                 await self.page.mouse.click(x, y)
             elif action.action_type == "dblclick":
                 await self.page.mouse.dblclick(x, y)
-            elif action.action_type == "hover":
-                await self.page.mouse.move(x, y)
-            elif action.action_type == "type":
-                text = action.params.get("text", "")
-                field_hint = action.params.get("field_hint") if isinstance(action.params, dict) else None
-                if field_hint:
-                    resolved_input = await self._resolve_semantic_input_target(
-                        x=x,
-                        y=y,
-                        field_hint=field_hint,
-                    )
-                    if resolved_input:
-                        x, y = resolved_input["x"], resolved_input["y"]
-                        trace_entry["field_hint"] = field_hint
-                        trace_entry["input_resolution"] = {
-                            "x": x,
-                            "y": y,
-                            "score": resolved_input.get("score"),
-                        }
-                        logger.info(
-                            "Semantic input disambiguation relocated target to "
-                            f"({x:.1f}, {y:.1f}) for hint '{field_hint}'"
-                        )
-                
-                # ═══════════════════════════════════════════
-                # Smart Input Focus (Layer 2) — JS-First
-                # ═══════════════════════════════════════════
-                # CRITICAL: Do NOT mouse.click on icon coordinates — this can
-                # trigger navigation (e.g. Bing search icon) and destroy context.
-                # Instead, use JS to find and focus the nearest input element directly.
-                
-                focus_result = await self.page.evaluate("""
-                    ({x, y}) => {
-                        // 1. Check what's at (x, y)
-                        const el = document.elementFromPoint(x, y);
-                        
-                        // 2. Helper: is this element editable?
-                        function isEditable(e) {
-                            if (!e) return false;
-                            const tag = e.tagName.toLowerCase();
-                            return (
-                                tag === 'input' && !['hidden','submit','button','checkbox','radio','image'].includes(e.type) ||
-                                tag === 'textarea' ||
-                                e.contentEditable === 'true' ||
-                                e.getAttribute('role') === 'textbox' ||
-                                e.getAttribute('role') === 'searchbox' ||
-                                e.getAttribute('role') === 'combobox'
-                            );
-                        }
-                        
-                        // 3. If element at point is editable, focus it directly
-                        if (isEditable(el)) {
-                            el.focus();
-                            el.click();
-                            const r = el.getBoundingClientRect();
-                            return {
-                                success: true,
-                                tag: el.tagName.toLowerCase(),
-                                relocated: false,
-                                x: r.left + r.width / 2,
-                                y: r.top + r.height / 2
-                            };
-                        }
-                        
-                        // 4. Walk up the DOM tree — maybe the input wraps the icon
-                        let parent = el ? el.parentElement : null;
-                        for (let i = 0; i < 5 && parent; i++) {
-                            if (isEditable(parent)) {
-                                parent.focus();
-                                parent.click();
-                                const r = parent.getBoundingClientRect();
-                                return {
-                                    success: true,
-                                    tag: parent.tagName.toLowerCase(),
-                                    relocated: true,
-                                    x: r.left + r.width / 2,
-                                    y: r.top + r.height / 2
-                                };
-                            }
-                            parent = parent.parentElement;
-                        }
-                        
-                        // 5. Search nearby for the nearest editable element
-                        const candidates = document.querySelectorAll(
-                            'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]):not([type="image"]), ' +
-                            'textarea, [contenteditable="true"], [role="textbox"], [role="searchbox"], [role="combobox"]'
-                        );
-                        
-                        let nearest = null;
-                        let minDist = Infinity;
-                        
-                        for (const c of candidates) {
-                            const r = c.getBoundingClientRect();
-                            if (r.width === 0 || r.height === 0) continue;
-                            const cx = r.left + r.width / 2;
-                            const cy = r.top + r.height / 2;
-                            const dist = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2);
-                            if (dist < 400 && dist < minDist) {
-                                minDist = dist;
-                                nearest = c;
-                            }
-                        }
-                        
-                        if (nearest) {
-                            nearest.focus();
-                            nearest.click();
-                            const r = nearest.getBoundingClientRect();
-                            return {
-                                success: true,
-                                tag: nearest.tagName.toLowerCase(),
-                                relocated: true,
-                                x: r.left + r.width / 2,
-                                y: r.top + r.height / 2
-                            };
-                        }
-                        
-                        return { success: false };
-                    }
-                """, {"x": x, "y": y})
-                
-                if focus_result and focus_result.get("success"):
-                    tag = focus_result.get("tag", "?")
-                    if focus_result.get("relocated"):
-                        fx, fy = focus_result["x"], focus_result["y"]
-                        logger.warning(f"🎯 JS direct focus: ({x},{y}) → <{tag}> at ({fx},{fy})")
-                        trace_entry["relocated_to"] = {"x": fx, "y": fy}
-                    else:
-                        logger.info(f"✅ JS direct focus on <{tag}> at ({x},{y})")
-                    
-                    # Small delay for focus events to settle
-                    await asyncio.sleep(0.2)
-                    
-                    # Select all existing text and clear
-                    await self.page.keyboard.press("Control+a")
-                    await asyncio.sleep(0.1)
-                    
-                    # Type the text
-                    await self.page.keyboard.type(text, delay=50)
-                else:
-                    # Absolute fallback: click original coords + type (risky but last resort)
-                    logger.warning(f"⚠️ JS focus failed, falling back to mouse.click({x},{y}) + type")
-                    await self.page.mouse.click(x, y)
-                    await asyncio.sleep(0.3)
-                    await self.page.keyboard.type(text, delay=50)
-
-        # B. DOM Strategy (传统 Selector)
-        elif strategy == "dom":
-            selector = target.value
-            if not selector:
-                raise ValueError("DOM strategy requires a selector value")
-            
-            trace_entry["stable_selector"] = selector
-            locator = self.page.locator(selector).first
-            
-            if action.action_type == "click":
-                await locator.click()
-            elif action.action_type == "dblclick":
-                await locator.dblclick()
-            elif action.action_type == "hover":
-                await locator.hover()
-            elif action.action_type == "type":
-                text = action.params.get("text", "")
-                await locator.fill(text)
-
-        # C. Point Strategy (直接坐标)
-        elif strategy == "point":
-            # value 可能是 "x,y"
-            if target.bbox:
-                # 使用 bbox 中心
-                x = (target.bbox[0] + target.bbox[2]) / 2
-                y = (target.bbox[1] + target.bbox[3]) / 2
-            elif "," in str(target.value):
-                parts = str(target.value).split(",")
-                x, y = float(parts[0]), float(parts[1])
             else:
-                raise ValueError("Point strategy requires bbox or 'x,y' value")
+                await self.page.mouse.move(x, y)
+            return
 
-            trace_entry["coords"] = {"x": x, "y": y}
-            if action.action_type == "click":
-                await self.page.mouse.click(x, y)
-            elif action.action_type == "type":
-                await self.page.mouse.click(x, y)
-                await self.page.keyboard.type(action.params.get("text", ""))
+        if action.action_type == "type":
+            text = str(params.get("text", ""))
+            if not text or text == "<needs_value>":
+                raise ValueError("Type action missing concrete params.text")
 
+            field_hint = params.get("field_hint")
+            if field_hint:
+                resolved = await self._resolve_semantic_input_target(
+                    x=x,
+                    y=y,
+                    field_hint=str(field_hint),
+                )
+                if resolved:
+                    x, y = resolved["x"], resolved["y"]
+                    trace_entry["input_resolution"] = resolved
+
+            if selector:
+                try:
+                    locator = self.page.locator(selector).first
+                    if await locator.count() > 0:
+                        await locator.fill(text)
+                        return
+                except Exception:
+                    logger.debug("Selector-based fill failed; falling back to point typing.")
+
+            await self._focus_and_type_by_point(x, y, text)
+            return
+
+        if action.action_type == "press":
+            await self.page.mouse.click(x, y)
+            key = str(params.get("key", "Enter"))
+            await self.page.keyboard.press(key)
+            return
+
+        raise NotImplementedError(f"Unsupported visual action: {action.action_type}")
+
+    async def _execute_dom_action(
+        self,
+        action: VisualActionIR,
+        trace_entry: Dict[str, Any],
+    ) -> None:
+        selector = getattr(action.target, "value", None)
+        if not selector:
+            raise ValueError("DOM strategy requires selector target.value")
+
+        selector = str(selector)
+        trace_entry["stable_selector"] = selector
+        locator = self.page.locator(selector).first
+        params = action.params or {}
+
+        if action.action_type == "click":
+            await locator.click()
+        elif action.action_type == "dblclick":
+            await locator.dblclick()
+        elif action.action_type == "hover":
+            await locator.hover()
+        elif action.action_type == "type":
+            text = str(params.get("text", ""))
+            if not text or text == "<needs_value>":
+                raise ValueError("Type action missing concrete params.text")
+            await locator.fill(text)
+        elif action.action_type == "press":
+            await locator.press(str(params.get("key", "Enter")))
+        elif action.action_type == "wait":
+            timeout_ms = int(params.get("timeout_ms") or params.get("timeout") or 5000)
+            await locator.wait_for(state="visible", timeout=timeout_ms)
+        elif action.action_type == "assert_visible":
+            if await locator.count() < 1:
+                raise AssertionError(f"Element not found: {selector}")
+            if not await locator.is_visible():
+                raise AssertionError(f"Element not visible: {selector}")
+        elif action.action_type == "assert_text":
+            expected = str(params.get("text") or params.get("expected") or "")
+            actual = await locator.text_content() or ""
+            if expected and expected not in actual:
+                raise AssertionError(f"Expected text '{expected}' not found in '{actual}'")
         else:
-            raise NotImplementedError(f"Strategy {strategy} not supported yet")
+            raise NotImplementedError(f"Unsupported DOM action: {action.action_type}")
 
-    # ═══════════════════════════════════════════
-    # Smart Input Relocation (Layer 2)
-    # ═══════════════════════════════════════════
-    async def _find_input_at_or_near(self, x: float, y: float, radius: int = 200) -> Optional[Dict]:
+    async def _execute_point_action(
+        self,
+        action: VisualActionIR,
+        trace_entry: Dict[str, Any],
+    ) -> None:
+        target = action.target
+        if target and target.bbox:
+            x, y = self._center_from_bbox([float(v) for v in target.bbox])
+        elif target and target.value and "," in str(target.value):
+            raw_x, raw_y = str(target.value).split(",", 1)
+            x, y = float(raw_x), float(raw_y)
+        else:
+            raise ValueError("Point strategy requires bbox or 'x,y' target.value")
+
+        trace_entry["coords"] = {"x": x, "y": y}
+        params = action.params or {}
+
+        if action.action_type == "click":
+            await self.page.mouse.click(x, y)
+        elif action.action_type == "hover":
+            await self.page.mouse.move(x, y)
+        elif action.action_type == "type":
+            text = str(params.get("text", ""))
+            if not text or text == "<needs_value>":
+                raise ValueError("Type action missing concrete params.text")
+            await self._focus_and_type_by_point(x, y, text)
+        else:
+            raise NotImplementedError(f"Unsupported point action: {action.action_type}")
+
+    async def _execute_global_action(self, action: VisualActionIR, trace_entry: Dict[str, Any]) -> None:
+        params = action.params or {}
+        if action.action_type == "navigate":
+            url = params.get("url")
+            if not url:
+                raise ValueError("Navigate action missing params.url")
+            await self.page.goto(str(url), wait_until="domcontentloaded", timeout=30000)
+            trace_entry["url"] = str(url)
+            return
+
+        if action.action_type == "wait":
+            timeout_ms = int(params.get("timeout_ms") or params.get("timeout") or 1000)
+            await asyncio.sleep(max(timeout_ms, 0) / 1000.0)
+            return
+
+        if action.action_type == "scroll":
+            delta_x = int(params.get("delta_x", 0))
+            delta_y = int(params.get("delta_y", 500))
+            await self.page.mouse.wheel(delta_x, delta_y)
+            return
+
+        if action.action_type == "screenshot":
+            await self.page.screenshot(type="png")
+            return
+
+        if action.action_type == "abort":
+            raise RuntimeError("Action aborted by planner")
+
+        if action.action_type == "done":
+            return
+
+        raise NotImplementedError(f"Unsupported global action: {action.action_type}")
+
+    async def execute(self, action: VisualActionIR, id_map: Optional[Dict[int, Dict[str, Any]]] = None) -> bool:
         """
-        检查 (x, y) 处的元素是否为输入框。
-        如果不是，在附近 radius 像素范围内搜索最近的 input/textarea。
-        
-        Returns:
-            {"x": float, "y": float, "tag": str, "relocated": bool} or None
+        Execute a single UI action.
+
+        Returns `True` on success and raises on execution failure.
         """
+        if not action:
+            raise ValueError("Action is required")
+
+        trace_entry: Dict[str, Any] = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "action_type": action.action_type,
+            "target_strategy": getattr(action.target, "strategy", None),
+        }
+
         try:
-            result = await self.page.evaluate("""
-                ({x, y, radius}) => {
-                    const el = document.elementFromPoint(x, y);
-                    if (!el) return null;
-                    
-                    // Check if current element is editable
-                    const tag = el.tagName.toLowerCase();
-                    const isEditable = (
-                        tag === 'input' || 
-                        tag === 'textarea' || 
-                        el.contentEditable === 'true' ||
-                        el.getAttribute('role') === 'textbox' ||
-                        el.getAttribute('role') === 'searchbox'
-                    );
-                    
-                    if (isEditable) {
-                        const rect = el.getBoundingClientRect();
-                        return {
-                            x: rect.left + rect.width / 2,
-                            y: rect.top + rect.height / 2,
-                            tag: tag,
-                            relocated: false
-                        };
-                    }
-                    
-                    // Not editable — search nearby for input/textarea
-                    const candidates = document.querySelectorAll(
-                        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="checkbox"]):not([type="radio"]), ' +
-                        'textarea, ' +
-                        '[contenteditable="true"], ' +
-                        '[role="textbox"], ' +
-                        '[role="searchbox"]'
-                    );
-                    
-                    let nearest = null;
-                    let minDist = Infinity;
-                    
-                    for (const c of candidates) {
-                        const r = c.getBoundingClientRect();
-                        if (r.width === 0 || r.height === 0) continue;
-                        
-                        const cx = r.left + r.width / 2;
-                        const cy = r.top + r.height / 2;
-                        const dist = Math.sqrt((cx - x) ** 2 + (cy - y) ** 2);
-                        
-                        if (dist < radius && dist < minDist) {
-                            minDist = dist;
-                            nearest = {
-                                x: cx,
-                                y: cy,
-                                tag: c.tagName.toLowerCase(),
-                                relocated: true
-                            };
-                        }
-                    }
-                    
-                    return nearest;
-                }
-            """, {"x": x, "y": y, "radius": radius})
-            return result
-        except Exception as e:
-            logger.error(f"Smart input relocation failed: {e}")
-            return None
+            target = action.target
+            strategy = getattr(target, "strategy", None)
+
+            if strategy == "visual":
+                await self._execute_visual_action(action, id_map or {}, trace_entry)
+            elif strategy == "dom":
+                await self._execute_dom_action(action, trace_entry)
+            elif strategy == "point":
+                await self._execute_point_action(action, trace_entry)
+            else:
+                await self._execute_global_action(action, trace_entry)
+
+            trace_entry["status"] = "success"
+            self.trace_logs.append(trace_entry)
+            return True
+        except Exception as exc:
+            trace_entry["status"] = "failed"
+            trace_entry["error"] = str(exc)
+            self.trace_logs.append(trace_entry)
+            raise

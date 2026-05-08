@@ -68,7 +68,7 @@ class VisualActionIR(BaseModel):
         "scroll", "drag_and_drop",
         "wait", "screenshot", "navigate",
         "assert_visible", "assert_text",
-        "done"
+        "done", "abort"
     ] = Field(..., description="动作类型")
     
     target: Optional[VisualLocator] = Field(

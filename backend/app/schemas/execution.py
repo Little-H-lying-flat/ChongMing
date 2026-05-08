@@ -33,7 +33,6 @@ class StepResult:
     duration_ms: float
     screenshot: Optional[str] = None
     error: Optional[str] = None
-    error: Optional[str] = None
     details: Optional[dict] = None
     description: Optional[str] = None
 
@@ -43,8 +42,6 @@ class ExecutionResult:
     tc_id: str
     success: bool
     status: str  # passed, failed, skipped, error
-    step_results: List[StepResult]
-    total_duration_ms: float
     step_results: List[StepResult]
     total_duration_ms: float
     trace_id: str

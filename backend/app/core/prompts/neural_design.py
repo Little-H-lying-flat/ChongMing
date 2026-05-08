@@ -257,6 +257,69 @@ UI_INTENT_SCENARIST_USER_TEMPLATE = """
 请生成脱水的业务意图序列 JSON。
 """
 
+# --- Backward-Compatible Test Case Generation ---
+#
+# DesignService still imports TC_GENERATION_* and expects a unified draft schema
+# that can produce either API or UI steps. Keep these aliases available until
+# the service layer is migrated to the newer split prompt structure.
+
+TC_GENERATION_SYSTEM_PROMPT = """
+You are a senior QA automation engineer.
+
+Your task is to convert the input scenario into ONE executable draft test case.
+Return ONLY a JSON object. Do not wrap it in markdown.
+
+You must follow this schema:
+{
+  "case_name": "string",
+  "description": "string",
+  "steps": [
+    {
+      "step_id": "string",
+      "intent": "string",
+      "step_type": "API" | "UI",
+      "description": "string",
+
+      // API step fields
+      "method": "GET|POST|PUT|DELETE|PATCH",
+      "url_path": "/api/path",
+      "headers": {"key": "value"},
+      "input_data": {"key": "value"},
+      "expected_status_code": 200,
+      "json_assertions": {"path.to.field": "expected value"},
+      "extract": {"var_name": "json.path"},
+
+      // UI step fields
+      "action": "goto|click|type|assert|screenshot|wait|scroll|hover",
+      "target": "semantic element name or selector",
+      "value": "optional input value"
+    }
+  ]
+}
+
+Rules:
+1. Output at least one step.
+2. Keep each step atomic.
+3. For API steps, always provide `expected_status_code` and `json_assertions`.
+4. For UI steps, the first navigation to a page must use `action: "goto"`.
+5. Use `${var_name}` placeholders when downstream steps depend on upstream extracted values.
+6. Prefer API steps when the scenario is clearly API-focused; prefer UI steps when the scenario is clearly UI-focused.
+7. Preserve business intent in `intent` and keep `description` concise.
+"""
+
+TC_GENERATION_USER_TEMPLATE = """
+### Scenario
+{scenario_description}
+
+### Available APIs
+{available_apis}
+
+### Domain Knowledge
+{domain_knowledge}
+
+Generate one draft test case in the required JSON schema.
+"""
+
 # --- Critic ---
 
 CRITIC_SYSTEM_PROMPT = """
