@@ -601,26 +601,29 @@ export default function NeuralDesignPage() {
                                         })()}
                                         <AccordionContent className="px-4 pb-4 pt-0">
                                             <div className="pl-4 border-l-2 border-slate-800 ml-1 space-y-2 mt-2">
-                                                {(scenario.steps || []).map((step, idx) => (
-                                                    <div key={idx} className="flex gap-3 text-sm text-slate-400 items-start">
-                                                        <span className="font-mono text-xs text-slate-600 select-none mt-0.5">
-                                                            {(idx + 1).toString().padStart(2, '0')}
-                                                        </span>
-                                                        <div className="flex-1">
-                                                            {step.step_type && (
-                                                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mr-2 ${step.step_type === 'API'
-                                                                    ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                                                                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                                                    }`}>
-                                                                    {step.step_type === 'API' ? '🌐 API' : '👁️ UI'}
-                                                                </span>
-                                                            )}
-                                                            <span>
-                                                                {step.description || step.name || (typeof step === 'string' ? step : JSON.stringify(step))}
+                                                {(scenario.steps || []).map((step, idx) => {
+                                                    const stepObject = typeof step === 'string' ? null : step;
+                                                    return (
+                                                        <div key={idx} className="flex gap-3 text-sm text-slate-400 items-start">
+                                                            <span className="font-mono text-xs text-slate-600 select-none mt-0.5">
+                                                                {(idx + 1).toString().padStart(2, '0')}
                                                             </span>
+                                                            <div className="flex-1">
+                                                                {stepObject?.step_type && (
+                                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium mr-2 ${stepObject.step_type === 'API'
+                                                                        ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                                                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                                                        }`}>
+                                                                        {stepObject.step_type === 'API' ? '🌐 API' : '👁️ UI'}
+                                                                    </span>
+                                                                )}
+                                                                <span>
+                                                                    {stepObject?.description || (typeof step === 'string' ? step : JSON.stringify(step))}
+                                                                </span>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         </AccordionContent>
                                     </AccordionItem>

@@ -501,7 +501,7 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
                                                                                         )}
                                                                                         <div className="bg-[#0D1117] p-3 rounded-md border border-slate-800 overflow-x-auto">
                                                                                             <pre className="text-[11px] font-mono text-slate-200 leading-relaxed">
-                                                                                                {details.response && (typeof details.response.body === 'object' ? JSON.stringify(details.response.body, null, 2) : details.response.body)}
+                                                                                                {details.response ? (typeof details.response.body === 'string' ? details.response.body : JSON.stringify(details.response.body, null, 2)) : ""}
                                                                                             </pre>
                                                                                         </div>
                                                                                     </TabsContent>
