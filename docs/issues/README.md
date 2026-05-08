@@ -1,40 +1,67 @@
-# issues 分册索引（来源于《模块全景说明书》）
+# 模块问题与技术债分册索引
 
-## 说明
-- 本目录为“模块问题与技术债分册”，对应主文档 [模块全景说明书](../模块全景说明书.md) 第 5、6 章。
-- 主文档负责“全局优先级与治理路线”，本目录负责“模块级问题拆解与跟踪”。
+`docs/issues/` 保存重明平台的模块级问题、技术债、测试计划和治理任务。这里用于跟踪“哪些模块还有风险”和“下一步怎么收敛”，不是运行时状态记录。
 
 ## 使用方式
-1. 在主文档确认模块定位与优先级（P0/P1/P2）。
-2. 在本目录对应 issue 分册中拆解任务、责任人、里程碑。
-3. 关闭 issue 时，反向更新主文档风险状态。
 
-## 分册与总览章节映射（简版摘要）
+1. 先在根目录 `README.md` 和 `docs/diagrams/` 确认模块边界和调用链。
+2. 再进入对应 issue 分册查看问题列表、优先级、验收指标和治理建议。
+3. 关闭或新增问题时，同步更新本索引和相关设计/架构图。
 
-| Issue 文件 | 对应模块 | 对应总览章节 | 简版摘要 |
-|---|---|---|---|
-| `00_任务总览.md` | 全模块 | 5/6 | 全局任务池与阶段目标。 |
-| `01_神经设计层_issues.md` | neural_design | 3.3 | 需求解析与场景生成相关问题。 |
-| `02_右瞳引擎_issues.md` | right_pupil | 3.4 | UI 自动化稳定性与定位策略问题。 |
-| `03_左瞳引擎_issues.md` | left_pupil | 3.4 | API 链路、依赖规划、断言问题。 |
-| `04_涡轮引擎_issues.md` | turbo | 3.4 | 性能压测脚本与结果可靠性问题。 |
-| `05_凤凰涅槃层_issues.md` | phoenix | 3.3 | 脚本编译与自愈闭环问题。 |
-| `06_缺陷分析智能体_issues.md` | smart_ops | 3.3 | 根因分析与知识检索问题。 |
-| `07_自愈中心_issues.md` | smart_ops/self-heal | 3.3/5 | 自愈策略有效性与边界问题。 |
-| `08_智能等待机制_issues.md` | vision | 3.4 | 等待稳定性与误判问题。 |
-| `09_VRT视觉回归_issues.md` | vision/vrt | 3.4/5 | 视觉对比噪声与误报问题。 |
-| `10_Celery任务调度_issues.md` | core/tasks | 3.6 | 异步任务语义与进度一致性问题。 |
-| `11_LangGraph编排_issues.md` | engines/services | 3.3/3.4 | 编排可靠性与可解释性问题。 |
-| `12_前端层_issues.md` | frontend | 3.7 | 页面交互、映射和体验问题。 |
-| `13_API网关层_issues.md` | api/router | 3.1/3.2 | 路由治理、契约一致性问题。 |
-| `14_报告_数据_环境_issues.md` | report/data/env | 3.3/3.7 | 报告、数据、环境相关问题。 |
-| `15_神经缓存层_issues.md` | core/cache | 3.6 | 缓存一致性与性能问题。 |
+## 模块到代码路径映射
 
-## 优先级对齐规则
-- High：必须映射到主文档 P0，且要求明确验收指标。
-- Medium：默认映射到 P1，除非存在跨模块阻断风险。
-- Low：进入 P2 或长期治理，要求有自动化防回归策略。
+| 模块 | 主要代码路径 | Issue 分册 |
+|---|---|---|
+| 全局任务池 | 全仓库 | `00_任务总览.md` |
+| Neural Design | `backend/app/api/v1/endpoints/design.py`、`backend/app/services/neural_design/`、`backend/app/tasks/design_tasks.py` | `01_神经设计层_issues.md` |
+| Right Pupil / UI | `backend/app/engines/right_pupil/`、`backend/app/engines/vision/`、`frontend/src/app/visual-ui/` | `02_右瞳引擎_issues.md` |
+| Left Pupil / API | `backend/app/engines/left_pupil/`、`backend/app/services/left_pupil/`、`frontend/src/app/api-auto/` | `03_左瞳引擎_issues.md` |
+| Turbo | `backend/app/api/v1/endpoints/turbo.py`、`backend/app/engines/turbo/`、`deploy/locust/` | `04_涡轮引擎_issues.md` |
+| Phoenix | `backend/app/api/v1/endpoints/phoenix.py`、`backend/app/services/phoenix/`、`backend/app/tasks/phoenix_tasks.py` | `05_凤凰涅槃层_issues.md` |
+| Smart Ops / 缺陷分析 | `backend/app/api/v1/endpoints/smart_ops.py`、`backend/app/services/smart_ops/` | `06_缺陷分析智能体_issues.md` |
+| 自愈中心 | `backend/app/engines/right_pupil/agents/healer.py`、`backend/app/engines/left_pupil/agents/api_healer.py` | `07_自愈中心_issues.md` |
+| 智能等待 | `backend/app/engines/vision/smart_waiter.py` | `08_智能等待机制_issues.md` |
+| VRT 视觉回归 | `backend/app/services/phoenix/regression/visual_comparator.py` | `09_VRT视觉回归_issues.md` |
+| Celery 任务调度 | `backend/app/worker.py`、`backend/app/tasks/`、`backend/app/api/v1/endpoints/tasks.py` | `10_Celery任务调度_issues.md` |
+| LangGraph/编排 | `backend/app/services/neural_design/graph.py`、`backend/app/engines/*/graph.py` | `11_LangGraph编排_issues.md` |
+| 前端层 | `frontend/src/app/`、`frontend/src/components/`、`frontend/src/services/` | `12_前端层_issues.md` |
+| API 网关层 | `backend/app/main.py`、`backend/app/api/v1/router.py`、`backend/app/api/v1/endpoints/` | `13_API网关层_issues.md` |
+| 报告/数据/环境 | `backend/app/services/execution_service.py`、`backend/app/services/data_*`、`backend/app/services/environment_manager.py` | `14_报告_数据_环境_issues.md` |
+| 缓存/记忆 | `backend/app/core/memory_base.py`、`backend/app/services/left_pupil/context_memory.py`、`backend/app/core/chroma_client.py` | `15_神经缓存层_issues.md` |
+
+## 分册清单
+
+| 文件 | 说明 |
+|---|---|
+| `00_任务总览.md` | 全局任务池和阶段目标 |
+| `01_神经设计层_issues.md` | 需求解析、场景生成、评审链路问题 |
+| `02_右瞳引擎_issues.md` | UI 自动化稳定性、视觉定位、自愈问题 |
+| `03_左瞳引擎_issues.md` | API 链路、依赖规划、断言、变量提取问题 |
+| `04_涡轮引擎_issues.md` | 压测脚本、数据合成、实时统计问题 |
+| `05_凤凰涅槃层_issues.md` | 轨迹编译、脚本固化、回归治理问题 |
+| `06_缺陷分析智能体_issues.md` | 根因分析、相似缺陷检索、修复建议问题 |
+| `07_自愈中心_issues.md` | UI/API 自愈策略、失败兜底和边界问题 |
+| `08_智能等待机制_issues.md` | 页面稳定检测、等待条件、误判问题 |
+| `09_VRT视觉回归_issues.md` | 视觉对比、动态噪声、误报控制问题 |
+| `10_Celery任务调度_issues.md` | 队列、worker、任务进度和状态一致性问题 |
+| `11_LangGraph编排_issues.md` | 图编排、可解释性、失败恢复问题 |
+| `12_前端层_issues.md` | 页面交互、服务层契约、状态管理问题 |
+| `13_API网关层_issues.md` | 路由治理、接口契约、错误语义问题 |
+| `14_报告_数据_环境_issues.md` | 执行报告、测试数据、环境变量问题 |
+| `15_神经缓存层_issues.md` | 缓存一致性、RAG/记忆层、检索质量问题 |
+| `测试用例管理_测试计划.md` | 测试用例管理模块测试计划 |
+
+## 优先级规则
+
+| 优先级 | 含义 | 要求 |
+|---|---|---|
+| High | 阻断核心链路或存在高风险误判 | 必须有复现步骤、影响范围、验收指标 |
+| Medium | 影响模块稳定性、体验或可维护性 | 应说明触发条件和推荐修复方向 |
+| Low | 长期治理、体验优化、文档补齐 | 应有防回归或后续检查方式 |
 
 ## 维护规则
-- 每个 issue 分册顶部建议增加“来源总览章节”与“最后同步日期”。
-- 涉及接口路径、模块边界变化时，同步更新 [模块全景说明书](../模块全景说明书.md) 附录矩阵。
+
+- 不把临时运行日志直接写入 issue 分册；运行状态以数据库、日志和 Git 历史为准。
+- 每个 issue 应尽量包含：现象、影响、代码路径、复现方式、期望结果、验收标准。
+- 修改 API 路径、队列名、服务边界或调用链时，同步更新 `docs/diagrams/` 和相关 README。
+- 如果 issue 已被代码修复，不保留过期 workaround；改为记录最终行为和验证方式。

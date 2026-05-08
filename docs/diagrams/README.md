@@ -1,25 +1,98 @@
-# Architecture Diagrams (Mermaid)
+# Architecture Diagrams
 
-This folder keeps high-signal architecture diagrams that should be updated when flow logic changes.
+`docs/diagrams/` 保存重明平台的 Mermaid 架构图和时序图。这里的图需要和真实代码路径、API 前缀、Celery 调度和引擎调用链保持一致。
 
-## Files
+## 图谱清单
 
-- `module-dependency.mmd`: module-level dependency map across frontend, API, services, tasks, engines, and infra.
-- `sequence-testcase-execution-result.mmd`: end-to-end runtime flow from test case creation to execution result query.
-- `sequence-health-omniparser.mmd`: aggregated health-check path and OmniParser probe behavior.
-- `sequence-neural-design-to-execution.mmd`: Flow 1 design analysis/generation to Flow 3 execution handoff.
-- `sequence-dispatcher-branching.mmd`: dispatcher routing with UI/API branch execution and persistence.
-- `sequence-phoenix-compile-heal.mmd`: Phoenix trace compile + script healing workflow.
-- `sequence-exception-timeout.mmd`: timeout branch from step execution to failed final status.
-- `sequence-exception-assertion-failure.mmd`: assertion failure branch and result persistence.
-- `sequence-exception-self-heal-fallback.mmd`: UI self-healing failure fallback/abort branch.
+| 文件 | 类型 | 覆盖范围 | 主要代码路径 |
+|---|---|---|---|
+| `module-dependency.mmd` | 模块依赖图 | 前端、API、服务层、任务层、引擎层、基础设施和外部系统 | `frontend/src`、`backend/app`、`deploy/docker-compose.yml` |
+| `sequence-testcase-execution-result.mmd` | 时序图 | 用例选择、执行创建、Celery/本地执行、Dispatcher 分支、结果持久化、前端查询 | `endpoints/executions.py`、`tasks/execution_tasks.py`、`services/execution_service.py` |
+| `sequence-health-omniparser.mmd` | 时序图 | 健康检查与 OmniParser 探针 | `endpoints/health.py`、`services/omniparser_health.py` |
+| `sequence-neural-design-to-execution.mmd` | 时序图 | 需求解析生成场景并交给执行链路 | `endpoints/design.py`、`services/neural_design/`、`tasks/design_tasks.py` |
+| `sequence-dispatcher-branching.mmd` | 时序图 | Dispatcher 对 UI/API/HYBRID 步骤的分支执行 | `engines/dispatcher.py`、`engines/right_pupil/`、`engines/left_pupil/` |
+| `sequence-phoenix-compile-heal.mmd` | 时序图 | Phoenix 轨迹编译、脚本生成、自愈和回归治理 | `endpoints/phoenix.py`、`services/phoenix/`、`tasks/phoenix_tasks.py` |
+| `sequence-exception-timeout.mmd` | 异常时序图 | 步骤执行超时到失败状态落库 | `tasks/execution_tasks.py`、`services/execution_service.py` |
+| `sequence-exception-assertion-failure.mmd` | 异常时序图 | API 断言失败、错误信息和结果持久化 | `engines/left_pupil/`、`services/left_pupil/` |
+| `sequence-exception-self-heal-fallback.mmd` | 异常时序图 | UI 自愈失败后的兜底和终止 | `engines/right_pupil/agents/healer.py`、`engines/right_pupil/` |
 
-## Maintenance rule
+## 当前主调用链
 
-When changing endpoint orchestration, Celery dispatching, engine routing, or health probe logic:
+### 执行调度
 
-1. Update the impacted `.mmd` file in this folder in the same PR.
-2. Keep node names aligned with actual module/file names.
-3. Ensure sequence steps still match real API contracts.
-4. Run `python scripts/check_mermaid_diagrams.py` before pushing.
-5. CI `Backend CI` also runs Mermaid guard and will fail on invalid diagram syntax/structure.
+```text
+frontend/src/app/executions/page.tsx
+  -> POST /api/v1/executions
+  -> ExecutionService.create_execution
+  -> execute_test_cases.delay 或 BackgroundTasks 本地执行
+  -> Dispatcher.execute
+  -> RightPupilEngine 或 LeftPupilEngine
+  -> ExecutionService.create_step_result / update_execution_status
+  -> GET /api/v1/executions/{id}/result
+```
+
+### 需求解析
+
+```text
+frontend/src/app/design/page.tsx
+  -> /api/v1/design/*
+  -> DesignService / analyze_requirement_task
+  -> AI Client + RAG Retriever
+  -> scenarios / refined test cases
+  -> Visual UI 导入或 /executions dynamic_payload
+```
+
+### 视觉 UI
+
+```text
+frontend/src/app/visual-ui/*
+  -> /api/v1/visual-ui/cases
+  -> VisualUIService
+  -> /api/v1/executions
+  -> RightPupilEngine
+  -> Vision / OmniParser / Playwright
+```
+
+### Turbo
+
+```text
+frontend/src/app/performance 或 frontend/src/app/turbo
+  -> /api/v1/turbo/run
+  -> TurboEngine
+  -> Locust runner
+  -> /api/v1/turbo/stats/{test_id}
+```
+
+## 维护规则
+
+当以下内容变化时，必须同步更新对应 `.mmd`：
+
+1. 新增、删除或重命名 API 前缀。
+2. `ExecutionService`、Celery 调度或 `execute_test_cases` 的流程变化。
+3. `Dispatcher`、Right Pupil、Left Pupil、Turbo、Phoenix 的调用链变化。
+4. 健康检查、OmniParser 探针、向量库或外部服务依赖变化。
+5. 前端页面到后端端点的映射变化。
+
+## 校验
+
+在仓库根目录运行：
+
+```bash
+python scripts/check_mermaid_diagrams.py
+```
+
+校验脚本会检查：
+
+- Mermaid 文件是否为 UTF-8。
+- 首行是否为支持的 Mermaid 图类型。
+- 流程图是否有边。
+- 时序图是否有消息箭头。
+- `subgraph` / `alt` / `loop` 等块是否闭合。
+- 括号是否配平。
+
+## Mermaid 编写约定
+
+- 节点名尽量使用真实模块名或文件名，例如 `ExecutionService`、`execute_test_cases`、`RightPupilEngine`。
+- 不在图里放过长业务文案，详细解释写到 README 或设计文档。
+- 外部系统统一放在 Infra/External 区域。
+- 如果图与代码不一致，以代码为准并立即修正文档。

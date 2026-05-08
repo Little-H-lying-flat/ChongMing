@@ -1,62 +1,102 @@
 sequenceDiagram
     autonumber
     actor U as User
-    participant FE as Frontend (Next.js)
-    participant API_TC as /api/v1/test-cases
-    participant API_EX as /api/v1/executions
+    participant FE as Frontend executions page
+    participant API_EX as POST/GET /api/v1/executions
+    participant API_TC as GET /api/v1/test-cases
     participant SVC as ExecutionService
+    participant ENV as EnvironmentManager
     participant DB as Database
-    participant C as Celery Broker/Redis
-    participant W as Celery Worker
+    participant C as Celery or BackgroundTasks
     participant T as execute_test_cases
+    participant LDR as TestCaseLoader or TestCase table
     participant D as Dispatcher
     participant RP as RightPupilEngine
     participant LP as LeftPupilEngine
     participant OP as OmniParser
-    participant SVC2 as ExecutionService
+    participant TARGET as Target Web/API
+    participant FS as data/screenshots
 
-    U->>FE: Create test case
-    FE->>API_TC: POST /test-cases
-    API_TC->>DB: insert TestCase
-    DB-->>API_TC: TC_ID
-    API_TC-->>FE: 201 Created
+    U->>FE: Open executions dashboard
+    FE->>API_TC: GET /test-cases?page=1&page_size=100
+    API_TC->>DB: Select test cases
+    DB-->>API_TC: TestCase list
+    API_TC-->>FE: Available tc_ids
 
-    U->>FE: Run regression (select tc_ids)
+    U->>FE: Select tc_ids, env, parallel, max_workers
     FE->>API_EX: POST /executions
-    API_EX->>SVC: create_execution(PENDING)
-    SVC->>DB: insert Execution
-    API_EX->>C: publish execute_test_cases task
-    API_EX-->>FE: 202 + execution_id
+    API_EX->>ENV: Resolve required variables if dynamic_payload exists
+    ENV->>DB: Load selected or default environment
+    DB-->>ENV: Environment variables and base_url
+    ENV-->>API_EX: Context or missing variable list
 
-    loop Poll progress
-        FE->>API_EX: GET /executions/{execution_id}
-        API_EX->>SVC: get_execution_status_dict
-        SVC->>DB: select Execution
-        DB-->>API_EX: status/progress
-        API_EX-->>FE: current status
+    alt Missing required variables
+        API_EX-->>FE: 422 missing_execution_variables
+    else Request accepted
+        API_EX->>SVC: create_execution(execution_id, tc_ids, config)
+        SVC->>DB: Insert Execution status PENDING
+        DB-->>SVC: Created
+        alt Active Celery workers
+            API_EX->>C: execute_test_cases.delay(execution_id, tc_ids, config, dynamic_payload)
+        else No active worker
+            API_EX->>C: BackgroundTasks add local execute_test_cases.run
+        end
+        API_EX-->>FE: 202 execution_id and dashboard_url
     end
 
-    C-->>W: task delivery
-    W->>T: execute_test_cases(execution_id, tc_ids)
-    T->>DB: load test cases / env context
-    T->>D: execute(tc_ir, execution_id)
-
-    alt UI/HYBRID step
-        D->>RP: execute_step(...)
-        RP->>OP: POST /parse (screenshot)
-        OP-->>RP: layout/elements
-        RP-->>D: step result (+ screenshots)
-    else API step
-        D->>LP: execute(api_ir, context)
-        LP->>LP: assert + extract variables
-        LP-->>D: step result
+    loop Poll list and stats
+        FE->>API_EX: GET /executions?skip=&limit= and GET /executions/stats
+        API_EX->>SVC: list_executions and get_execution_stats
+        SVC->>DB: Select executions and aggregate stats
+        DB-->>SVC: Rows and stats
+        SVC-->>API_EX: Status page data
+        API_EX-->>FE: Current status summary
     end
 
-    T->>SVC2: create_step_result(...)
-    SVC2->>DB: insert ExecutionStep
-    SVC2->>DB: update Execution final status
+    C-->>T: Run task
+    T->>SVC: update_execution_status(RUNNING)
+    SVC->>DB: Update Execution
+    T->>ENV: Load env context
+    ENV->>DB: Select environment
+    DB-->>ENV: Variables and base_url
+    ENV-->>T: initial_context
 
-    FE->>API_EX: GET /executions/{id}/result
-    API_EX->>SVC2: get_execution_result_dict
-    SVC2->>DB: aggregate execution + steps
-    API_EX-->>FE: summary/cases/report_url
+    loop For each tc_id
+        T->>LDR: Load TCIR from dynamic_payload, DB, or legacy loader
+        LDR->>DB: Select TestCase when needed
+        DB-->>LDR: TestCase record
+        LDR-->>T: TCIR
+        T->>D: execute(tc_ir, execution_id, initial_context)
+
+        alt UI or HYBRID step
+            D->>RP: execute UI step
+            RP->>TARGET: Open page, interact, capture screenshot
+            RP->>OP: Parse screenshot or labeled image
+            OP-->>RP: Elements and visual layout
+            RP-->>D: Step result with screenshots and trace
+        else API step
+            D->>LP: execute API step
+            LP->>TARGET: HTTP request
+            TARGET-->>LP: HTTP response
+            LP->>LP: Assert response and extract variables
+            LP-->>D: Step result and variable_trace
+        end
+
+        D-->>T: Test case result
+        T->>SVC: create_step_result(execution_id, tc_id, status, result)
+        SVC->>FS: Offload large base64 screenshots
+        SVC->>DB: Insert ExecutionStep
+        DB-->>SVC: Persisted
+    end
+
+    T->>SVC: update_execution_status(PASSED or FAILED or ERROR)
+    SVC->>DB: Update final summary, end_time, duration
+    DB-->>SVC: Updated
+
+    U->>FE: Open result drawer
+    FE->>API_EX: GET /executions/{execution_id}/result
+    API_EX->>SVC: get_execution_result_dict
+    SVC->>DB: Load Execution and ExecutionStep rows
+    SVC->>FS: Resolve local screenshot markers when needed
+    SVC-->>API_EX: Aggregated result
+    API_EX-->>FE: Summary, cases, steps, report_url

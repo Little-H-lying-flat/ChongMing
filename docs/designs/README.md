@@ -1,37 +1,59 @@
-# designs 分册索引（来源于《模块全景说明书》）
+# 详细设计分册索引
 
-## 说明
-- 本目录为“详细设计分册”，对应主文档 [模块全景说明书](../模块全景说明书.md)。
-- 总体口径以主文档为准；本目录聚焦“单模块深挖设计”。
-- 若主文档与分册描述冲突，优先修正分册并回链主文档章节。
+`docs/designs/` 保存重明平台的模块级详细设计材料。这里的文档用于解释模块边界、设计意图、关键流程和治理规则；代码事实以 `backend/`、`frontend/`、`deploy/` 的当前实现为准。
 
-## 建议阅读顺序
-1. 先读 [模块全景说明书](../模块全景说明书.md)
-2. 再按领域进入本目录对应设计文档
+## 推荐阅读顺序
 
-## 分册与总览章节映射（简版摘要）
+1. 先读仓库根目录 [`README.md`](../../README.md)，了解整体架构和核心调用链。
+2. 再读 [`docs/diagrams/README.md`](../diagrams/README.md)，查看当前 Mermaid 架构图和时序图。
+3. 按模块阅读本目录的详细设计文档。
+4. 如需看问题和技术债，进入 [`docs/issues/README.md`](../issues/README.md)。
 
-| 分册文件 | 对应总览章节 | 简版摘要 |
+## 当前代码模块映射
+
+| 领域 | 主要代码路径 | 设计分册 |
 |---|---|---|
-| `重明架构白皮书.txt` | 2. 系统模块总览图 | 全局分层与能力边界总览。 |
-| `重明技术规格书.txt` | 3. 模块详解（总） | 平台级规格、能力清单、关键约束。 |
-| `重明_详细设计说明书_API网关层.txt` | 3.1 / 3.2 | FastAPI 入口、路由聚合、接口治理。 |
-| `重明_详细设计说明书_神经设计层.txt` | 3.3（neural_design） | PRD 到测试意图生成与编排。 |
-| `重明_详细设计说明书_右瞳引擎.txt` | 3.4（right_pupil） | UI 自动化执行与多智能体协同。 |
-| `重明_详细设计说明书_左瞳引擎.txt` | 3.4（left_pupil） | API 自动化执行、依赖规划与断言。 |
-| `重明_详细设计说明书_双模态执行.txt` | 3.4（dispatcher/runner） | UI/API 执行协同与调度策略。 |
-| `重明_详细设计说明书_涡轮引擎.txt` | 3.4（turbo） | 性能压测脚本生成与执行。 |
-| `重明_详细设计说明书_凤凰涅槃层.txt` | 3.3（phoenix） | 轨迹编译、脚本演进、回归治理。 |
-| `重明_详细设计说明书_缺陷分析智能体.txt` | 3.3（smart_ops） | 缺陷根因分析与知识检索。 |
-| `重明_详细设计说明书_自愈中心模块.txt` | 3.3/5 | 缺陷自愈流程与策略。 |
-| `重明_详细设计说明书_智能等待机制.txt` | 3.4（vision） | 智能等待、稳定性控制。 |
-| `重明_详细设计说明书_VRT视觉回归测试.txt` | 3.4/5 | 视觉回归比对与噪声处理。 |
-| `重明_详细设计说明书_Celery任务调度.txt` | 3.6 | 异步执行、队列、进度跟踪。 |
-| `重明_详细设计说明书_环境管理模块.txt` | 3.3/7 | 测试环境配置与变量注入。 |
-| `重明_详细设计说明书_数据工厂模块.txt` | 3.3/7 | 测试数据生成与管理。 |
-| `重明_详细设计说明书_前端层.txt` | 3.7 | 页面模块与后端接口映射。 |
-| `重明_详细设计说明书_报告可视化模块.txt` | 3.7/7 | 执行结果可视化与看板。 |
+| API 网关层 | `backend/app/main.py`、`backend/app/api/v1/router.py`、`backend/app/api/v1/endpoints/` | `重明_详细设计说明书_API网关层.txt` |
+| Neural Design | `backend/app/api/v1/endpoints/design.py`、`backend/app/services/neural_design/`、`backend/app/tasks/design_tasks.py` | `重明_详细设计说明书_神经设计层.txt` |
+| Right Pupil / UI | `backend/app/engines/right_pupil/`、`backend/app/engines/vision/`、`backend/app/api/v1/endpoints/visual_ui.py` | `重明_详细设计说明书_右瞳引擎.txt`、`重明_详细设计说明书_智能等待机制.txt` |
+| Left Pupil / API | `backend/app/engines/left_pupil/`、`backend/app/services/left_pupil/`、`backend/app/api/v1/endpoints/api_engine.py`、`backend/app/api/v1/endpoints/left_pupil.py` | `重明_详细设计说明书_左瞳引擎.txt` |
+| 双模态调度 | `backend/app/engines/dispatcher.py`、`backend/app/tasks/execution_tasks.py`、`backend/app/services/execution_service.py` | `重明_详细设计说明书_双模态执行.txt`、`重明_详细设计说明书_Celery任务调度.txt` |
+| Turbo 性能压测 | `backend/app/api/v1/endpoints/turbo.py`、`backend/app/engines/turbo/`、`deploy/locust/` | `重明_详细设计说明书_涡轮引擎.txt` |
+| Phoenix | `backend/app/api/v1/endpoints/phoenix.py`、`backend/app/services/phoenix/`、`backend/app/tasks/phoenix_tasks.py` | `重明_详细设计说明书_凤凰涅槃层.txt` |
+| Smart Ops / 缺陷分析 | `backend/app/api/v1/endpoints/smart_ops.py`、`backend/app/services/smart_ops/` | `重明_详细设计说明书_缺陷分析智能体.txt`、`重明_详细设计说明书_自愈中心模块.txt` |
+| VRT 视觉回归 | `backend/app/services/phoenix/regression/visual_comparator.py`、`backend/app/engines/vision/` | `重明_详细设计说明书_VRT视觉回归测试.txt` |
+| 环境管理 | `backend/app/api/v1/endpoints/environments.py`、`backend/app/services/environment_manager.py` | `重明_详细设计说明书_环境管理模块.txt` |
+| 数据工厂 | `backend/app/api/v1/endpoints/data_factory.py`、`backend/app/services/data_factory.py`、`backend/app/services/data_pool.py`、`backend/app/services/data_template.py` | `重明_详细设计说明书_数据工厂模块.txt` |
+| 前端层 | `frontend/src/app/`、`frontend/src/components/`、`frontend/src/services/` | `重明_详细设计说明书_前端层.txt` |
+| 报告和可视化 | `frontend/src/app/executions/`、`frontend/src/components/ui/execution-drawer.tsx`、`backend/app/services/execution_service.py` | `重明_详细设计说明书_报告可视化模块.txt` |
+
+## 分册清单
+
+| 文件 | 说明 |
+|---|---|
+| `重明架构白皮书.txt` | 全局分层、能力边界和系统视角 |
+| `重明技术规格书.txt` | 平台级规格、能力清单、约束 |
+| `重明_详细设计说明书_API网关层.txt` | FastAPI 入口、路由聚合、接口治理 |
+| `重明_详细设计说明书_神经设计层.txt` | PRD/需求解析、场景生成、评审和编排 |
+| `重明_详细设计说明书_右瞳引擎.txt` | UI 自动化、视觉定位、多智能体协同 |
+| `重明_详细设计说明书_左瞳引擎.txt` | API 自动化、依赖规划、断言和变量提取 |
+| `重明_详细设计说明书_双模态执行.txt` | UI/API/HYBRID 执行分支和 Dispatcher 策略 |
+| `重明_详细设计说明书_涡轮引擎.txt` | 性能压测脚本生成、数据合成和 Locust 执行 |
+| `重明_详细设计说明书_凤凰涅槃层.txt` | 执行轨迹编译、脚本固化、回归治理 |
+| `重明_详细设计说明书_缺陷分析智能体.txt` | 根因分析、相似缺陷检索、修复建议 |
+| `重明_详细设计说明书_自愈中心模块.txt` | 自愈流程、策略边界和失败兜底 |
+| `重明_详细设计说明书_智能等待机制.txt` | 页面稳定检测、视觉等待和误判控制 |
+| `重明_详细设计说明书_VRT视觉回归测试.txt` | 视觉回归比对、动态噪声处理 |
+| `重明_详细设计说明书_Celery任务调度.txt` | 队列、worker、进度跟踪和定时任务 |
+| `重明_详细设计说明书_环境管理模块.txt` | 环境变量、base URL、加密变量 |
+| `重明_详细设计说明书_数据工厂模块.txt` | 测试数据模板、数据池、合成数据 |
+| `重明_详细设计说明书_前端层.txt` | 页面模块、服务层和后端接口映射 |
+| `重明_详细设计说明书_报告可视化模块.txt` | 执行结果展示、报告和看板 |
+| `测试用例管理模块实施说明.md` | 测试用例管理实现说明 |
 
 ## 维护规则
-- 新增或重命名分册时，必须更新本索引表。
-- 涉及模块边界/接口前缀变化时，先更新 [模块全景说明书](../模块全景说明书.md)，再同步分册。
+
+- 设计分册说明“为什么这样设计”，README 和代码说明“当前实际是什么”。
+- 新增、删除、重命名模块时，同步更新本索引、根 README 和对应 Mermaid 图。
+- 如果分册描述与代码冲突，优先核对当前代码，再修正文档。
+- 变更调用链时，同步更新 `docs/diagrams/*.mmd`，并运行 `python scripts/check_mermaid_diagrams.py`。
