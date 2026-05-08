@@ -45,6 +45,8 @@ output/
 *.bak
 *.swp
 local_runtime/
+backend/local_runtime/
+backend/data/screenshots/
 backend/turbo_workspace/
 backend/tests/e2e/output.txt
 backend/stdout-*.txt
@@ -59,14 +61,35 @@ backend/crash_logs*.txt
 backend/exec_*.txt
 backend/omnilogs.txt
 backend/err.txt
+frontend/ts_errors.txt
+frontend/*.log
+deploy/logs*.txt
+deploy/*debug*.txt
+deploy/milvus_debug.txt
 
 # Databases / caches / runtime state
 *.db
+*.db-journal
+*.sqlite
+*.sqlite3
 backend/.cache/
+backend/mem0_qdrant_db/
 backend/mem0_qdrant_db_test/
 mem0_qdrant_db_test/
 deploy/volumes/
+turbo_data/
+turbo_workspace/
 celerybeat-schedule
+
+# Root temporary/debug artifacts
+/patch.py
+/patch*.py
+/test_api.py
+/test_next_api.js
+/test_url_finder.py
+/test_output.txt
+/screenshot.png
+/temp_original_*
 
 # Coverage
 .coverage
