@@ -21,6 +21,79 @@ export interface VisualUseCase {
     steps: VisualStep[];
 }
 
+export type VisualCaseDraft = Omit<VisualUseCase, 'id' | 'created_at' | 'updated_at'>;
+
+export interface VisualDraftRequest {
+    prompt: string;
+    project_id: string;
+    base_url?: string;
+}
+
+export interface VisualDraftResponse {
+    status: 'ok' | 'needs_clarification';
+    draft?: VisualCaseDraft;
+    questions: string[];
+}
+
+interface VisualExecutionStep {
+    step_type: 'UI';
+    action_type: string;
+    description: string;
+    target?: string;
+    value?: string;
+    url?: string;
+    params: Record<string, string | number | boolean>;
+}
+
+export interface VisualExecutionPayload {
+    tc_ids: string[];
+    mode: 'normal';
+    engine: 'right_pupil' | 'midscene';
+    parallel: false;
+    dynamic_payload: Array<{
+        id: string;
+        name: string;
+        description?: string;
+        mode: 'UI';
+        steps: VisualExecutionStep[];
+    }>;
+}
+
+const toExecutionAction = (action: VisualStep['action']) => action.toLowerCase();
+
+export const buildVisualExecutionPayload = (visualCase: Pick<VisualUseCase, 'id' | 'name' | 'description' | 'base_url' | 'steps'>): VisualExecutionPayload => {
+    const steps: VisualExecutionStep[] = visualCase.steps.map((step) => {
+        const actionType = toExecutionAction(step.action);
+        const description = step.target_description || step.value || step.action;
+        const value = step.action === 'GOTO' ? (step.value || visualCase.base_url) : step.value;
+        const params: Record<string, string | number | boolean> = step.action === 'TYPE' && step.value ? { text: step.value } : {};
+
+        return {
+            step_type: 'UI' as const,
+            action_type: actionType,
+            description,
+            target: step.target_description,
+            value,
+            url: step.action === 'GOTO' ? value : undefined,
+            params,
+        };
+    });
+
+    return {
+        tc_ids: [visualCase.id],
+        mode: 'normal',
+        engine: 'right_pupil',
+        parallel: false,
+        dynamic_payload: [{
+            id: visualCase.id,
+            name: visualCase.name,
+            description: visualCase.description,
+            mode: 'UI',
+            steps,
+        }],
+    };
+};
+
 export const visualUiService = {
     // Get all cases (optionally by project ID)
     getCases: async (projectId?: string, skip: number = 0, limit: number = 20) => {
@@ -52,13 +125,17 @@ export const visualUiService = {
         return api.delete(`/visual-ui/cases/${id}`);
     },
 
+    generateDraft: async (payload: VisualDraftRequest) => {
+        return api.post<VisualDraftResponse>('/visual-ui/draft', payload);
+    },
+
     // Helper trigger to instantly execute via existing Dispatch endpoint
-    executeAdhoc: async (payload: any) => {
-        return api.post<any>('/executions', payload);
+    executeAdhoc: async (payload: VisualExecutionPayload | Record<string, unknown>) => {
+        return api.post<Record<string, unknown>>('/executions', payload);
     },
 
     // Import and map from Neural Design
-    importFromDesign: async (scenario: any) => {
+    importFromDesign: async (scenario: Record<string, unknown>) => {
         return api.post<{ status: string; visual_case_id: string }>('/visual-ui/import-from-design', scenario);
     }
 };

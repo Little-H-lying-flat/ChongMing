@@ -1,13 +1,32 @@
+import asyncio
+import contextlib
+import json
 from typing import List, Any, Dict, Optional
 
+import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
-from app.schemas.visual_ui import VisualUseCaseCreate, VisualUseCaseUpdate, VisualUseCaseResponse
+from app.core.logging import logger
+from app.schemas.visual_ui import (
+    VisualUIDraftRequest,
+    VisualUIDraftResponse,
+    VisualUseCaseCreate,
+    VisualUseCaseResponse,
+    VisualUseCaseUpdate,
+)
 from app.services.visual_ui_service import VisualUIService
 
 router = APIRouter()
+
+@router.post("/draft", response_model=VisualUIDraftResponse, summary="根据自然语言生成视觉 UI 用例草稿")
+async def generate_visual_draft(data: VisualUIDraftRequest):
+    try:
+        return await VisualUIService.generate_draft(data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/cases", response_model=VisualUseCaseResponse, summary="创建视觉 UI 用例")
 async def create_visual_case(
@@ -177,24 +196,96 @@ async def import_from_design(
 class VisualWSManager:
     def __init__(self):
         self.active_connections: Dict[str, List[WebSocket]] = {}
+        self._subscription_tasks: Dict[str, asyncio.Task] = {}
+        self._redis_client: Optional[redis.Redis] = None
+
+    def _channel(self, execution_id: str) -> str:
+        return f"visual-ui:live-trace:{execution_id}"
+
+    def _redis_url(self) -> str:
+        broker = settings.CELERY_BROKER_URL or ""
+        if broker.startswith(("redis://", "rediss://")):
+            return broker
+        return settings.REDIS_URL
+
+    async def _get_redis(self) -> Optional[redis.Redis]:
+        if self._redis_client is not None:
+            return self._redis_client
+        try:
+            self._redis_client = redis.from_url(self._redis_url(), decode_responses=True)
+            await self._redis_client.ping()
+            return self._redis_client
+        except Exception as exc:
+            logger.warning(f"Visual UI Redis live trace unavailable, using local WebSocket fallback: {exc}")
+            self._redis_client = None
+            return None
 
     async def connect(self, websocket: WebSocket, execution_id: str):
         await websocket.accept()
         if execution_id not in self.active_connections:
             self.active_connections[execution_id] = []
         self.active_connections[execution_id].append(websocket)
+        await self._ensure_subscription(execution_id)
 
     def disconnect(self, websocket: WebSocket, execution_id: str):
         if execution_id in self.active_connections and websocket in self.active_connections[execution_id]:
             self.active_connections[execution_id].remove(websocket)
             if not self.active_connections[execution_id]:
                 del self.active_connections[execution_id]
+                task = self._subscription_tasks.pop(execution_id, None)
+                if task:
+                    task.cancel()
+
+    async def _ensure_subscription(self, execution_id: str) -> None:
+        task = self._subscription_tasks.get(execution_id)
+        if task and not task.done():
+            return
+        redis_client = await self._get_redis()
+        if redis_client is None:
+            return
+        self._subscription_tasks[execution_id] = asyncio.create_task(
+            self._listen_to_execution(redis_client, execution_id)
+        )
+
+    async def _listen_to_execution(self, redis_client: redis.Redis, execution_id: str) -> None:
+        pubsub = redis_client.pubsub()
+        try:
+            await pubsub.subscribe(self._channel(execution_id))
+            async for event in pubsub.listen():
+                if event.get("type") != "message":
+                    continue
+                try:
+                    payload = json.loads(event.get("data") or "{}")
+                except json.JSONDecodeError:
+                    logger.warning(f"Invalid Visual UI live trace payload for execution={execution_id}")
+                    continue
+                await self._broadcast_local(execution_id, payload)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(f"Visual UI live trace subscription ended for execution={execution_id}: {exc}")
+        finally:
+            with contextlib.suppress(Exception):
+                await pubsub.unsubscribe(self._channel(execution_id))
+                await pubsub.close()
+
+    async def _broadcast_local(self, execution_id: str, message: dict):
+        connections = list(self.active_connections.get(execution_id, []))
+        for connection in connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                self.disconnect(connection, execution_id)
 
     async def broadcast_to_execution(self, execution_id: str, message: dict):
-        if execution_id in self.active_connections:
-            for connection in self.active_connections[execution_id]:
-                # Send the labeled image or trace log to users watching this execution
-                await connection.send_json(message)
+        redis_client = await self._get_redis()
+        if redis_client is None:
+            await self._broadcast_local(execution_id, message)
+            return
+        await redis_client.publish(
+            self._channel(execution_id),
+            json.dumps(message, ensure_ascii=False),
+        )
 
 visual_ws_manager = VisualWSManager()
 

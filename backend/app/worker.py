@@ -14,10 +14,13 @@ Celery 应用配置
 """
 
 from datetime import timedelta
+import asyncio
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init, worker_ready
 from kombu import Queue, Exchange
+from loguru import logger
 
 from app.core.config import settings
 
@@ -37,6 +40,37 @@ celery = Celery(
         "app.tasks.scheduled_tasks",
     ],
 )
+
+_ai_manager_initialized = False
+
+
+def _initialize_ai_manager_for_worker() -> None:
+    global _ai_manager_initialized
+    if _ai_manager_initialized:
+        return
+
+    from app.core.ai_client import init_ai_manager
+    from app.services.smart_ops.ai_config_provider_impl import AIConfigProviderImpl
+    from app.services.smart_ops.ai_config_service import AIConfigService
+
+    try:
+        asyncio.run(AIConfigService.ensure_schema_ready())
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(AIConfigService.ensure_schema_ready())
+        finally:
+            loop.close()
+
+    init_ai_manager(AIConfigProviderImpl())
+    _ai_manager_initialized = True
+    logger.info("AI Client Manager initialized for Celery worker")
+
+
+@worker_process_init.connect
+@worker_ready.connect
+def initialize_worker_ai_manager(**_: object) -> None:
+    _initialize_ai_manager_for_worker()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
