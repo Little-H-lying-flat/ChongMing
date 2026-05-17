@@ -98,6 +98,8 @@ celerybeat-schedule
 /frontend/midscene_run/
 /frontend/visual-qa-output/
 /midscene-runner/node_modules/
+/midscene-runner/data/
+/midscene-runner/midscene_run/
 /scripts/__pycache__/
 
 # Coverage
