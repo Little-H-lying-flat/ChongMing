@@ -18,17 +18,21 @@ class DefectManager:
     
     def __init__(self):
         self.vector_store = VectorStore()
-        
-        # Initialize Embeddings
-        # Uses OpenAI compatible API (e.g. Qwen via DashScope if compatible, or actual OpenAI)
-        # Note: Qwen standard API might need custom wrapper if not fully OpenAI-compatible for embeddings.
-        # For now, assuming standard OpenAI interface or mock for local dev.
+        self.embeddings: OpenAIEmbeddings | None = None
+
+    def _get_embeddings(self) -> OpenAIEmbeddings | None:
+        if self.embeddings is not None:
+            return self.embeddings
+        if not settings.QWEN_API_KEY:
+            logger.warning("Embedding search disabled because QWEN_API_KEY is not configured")
+            return None
         self.embeddings = OpenAIEmbeddings(
-            openai_api_key=settings.QWEN_API_KEY, 
+            openai_api_key=settings.QWEN_API_KEY,
             openai_api_base=settings.QWEN_BASE_URL,
-            model=settings.MODEL_EMBEDDING
+            model=settings.MODEL_EMBEDDING,
         )
-        
+        return self.embeddings
+
     async def connect(self):
         """Connect to underlying storage"""
         self.vector_store.connect()
@@ -40,12 +44,12 @@ class DefectManager:
         2. Store in Milvus
         """
         try:
-            # Generate Embedding
-            # Combine text for richer context? Or just error message?
+            embeddings = self._get_embeddings()
+            if embeddings is None:
+                return
             text_to_embed = f"{error_msg}\nRoot Cause: {root_cause}"
-            vector = await self.embeddings.aembed_query(text_to_embed)
-            
-            # Store
+            vector = await embeddings.aembed_query(text_to_embed)
+
             self.vector_store.insert(
                 embedding=vector,
                 metadata={
@@ -63,7 +67,10 @@ class DefectManager:
         Find minimal defects
         """
         try:
-            vector = await self.embeddings.aembed_query(error_msg)
+            embeddings = self._get_embeddings()
+            if embeddings is None:
+                return []
+            vector = await embeddings.aembed_query(error_msg)
             results = self.vector_store.search(vector, top_k=top_k)
             return results
         except Exception as e:

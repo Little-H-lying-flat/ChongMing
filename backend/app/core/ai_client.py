@@ -24,7 +24,6 @@ from app.core.ai_models import (
     ModelConfig,
     ModelProvider,
     ModelCapability,
-    get_model_for_module,
     AVAILABLE_MODELS,
 )
 
@@ -284,8 +283,18 @@ class AIClientManager:
         if settings.QWEN_API_KEY:
             self._clients[ModelProvider.DASHSCOPE] = DashScopeClient()
             logger.info("DashScope 客户端已初始化")
-            
-        # TODO: Add other providers
+        if settings.OPENAI_API_KEY:
+            self._clients[ModelProvider.OPENAI] = OpenAIClient(
+                api_key=settings.OPENAI_API_KEY,
+                base_url=settings.OPENAI_BASE_URL,
+            )
+            logger.info("OpenAI-compatible 客户端已初始化")
+        if settings.GEMINI_API_KEY:
+            self._clients[ModelProvider.GEMINI] = OpenAIClient(
+                api_key=settings.GEMINI_API_KEY,
+                base_url=settings.GEMINI_BASE_URL,
+            )
+            logger.info("Gemini-compatible 客户端已初始化")
     
     def _get_client(self, provider: ModelProvider) -> BaseAIClient:
         """获取客户端"""
@@ -294,8 +303,15 @@ class AIClientManager:
             if provider == ModelProvider.DASHSCOPE:
                  self._clients[ModelProvider.DASHSCOPE] = DashScopeClient()
                  return self._clients[ModelProvider.DASHSCOPE]
-            
-            if provider == ModelProvider.GEMINI and hasattr(settings, "GEMINI_API_KEY"):
+
+            if provider == ModelProvider.OPENAI and settings.OPENAI_API_KEY:
+                 self._clients[ModelProvider.OPENAI] = OpenAIClient(
+                     api_key=settings.OPENAI_API_KEY,
+                     base_url=settings.OPENAI_BASE_URL,
+                 )
+                 return self._clients[ModelProvider.OPENAI]
+
+            if provider == ModelProvider.GEMINI and settings.GEMINI_API_KEY:
                  self._clients[ModelProvider.GEMINI] = OpenAIClient(
                      api_key=settings.GEMINI_API_KEY,
                      base_url=settings.GEMINI_BASE_URL,

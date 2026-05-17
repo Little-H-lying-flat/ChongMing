@@ -13,8 +13,9 @@ from typing import Optional
 class ModelProvider(str, Enum):
     """大模型提供商"""
     DASHSCOPE = "dashscope"  # 阿里云百炼
-    OPENAI = "openai"        # OpenAI (备用)AI Provider
-    LOCAL = "local"  # 本地模型 (Ollama)
+    OPENAI = "openai"        # OpenAI-compatible provider
+    GEMINI = "gemini"        # Gemini-compatible gateway
+    LOCAL = "local"          # 本地模型 (Ollama)
 
 
 class ModelCapability(str, Enum):
@@ -45,6 +46,42 @@ class ModelConfig:
 
 AVAILABLE_MODELS = {
     # === 阿里云 DashScope 模型 ===
+    "qwen-plus": ModelConfig(
+        model_id="qwen-plus",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.TEXT,
+        max_tokens=8192,
+        temperature=0.7,
+        description="通义千问 Plus - 通用均衡模型",
+        cost_per_1k_tokens=0.004,
+    ),
+    "qwen-max": ModelConfig(
+        model_id="qwen-max",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.REASONING,
+        max_tokens=8192,
+        temperature=0.7,
+        description="通义千问 Max - 高能力推理模型",
+        cost_per_1k_tokens=0.02,
+    ),
+    "qwen-vl-plus": ModelConfig(
+        model_id="qwen-vl-plus",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.VISION,
+        max_tokens=8192,
+        temperature=0.7,
+        description="通义千问 VL Plus - 视觉理解模型",
+        cost_per_1k_tokens=0.008,
+    ),
+    "qwen-omni-turbo": ModelConfig(
+        model_id="qwen-omni-turbo",
+        provider=ModelProvider.DASHSCOPE,
+        capability=ModelCapability.VISION,
+        max_tokens=8192,
+        temperature=0.7,
+        description="通义千问 Omni Turbo - 多模态模型",
+        cost_per_1k_tokens=0.004,
+    ),
     "qwen-turbo": ModelConfig(
         model_id="qwen-turbo",
         provider=ModelProvider.DASHSCOPE,
@@ -131,6 +168,15 @@ AVAILABLE_MODELS = {
         description="GPT-4o Mini - 快速多模态",
         cost_per_1k_tokens=0.00015,
     ),
+    "gpt-5.5": ModelConfig(
+        model_id="gpt-5.5",
+        provider=ModelProvider.OPENAI,
+        capability=ModelCapability.TEXT,
+        max_tokens=8192,
+        temperature=0.2,
+        description="OpenAI-compatible local GPT-5.5",
+        cost_per_1k_tokens=0.0,
+    ),
 
     "text-embedding-v4": ModelConfig(
         model_id="text-embedding-v4",
@@ -139,6 +185,15 @@ AVAILABLE_MODELS = {
         max_tokens=8192,
         description="通义文本向量模型 V4",
         cost_per_1k_tokens=0.0005,
+    ),
+    "gemini-3-pro-high": ModelConfig(
+        model_id="gemini-3-pro-high",
+        provider=ModelProvider.GEMINI,
+        capability=ModelCapability.REASONING,
+        max_tokens=8192,
+        temperature=0.2,
+        description="Gemini-compatible high reasoning model",
+        cost_per_1k_tokens=0.0,
     ),
 }
 
@@ -180,7 +235,7 @@ class AIModule(str, Enum):
 
 # 默认模型映射配置
 DEFAULT_MODEL_MAPPING = {
-    
+
     # === 通用 ===
     AIModule.GENERAL_CHAT: "qwen-turbo",
     AIModule.GENERAL_SUMMARY: "qwen-turbo",
@@ -210,52 +265,55 @@ DEFAULT_MODEL_MAPPING = {
 }
 
 
+ENV_MODEL_MAPPING = {
+    AIModule.GENERAL_CHAT: "MODEL_GENERAL_CHAT",
+    AIModule.GENERAL_SUMMARY: "MODEL_GENERAL_LONG",
+    AIModule.RAG_EMBEDDING: "MODEL_EMBEDDING",
+    AIModule.AGENT_NEURAL_MERGER: "MODEL_NEURAL_SCENARIO",
+    AIModule.AGENT_NEURAL_API_EXPERT: "MODEL_PHOENIX_CODEGEN",
+    AIModule.AGENT_LEFT_SHERLOCK: "MODEL_LEFT_PUPIL_CHAIN",
+    AIModule.AGENT_RIGHT_VISUAL: "MODEL_RIGHT_PUPIL_VL",
+}
+
+
+def get_env_model_for_module(module: AIModule) -> Optional[str]:
+    env_name = ENV_MODEL_MAPPING.get(module)
+    if not env_name:
+        return None
+
+    try:
+        from app.core.config import settings
+    except ImportError:
+        return None
+
+    configured_fields = settings.model_fields_set
+    if env_name not in configured_fields:
+        return None
+
+    value = getattr(settings, env_name, None)
+    return value or None
+
+
+def get_default_model_id(module: AIModule) -> str:
+    return get_env_model_for_module(module) or DEFAULT_MODEL_MAPPING.get(module) or "qwen-plus"
+
+
 def get_model_for_module(
     module: AIModule,
     override: Optional[str] = None,
 ) -> ModelConfig:
     """
     获取模块对应的模型配置
-    
+
     Args:
         module: AI 功能模块
         override: 可选的模型覆盖
-        
+
     Returns:
         ModelConfig: 模型配置
     """
-    # Priority: 1. Override arg, 2. AI_MODELS Default Mapping (Code Config), 3. External Config
-    # User Request: Prioritize ai_models.py config
-    if override:
-        model_id = override
-    elif module in DEFAULT_MODEL_MAPPING:
-        model_id = DEFAULT_MODEL_MAPPING[module]
-    else:
-        # Fallback to config only if not defined in code mapping
-        try:
-            from app.core.config import settings
-            config_mapping = {
-                AIModule.AGENT_NEURAL_MERGER: settings.MODEL_NEURAL_SCENARIO,
-                
-                AIModule.AGENT_RIGHT_VISUAL: settings.MODEL_RIGHT_PUPIL_VL,
-                AIModule.AGENT_LEFT_SHERLOCK: settings.MODEL_LEFT_PUPIL_CHAIN,
-                AIModule.AGENT_NEURAL_API_EXPERT: settings.MODEL_PHOENIX_CODEGEN,
-                
-                AIModule.GENERAL_CHAT: settings.MODEL_GENERAL_CHAT,
-                AIModule.GENERAL_SUMMARY: settings.MODEL_GENERAL_LONG,
-                AIModule.RAG_EMBEDDING: settings.MODEL_EMBEDDING,
-            }
-            model_id = config_mapping.get(module)
-        except ImportError:
-            model_id = None
-            
-    if not model_id:
-        model_id = "qwen-plus" # Absolute fallback
-    
+    model_id = override or get_default_model_id(module)
     if model_id not in AVAILABLE_MODELS:
-        # Fallback to a known safe model if configured model is missing (e.g. typo in config)
-        if "qwen-plus" in AVAILABLE_MODELS:
-            return AVAILABLE_MODELS["qwen-plus"]
         raise ValueError(f"未知模型: {model_id}")
-    
+
     return AVAILABLE_MODELS[model_id]
