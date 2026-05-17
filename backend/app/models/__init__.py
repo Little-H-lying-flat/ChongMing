@@ -6,5 +6,16 @@ from app.models.script import Script
 from app.models.visual_ui import VisualUseCase, VisualStep
 from app.models.defect import DefectRecord
 from app.models.environment import Environment
+from app.models.api_asset import ApiAsset
 
-__all__ = ["TestCase", "Execution", "ExecutionStep", "Script", "VisualUseCase", "VisualStep", "DefectRecord", "Environment"]
+__all__ = [
+    "TestCase",
+    "Execution",
+    "ExecutionStep",
+    "Script",
+    "VisualUseCase",
+    "VisualStep",
+    "DefectRecord",
+    "Environment",
+    "ApiAsset",
+]

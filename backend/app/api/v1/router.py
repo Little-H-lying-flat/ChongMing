@@ -19,6 +19,7 @@ from app.api.v1.endpoints import (
     turbo,
     left_pupil,
     api_engine,
+    api_assets,
     data_factory,
 )
 
@@ -106,6 +107,13 @@ api_router.include_router(
     api_engine.router,
     prefix="/api-engine",
     tags=["API Engine 兼容接口"]
+)
+
+# API 接口资产库
+api_router.include_router(
+    api_assets.router,
+    prefix="/api-assets",
+    tags=["接口资产库"]
 )
 
 # 数据工厂
