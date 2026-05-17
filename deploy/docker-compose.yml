@@ -2,8 +2,6 @@
 # 版本：v2.0
 # 日期：2026-02-06
 
-version: "3.8"
-
 # ==================== 网络配置 ====================
 networks:
   chongming-net:
@@ -11,6 +9,21 @@ networks:
     ipam:
       config:
         - subnet: 172.28.0.0/16
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql+asyncpg://chongming:${DB_PASSWORD:-chongming123}@postgres:5432/chongming
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CELERY_RESULT_BACKEND: redis://redis:6379/2
+  QWEN_API_KEY: ${QWEN_API_KEY:-}
+  QWEN_BASE_URL: ${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+  CHROMADB_HOST: chromadb
+  CHROMADB_PORT: 8000
+  MILVUS_HOST: milvus
+  MILVUS_PORT: 19530
+  OMNIPARSER_URL: http://omniparser:8002
+  OMNIPARSER_ENABLED: ${OMNIPARSER_ENABLED:-false}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 # ==================== 卷配置 ====================
 volumes:
@@ -40,21 +53,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://chongming:${DB_PASSWORD:-chongming123}@postgres:5432/chongming
-      - REDIS_URL=redis://redis:6379/0
-      - QWEN_API_KEY=${QWEN_API_KEY}
-      - QWEN_BASE_URL=${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
-      - CHROMADB_HOST=chromadb
-      - CHROMADB_PORT=8001
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
-      - OMNIPARSER_URL=http://omniparser:8002
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      <<: *backend-env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     volumes:
-      - ../backend:/app
       - test_assets:/app/test_assets
       - recordings:/app/recordings
       - reports:/app/reports
@@ -67,7 +68,7 @@ services:
     networks:
       - chongming-net
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health/ping" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -97,18 +98,16 @@ services:
     image: chongming/worker:${VERSION:-latest}
     container_name: chongming-worker-ui
     restart: unless-stopped
-    command: celery -A app.worker:celery worker -Q ui_queue -n worker-ui@%h --concurrency=4
+    command: celery -A app.worker:celery worker -Q execution -n worker-ui@%h --concurrency=4
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OMNIPARSER_URL=http://omniparser:8002
-      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      <<: *backend-env
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     volumes:
-      - ../backend:/app
       - recordings:/app/recordings
       - /dev/shm:/dev/shm # Playwright 共享内存
     depends_on:
       - redis
+      - postgres
       - api-gateway
     networks:
       - chongming-net
@@ -121,13 +120,12 @@ services:
     image: chongming/worker:${VERSION:-latest}
     container_name: chongming-worker-api
     restart: unless-stopped
-    command: celery -A app.worker:celery worker -Q api_queue -n worker-api@%h --concurrency=8
+    command: celery -A app.worker:celery worker -Q high,normal,low,phoenix -n worker-api@%h --concurrency=8
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OMNIPARSER_URL=http://omniparser:8002
+      <<: *backend-env
     depends_on:
       - redis
+      - postgres
       - api-gateway
     networks:
       - chongming-net
@@ -140,13 +138,12 @@ services:
     image: chongming/worker-turbo:${VERSION:-latest}
     container_name: chongming-worker-turbo
     restart: unless-stopped
-    command: celery -A app.worker:celery worker -Q turbo_queue -n worker-turbo@%h --concurrency=2
+    command: celery -A app.worker:celery worker -Q turbo -n worker-turbo@%h --concurrency=2
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OMNIPARSER_URL=http://omniparser:8002
+      <<: *backend-env
     depends_on:
       - redis
+      - postgres
     networks:
       - chongming-net
 
@@ -158,14 +155,12 @@ services:
     image: chongming/worker:${VERSION:-latest}
     container_name: chongming-worker-design
     restart: unless-stopped
-    command: celery -A app.worker:celery worker -Q design_queue -n worker-design@%h --concurrency=4
+    command: celery -A app.worker:celery worker -Q design -n worker-design@%h --concurrency=4
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - OMNIPARSER_URL=http://omniparser:8002
-      - QWEN_API_KEY=${QWEN_API_KEY}
+      <<: *backend-env
     depends_on:
       - redis
+      - postgres
       - chromadb
     networks:
       - chongming-net
@@ -180,9 +175,10 @@ services:
     restart: unless-stopped
     command: celery -A app.worker:celery beat --loglevel=info
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/1
+      <<: *backend-env
     depends_on:
       - redis
+      - postgres
     networks:
       - chongming-net
 
@@ -265,6 +261,7 @@ services:
     image: milvusdb/milvus:v2.3.0
     container_name: chongming-milvus
     restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
     ports:
       - "19530:19530"
       - "9091:9091"
@@ -310,6 +307,8 @@ services:
 
   # OmniParser (视觉识别)
   omniparser:
+    profiles:
+      - omniparser
     build:
       context: ../backend/omniparser
       dockerfile: Dockerfile
@@ -411,7 +410,6 @@ services:
     restart: unless-stopped
     ports:
       - "8080:80"
-      - "8443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl:/etc/nginx/ssl

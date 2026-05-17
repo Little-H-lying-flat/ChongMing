@@ -1,0 +1,44 @@
+# Development overrides for ChongMing.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
+services:
+  api-gateway:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ../backend:/app
+      - test_assets:/app/test_assets
+      - recordings:/app/recordings
+      - reports:/app/reports
+      - logs:/app/logs
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      target: dev
+    command: npm run dev -- -H 0.0.0.0
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+
+  worker-ui:
+    volumes:
+      - ../backend:/app
+      - recordings:/app/recordings
+      - /dev/shm:/dev/shm
+
+  worker-api:
+    volumes:
+      - ../backend:/app
+
+  worker-turbo:
+    volumes:
+      - ../backend:/app
+
+  worker-design:
+    volumes:
+      - ../backend:/app
+
+  celery-beat:
+    volumes:
+      - ../backend:/app

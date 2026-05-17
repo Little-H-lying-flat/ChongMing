@@ -6,7 +6,8 @@
 
 ```text
 deploy/
-├── docker-compose.yml       # 本地/单机部署主配置
+├── docker-compose.yml       # production-like 单机部署主配置
+├── docker-compose.dev.yml   # 本地开发覆盖配置
 ├── .env.example             # 环境变量模板
 ├── init.sql                 # PostgreSQL 初始化脚本
 ├── openapi.yaml             # OpenAPI 规格
@@ -20,7 +21,7 @@ deploy/
 
 ## Docker Compose 拓扑
 
-`docker-compose.yml` 使用 `chongming-net` bridge 网络，并定义 PostgreSQL、Redis、ChromaDB、Milvus、OmniParser、Locust、监控和前后端服务。
+`docker-compose.yml` 使用 `chongming-net` bridge 网络，并定义 PostgreSQL、Redis、ChromaDB、Milvus、OmniParser、Locust、监控和前后端服务。主配置按 production-like 方式运行，不启用源码挂载或热重载；本地开发热更新使用 `docker-compose.dev.yml` 显式叠加。
 
 ```mermaid
 flowchart LR
@@ -32,7 +33,7 @@ flowchart LR
 
     API --> Postgres[(postgres :5432)]
     API --> Redis[(redis :6379)]
-    API --> Chroma[(chromadb :8001)]
+    API --> Chroma[(chromadb :8000 internal / :8001 host)]
     API --> Milvus[(milvus :19530)]
     API --> Omni[omniparser :7861]
 
@@ -86,15 +87,21 @@ flowchart LR
 cd deploy
 cp .env.example .env
 # 编辑 .env，至少填写 QWEN_API_KEY，按需修改 DB_PASSWORD、Grafana/Flower 密码等
-docker-compose up -d
+docker compose -f docker-compose.yml up -d --build
+```
+
+本地开发需要热重载时显式叠加 dev 配置：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
 常用检查：
 
 ```bash
-docker-compose ps
-docker-compose logs -f api-gateway
-docker-compose logs -f worker-ui worker-api worker-design worker-turbo
+docker compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml logs -f api-gateway
+docker compose -f docker-compose.yml logs -f worker-ui worker-api worker-design worker-turbo
 ```
 
 访问入口：
@@ -126,6 +133,7 @@ API 容器还会设置：
 - `CELERY_BROKER_URL=redis://redis:6379/1`
 - `CELERY_RESULT_BACKEND=redis://redis:6379/2`
 - `CHROMADB_HOST=chromadb`
+- `CHROMADB_PORT=8000`（容器网络内部端口；宿主机调试端口仍是 `8001`）
 - `MILVUS_HOST=milvus`
 - `OMNIPARSER_URL=http://omniparser:8002`
 
@@ -134,13 +142,13 @@ API 容器还会设置：
 Compose 文件按能力拆分 worker：
 
 ```text
-worker-ui      -> celery -A app.worker:celery worker -Q ui_queue
-worker-api     -> celery -A app.worker:celery worker -Q api_queue
-worker-turbo   -> celery -A app.worker:celery worker -Q turbo_queue
-worker-design  -> celery -A app.worker:celery worker -Q design_queue
+worker-ui      -> celery -A app.worker:celery worker -Q execution
+worker-api     -> celery -A app.worker:celery worker -Q high,normal,low,phoenix
+worker-turbo   -> celery -A app.worker:celery worker -Q turbo
+worker-design  -> celery -A app.worker:celery worker -Q design
 ```
 
-后端 `app/worker.py` 中的代码级队列为 `execution`、`design`、`phoenix`、`turbo`、`high`、`normal`、`low`。如果容器队列名与代码路由不一致，应优先统一 Compose 和 `app/worker.py`，否则任务可能无法被对应 worker 消费。
+这些队列名与后端 `app/worker.py` 中的代码级队列保持一致，避免任务进入无人消费的旧 `*_queue`。
 
 ## 数据和卷
 
@@ -164,13 +172,13 @@ Compose 顶层声明的命名卷：
 |---|---|
 | 前端页面开发 | 本机 `cd frontend && npm run dev`，后端指向 `localhost:8000` |
 | 后端 API 开发 | 本机 `uvicorn app.main:app --reload --port 8000`，按需启动 Redis/Celery |
-| 完整链路联调 | `cd deploy &&docker-compose up -d` |
+| 完整链路联调 | `cd deploy && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build` |
 | 视觉 UI 调试 | 确认 OmniParser 可访问，GPU 环境优先 |
 | 性能压测 | 使用 Turbo API 或 Locust Web UI |
 
 ## Kubernetes
 
-Kubernetes 清单位于 `kubernetes/chongming.yaml`。部署前需要准备：
+Kubernetes 清单位于 `kubernetes/chongming.yaml`。该清单仍需要单独校准 Celery 队列、前端端口等生产细节；本轮 Compose 拆分不直接改 K8s。部署前需要准备：
 
 - Kubernetes 1.25+
 - 可用 StorageClass
@@ -193,19 +201,19 @@ kubectl get svc -n chongming
 
 ```bash
 # API 日志
-docker-compose logs -f api-gateway
+docker compose -f docker-compose.yml logs -f api-gateway
 
 # Worker 日志
-docker-compose logs -f worker-ui worker-api worker-design worker-turbo
+docker compose -f docker-compose.yml logs -f worker-ui worker-api worker-design worker-turbo
 
 # Redis 连通性
-docker-compose exec redis redis-cli ping
+docker compose -f docker-compose.yml exec redis redis-cli ping
 
 # PostgreSQL 健康检查
-docker-compose exec postgres pg_isready -U chongming
+docker compose -f docker-compose.yml exec postgres pg_isready -U chongming
 
 # 进入 API 容器
-docker-compose exec api-gateway /bin/bash
+docker compose -f docker-compose.yml exec api-gateway /bin/bash
 ```
 
 常见问题：

@@ -15,15 +15,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set working directory
 WORKDIR /app
 
-# Copy dependency definition
+# Copy package metadata and source needed for wheel installation
 COPY pyproject.toml /app/
+COPY app /app/app
 
 # Install dependencies config
 # Using pip to install directly from pyproject.toml
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir .
 
-# Copy project files (Will be overlaid by bind mount in dev, but good for prod)
+# Copy remaining project files
 COPY . /app/
 
 # Default command

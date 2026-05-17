@@ -1,18 +1,31 @@
-# Use Node 18 Alpine
-FROM node:18-alpine
+FROM node:20-alpine AS deps
 
 WORKDIR /app
 
-# Install dependencies
 COPY package*.json ./
-# Using npm install for dev (fast)
-RUN npm install
+RUN npm ci
 
-# Copy source
+FROM deps AS dev
+
 COPY . .
-
-# Expose port 3000
 EXPOSE 3000
+CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0"]
 
-# Start dev server
-CMD ["npm", "run", "dev"]
+FROM deps AS builder
+
+COPY . .
+RUN mkdir -p public && npm run build
+
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+
+EXPOSE 3000
+CMD ["node", "server.js"]

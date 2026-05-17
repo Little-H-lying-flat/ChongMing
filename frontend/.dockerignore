@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+visual-qa-output
+midscene_run
+data
+logs
+*.log
+npm-debug.log*
+.DS_Store
+Dockerfile
+.dockerignore
