@@ -90,6 +90,15 @@ celerybeat-schedule
 /test_output.txt
 /screenshot.png
 /temp_original_*
+/.claude/
+/e2e_report_safe.txt
+
+# Visual/Midscene runtime artifacts
+/frontend/data/
+/frontend/midscene_run/
+/frontend/visual-qa-output/
+/midscene-runner/node_modules/
+/scripts/__pycache__/
 
 # Coverage
 .coverage
