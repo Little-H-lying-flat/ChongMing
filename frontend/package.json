@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:local": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "qa:visual": "node scripts/visual-qa.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

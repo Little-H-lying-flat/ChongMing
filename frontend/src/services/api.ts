@@ -1,13 +1,36 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
+const API_VERSION_PATH = "/api/v1";
+const DEFAULT_API_ORIGIN = "http://127.0.0.1:8000";
+const ABSOLUTE_URL_PATTERN = /^https?:\/\//i;
+
+const trimTrailingSlash = (value: string) => value.replace(/\/+$/, "");
+
+export const API_ORIGIN = trimTrailingSlash(
+    (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_ORIGIN).replace(/\/api\/v1\/?$/, ""),
+);
+
+export const API_BASE_URL = `${API_ORIGIN}${API_VERSION_PATH}`;
+
+export const buildApiUrl = (url: string): string => {
+    if (ABSOLUTE_URL_PATTERN.test(url)) return url;
+
+    const normalizedPath = url.startsWith("/") ? url : `/${url}`;
+    const versionlessPath = normalizedPath.replace(/^\/api\/v1(?=\/|$)/, "") || "/";
+    return `${API_BASE_URL}${versionlessPath}`;
+};
+
+const jsonHeaders = {
+    "Content-Type": "application/json",
+};
 
 export const api = {
+    fetch: (url: string, init?: RequestInit): Promise<Response> => {
+        return fetch(buildApiUrl(url), init);
+    },
     get: async <T>(url: string): Promise<{ data: T }> => {
-        const res = await fetch(`${API_BASE_URL}${url}`, {
+        const res = await api.fetch(url, {
             method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            cache: 'no-store',
+            headers: jsonHeaders,
+            cache: "no-store",
         });
 
         if (!res.ok) {
@@ -16,13 +39,11 @@ export const api = {
         const data = await res.json();
         return { data };
     },
-    post: async <T>(url: string, body: any): Promise<{ data: T }> => {
-        const res = await fetch(`${API_BASE_URL}${url}`, {
+    post: async <T>(url: string, body?: unknown): Promise<{ data: T }> => {
+        const res = await api.fetch(url, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(body),
+            headers: jsonHeaders,
+            body: body === undefined ? undefined : JSON.stringify(body),
         });
 
         if (!res.ok) {
@@ -31,12 +52,10 @@ export const api = {
         const data = await res.json();
         return { data };
     },
-    put: async <T>(url: string, body: any): Promise<{ data: T }> => {
-        const res = await fetch(`${API_BASE_URL}${url}`, {
+    put: async <T>(url: string, body: unknown): Promise<{ data: T }> => {
+        const res = await api.fetch(url, {
             method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-            },
+            headers: jsonHeaders,
             body: JSON.stringify(body),
         });
 
@@ -47,7 +66,7 @@ export const api = {
         return { data };
     },
     delete: async (url: string): Promise<void> => {
-        const res = await fetch(`${API_BASE_URL}${url}`, {
+        const res = await api.fetch(url, {
             method: "DELETE",
         });
 

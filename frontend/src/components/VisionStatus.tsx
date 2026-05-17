@@ -81,15 +81,15 @@ export function VisionStatus() {
 
     return (
         <div
-            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-800/50 cursor-help transition-colors group"
+            className="group flex cursor-help items-center gap-2 rounded-lg border border-transparent px-2 py-1.5 transition-colors hover:border-sky-100 hover:bg-sky-50"
             title={status.description}
         >
-            <div className={`w-2 h-2 rounded-full ${status.color} shadow-[0_0_8px_rgba(0,0,0,0.5)] group-hover:shadow-[0_0_12px_${status.color === 'bg-emerald-500' ? '#10b981' : (status.color === 'bg-amber-500' ? '#f59e0b' : '#f43f5e')}]`} />
+            <div className={`h-2 w-2 rounded-full ${status.color} shadow-[0_0_10px_rgba(14,165,233,0.18)]`} />
             <div className="flex flex-col">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 group-hover:text-slate-400">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-sky-600">
                     Vision
                 </span>
-                <span className="text-xs font-medium text-slate-300 group-hover:text-white transition-colors">
+                <span className="text-xs font-medium text-slate-700 transition-colors group-hover:text-slate-950">
                     {status.label}
                 </span>
             </div>

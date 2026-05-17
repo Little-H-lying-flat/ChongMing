@@ -27,7 +27,7 @@ export interface EnvironmentCreate {
     variables?: Record<string, EnvironmentVariable | string>;
     headers?: Record<string, string>;
     auth_type?: string;
-    auth_config?: Record<string, any>;
+    auth_config?: Record<string, unknown>;
     is_default?: boolean;
 }
 
@@ -40,7 +40,7 @@ export interface HealthCheckResponse {
     environment_name: string;
     timestamp: string;
     overall_status: string;
-    details: Record<string, any>;
+    details: Record<string, unknown>;
 }
 
 export const getEnvironments = async (active_only: boolean = false): Promise<Environment[]> => {

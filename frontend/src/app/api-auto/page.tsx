@@ -67,6 +67,7 @@ export default function ApiAutoPage() {
     useEffect(() => {
         loadCases();
         loadEnvironments();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const loadEnvironments = async () => {
@@ -87,9 +88,10 @@ export default function ApiAutoPage() {
             if (res.data.items?.length > 0 && !activeCase) {
                 setActiveCase(res.data.items[0]);
             }
-        } catch (err: any) {
-            if (!err?.message?.includes("Failed to fetch")) {
-                toast.error("加载接口用例失败 (Failed to load API cases)", { description: err.message });
+        } catch (err: unknown) {
+            const error = err as { message?: string };
+            if (!error?.message?.includes("Failed to fetch")) {
+                toast.error("加载接口用例失败 (Failed to load API cases)", { description: error.message });
             }
         } finally {
             setIsLoadingList(false);
@@ -117,7 +119,7 @@ export default function ApiAutoPage() {
         try {
             let savedCase;
             if (activeCase.id === "NEW") {
-                const { id, ...payload } = activeCase;
+                const { id: _id, ...payload } = activeCase;
                 const res = await apiAutoService.createCase(payload);
                 savedCase = res.data;
                 toast.success("新建成功 (Created)");
@@ -128,8 +130,8 @@ export default function ApiAutoPage() {
             }
             setActiveCase(savedCase);
             await loadCases();
-        } catch (err: any) {
-            toast.error("保存失败 (Save Failed)", { description: err.message });
+        } catch (err: unknown) {
+            toast.error("保存失败 (Save Failed)", { description: (err as { message?: string }).message });
         } finally {
             setIsSaving(false);
         }
@@ -148,8 +150,8 @@ export default function ApiAutoPage() {
             toast.success("已删除 (Deleted)");
             if (activeCase?.id === caseToDelete) setActiveCase(null);
             loadCases();
-        } catch (err: any) {
-            toast.error("删除失败 (Delete Failed)", { description: err.message });
+        } catch (err: unknown) {
+            toast.error("删除失败 (Delete Failed)", { description: (err as { message?: string }).message });
         } finally {
             setDeleteConfirmOpen(false);
             setCaseToDelete(null);
@@ -174,14 +176,14 @@ export default function ApiAutoPage() {
             } else {
                 toast.error(`执行完成: ${res.data.failed_steps}个失败 (Execution Complete: ${res.data.failed_steps} Failed)`);
             }
-        } catch (err: any) {
-            toast.error("执行接口失败 (API Execution Failed)", { description: err.message });
+        } catch (err: unknown) {
+            toast.error("执行接口失败 (API Execution Failed)", { description: (err as { message?: string }).message });
         } finally {
             setIsExecuting(false);
         }
     };
 
-    const updateActiveCaseField = (field: keyof ApiTestCase, value: any) => {
+    const updateActiveCaseField = (field: keyof ApiTestCase, value: ApiTestCase[keyof ApiTestCase]) => {
         if (!activeCase) return;
         setActiveCase({ ...activeCase, [field]: value });
     };
@@ -194,12 +196,12 @@ export default function ApiAutoPage() {
     };
 
     return (
-        <div className="flex-1 flex overflow-hidden min-h-screen bg-slate-950 text-slate-200">
+        <div className="flex h-[calc(100vh-4rem)] overflow-hidden text-slate-900">
             {/* Left Panel: API Case Library */}
-            <div className="w-80 border-r border-slate-800 bg-slate-900 flex flex-col h-full shrink-0">
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                    <h2 className="font-semibold flex items-center gap-2 text-slate-200">
-                        <Code2 className="h-5 w-5 text-indigo-500" />
+            <div className="w-80 shrink-0 flex flex-col h-full rounded-3xl border border-white/70 bg-white/75 shadow-[12px_0_40px_-28px_rgba(14,165,233,0.5)] backdrop-blur-xl overflow-hidden">
+                <div className="p-4 border-b border-sky-100 flex items-center justify-between">
+                    <h2 className="font-semibold flex items-center gap-2 text-slate-900">
+                        <Code2 className="h-5 w-5 text-violet-600" />
                         API接口工厂 (API Factory)
                     </h2>
                     <Button size="icon" variant="ghost" onClick={handleCreateNew}>
@@ -216,7 +218,7 @@ export default function ApiAutoPage() {
                             <div
                                 key={tc.id}
                                 onClick={() => { setActiveCase(tc); setExecResult(null); }}
-                                className={`p-3 rounded-md cursor-pointer border transition-colors group ${activeCase?.id === tc.id ? 'border-indigo-500 bg-indigo-500/10 text-slate-200' : 'border-transparent bg-transparent hover:bg-slate-800/50 text-slate-300'}`}
+                                className={`p-3 rounded-2xl cursor-pointer border transition-all group ${activeCase?.id === tc.id ? 'border-sky-300 bg-gradient-to-r from-sky-100 via-white to-violet-100 text-slate-950 shadow-sm ring-1 ring-sky-200' : 'border-transparent bg-white/20 text-slate-700 hover:border-sky-200 hover:bg-white/80 hover:shadow-sm'}`}
                             >
                                 <div className="flex justify-between items-start">
                                     <div className="truncate font-medium text-sm">{tc.name}</div>
@@ -233,20 +235,20 @@ export default function ApiAutoPage() {
             </div>
 
             {/* Right Panel: API Workbench */}
-            <div className="flex-1 flex flex-col h-full bg-[#0d1117] overflow-y-auto">
+            <div className="flex-1 flex flex-col h-full overflow-y-auto">
                 {activeCase ? (
                     <div className="p-6 max-w-6xl w-full mx-auto space-y-6">
                         {/* Workbench Header */}
                         <div className="flex items-center justify-between">
                             <div className="flex-1 max-w-xl">
                                 <Input
-                                    className="text-2xl font-bold bg-transparent border-0 border-b border-transparent focus-visible:ring-0 focus-visible:border-indigo-500 h-10 px-0 shadow-none rounded-none text-slate-100"
+                                    className="text-2xl font-bold bg-transparent border-0 border-b border-transparent focus-visible:ring-0 focus-visible:border-sky-400 h-10 px-0 shadow-none rounded-none text-slate-950 placeholder:text-slate-400"
                                     value={activeCase.name}
                                     onChange={(e) => updateActiveCaseField("name", e.target.value)}
                                     placeholder="集合名称 (Collection Name)"
                                 />
                                 <Input
-                                    className="text-sm text-slate-400 bg-transparent border-0 h-7 px-0 shadow-none focus-visible:ring-0 mt-1"
+                                    className="text-sm text-slate-600 bg-transparent border-0 h-7 px-0 shadow-none focus-visible:ring-0 mt-1 placeholder:text-slate-400"
                                     value={activeCase.description || ""}
                                     onChange={(e) => updateActiveCaseField("description", e.target.value)}
                                     placeholder="添加关于此集合的业务描述... (Add business description...)"
@@ -254,10 +256,10 @@ export default function ApiAutoPage() {
                             </div>
                             <div className="flex items-center gap-3">
                                 <Select value={selectedEnv} onValueChange={setSelectedEnv}>
-                                    <SelectTrigger className="w-48 bg-slate-900 border-slate-700 text-slate-200 h-9 text-sm">
+                                    <SelectTrigger className="w-48 bg-white/80 border-sky-200 text-slate-800 h-9 text-sm shadow-sm">
                                         <SelectValue placeholder="选择运行环境" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
+                                    <SelectContent className="bg-white border-sky-100 text-slate-800 shadow-xl">
                                         <SelectItem value="default">无环境设定 (No Env)</SelectItem>
                                         {environments.map(env => (
                                             <SelectItem key={env.id} value={env.id}>
@@ -267,13 +269,13 @@ export default function ApiAutoPage() {
                                     </SelectContent>
                                 </Select>
 
-                                <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving} className="border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
+                                <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving} className="border-sky-200 bg-white/80 text-slate-700 shadow-sm hover:bg-sky-50 hover:text-sky-800">
                                     <Save className="h-4 w-4 mr-2" />
                                     {isSaving ? "保存中" : "保存"}
                                 </Button>
                                 {/* Only allow chain execution if we have steps */}
                                 {activeCase.steps.length > 0 && (
-                                    <Button size="sm" onClick={handleRunChain} disabled={isExecuting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                                    <Button size="sm" onClick={handleRunChain} disabled={isExecuting} className="bg-gradient-to-r from-sky-500 via-blue-500 to-violet-500 text-white shadow-lg shadow-sky-500/25 hover:from-sky-600 hover:via-blue-600 hover:to-violet-600">
                                         <PlayCircle className="h-4 w-4 mr-2" />
                                         运行 ({activeCase.steps.length})
                                     </Button>
@@ -288,19 +290,19 @@ export default function ApiAutoPage() {
                             {activeCase.steps.map((step, index) => (
                                 <div key={index} className="space-y-2">
                                     <div className="flex items-center justify-between px-1">
-                                        <h3 className="font-semibold text-slate-300 flex items-center gap-2">
-                                            <span className="bg-slate-800 text-slate-400 text-xs px-2 py-0.5 rounded">步骤 (Step) {index + 1}</span>
+                                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                            <span className="bg-sky-50 text-sky-700 border border-sky-100 text-xs px-2 py-0.5 rounded-full">步骤 (Step) {index + 1}</span>
                                             {step.name}
                                         </h3>
                                     </div>
-                                    {((step as any).step_type === "UI" || !step.request) ? (
-                                        <div className="p-4 bg-slate-900/50 rounded-md border border-slate-800 text-slate-400 flex flex-col gap-2">
+                                    {((step as unknown as { step_type?: string }).step_type === "UI" || !step.request) ? (
+                                        <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/80 text-slate-700 flex flex-col gap-2 shadow-sm">
                                             <div className="flex items-center text-amber-500 text-sm">
                                                 <AlertCircle className="w-4 h-4 mr-2" />
                                                 包含了非 API 类型的步骤 (UI/混合步骤)
                                             </div>
                                             <div className="text-sm">
-                                                描述 (Description): {(step as any).description || "无"}
+                                                描述 (Description): {(step as unknown as { description?: string }).description || "无"}
                                             </div>
                                             <div className="text-sm">
                                                 目前 API 工作台仅支持可视化编排 HTTP 接口测试步骤。
@@ -323,23 +325,23 @@ export default function ApiAutoPage() {
 
                     </div>
                 ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-                        <Code2 className="h-16 w-16 mb-4 text-slate-700 opacity-50" />
+                    <div className="h-full flex flex-col items-center justify-center text-slate-500">
+                        <Code2 className="h-16 w-16 mb-4 text-sky-300" />
                         <p className="text-lg">选择左侧用例，进入API自动化工作区 (Select a case to enter the API workbench)</p>
                     </div>
                 )}
             </div>
 
             <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <AlertDialogContent className="border-slate-200 bg-white text-slate-900 shadow-2xl">
                     <AlertDialogHeader>
                         <AlertDialogTitle>确定删除此API用例吗？ (Delete this API case?)</AlertDialogTitle>
-                        <AlertDialogDescription className="text-slate-400">
+                        <AlertDialogDescription className="text-slate-600">
                             此操作不可逆，将永久删除。 (This action is irreversible and permanent.)
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-slate-200">取消 (Cancel)</AlertDialogCancel>
+                        <AlertDialogCancel className="border-sky-200 bg-white text-slate-700 hover:bg-sky-50 hover:text-sky-800">取消 (Cancel)</AlertDialogCancel>
                         <AlertDialogAction onClick={confirmDelete} className="bg-rose-600 hover:bg-rose-700 text-white border-none">
                             确定删除 (Confirm Delete)
                         </AlertDialogAction>

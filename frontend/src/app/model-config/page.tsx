@@ -95,6 +95,7 @@ export default function SmartOpsPage() {
 
     useEffect(() => {
         fetchInitialData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const initRouteForm = (config: AIModuleConfig) => {
@@ -116,7 +117,7 @@ export default function SmartOpsPage() {
             toast.success("Provider凭证已更新 (Provider credentials updated)");
             setProviderOpen(false);
             setProviderForm({ ...providerForm, api_key: "" });
-        } catch (error) {
+        } catch (_error) {
             toast.error("更新Provider凭证失败 (Failed to update Provider credentials)");
         }
     };
@@ -136,7 +137,7 @@ export default function SmartOpsPage() {
             // Update local state
             setConfigs(configs.map(c => c.module === activeModule ? updatedConfig : c));
             toast.success(`${getModuleName(activeModule)} 路由更新成功 (route updated)`);
-        } catch (error) {
+        } catch (_error) {
             toast.error("更新模型路由失败 (Failed to update model route)");
         } finally {
             setSavingRoute(false);
@@ -147,9 +148,9 @@ export default function SmartOpsPage() {
         return (
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                    <div><Skeleton className="h-8 w-48 bg-slate-800" /><Skeleton className="h-4 w-64 mt-2 bg-slate-800" /></div>
+                    <div><Skeleton className="h-8 w-48 bg-sky-50" /><Skeleton className="h-4 w-64 mt-2 bg-sky-50" /></div>
                 </div>
-                <Skeleton className="h-[400px] w-full bg-slate-900 rounded-xl" />
+                <Skeleton className="h-[400px] w-full bg-white/80 rounded-xl" />
             </div>
         );
     }
@@ -158,25 +159,25 @@ export default function SmartOpsPage() {
         <div className="space-y-6">
             <div className="flex justify-between items-end">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-300 flex items-center gap-2">
-                        <Brain className="w-8 h-8 text-cyan-400" />
+                    <h2 className="text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-sky-600 via-blue-600 to-violet-600 flex items-center gap-2">
+                        <Brain className="w-8 h-8 text-cyan-600" />
                         AI中枢治理 (AI Model Governance)
                     </h2>
-                    <p className="text-slate-400 mt-1">
+                    <p className="text-slate-600 mt-1">
                         统一管控平台基础算力层与垂直场景的模型路由策略 (Unified model routing strategy management for base compute and vertical scenarios)
                     </p>
                 </div>
 
                 <Dialog open={providerOpen} onOpenChange={setProviderOpen}>
                     <DialogTrigger asChild>
-                        <Button variant="outline" className="border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300">
+                        <Button variant="outline" className="border-sky-200 bg-white/80 hover:bg-sky-50 text-slate-700">
                             <Key className="w-4 h-4 mr-2" /> 配置Provider凭证 (Configure Provider Credentials)
                         </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px] bg-slate-900 border-slate-800 text-slate-100">
+                    <DialogContent className="sm:max-w-[425px] bg-white/80 border-sky-100 text-slate-900">
                         <DialogHeader>
                             <DialogTitle>更新API访问凭证 (Update API Access Credentials)</DialogTitle>
-                            <DialogDescription className="text-slate-400">
+                            <DialogDescription className="text-slate-600">
                                 这些密钥将被加密存储且仅用于后端调用。 (Keys are encrypted and used only for backend calls.)
                             </DialogDescription>
                         </DialogHeader>
@@ -184,10 +185,10 @@ export default function SmartOpsPage() {
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="provider" className="text-right">供应商 (Provider)</Label>
                                 <Select value={providerForm.provider} onValueChange={(v) => setProviderForm({ ...providerForm, provider: v })}>
-                                    <SelectTrigger className="col-span-3 bg-slate-950 border-slate-700 text-white">
+                                    <SelectTrigger className="col-span-3 bg-white border-sky-200 text-slate-950">
                                         <SelectValue placeholder="选择供应商 (Select Provider)" />
                                     </SelectTrigger>
-                                    <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
+                                    <SelectContent className="bg-white/80 border-sky-200 text-slate-800">
                                         <SelectItem value="openai">OpenAI</SelectItem>
                                         <SelectItem value="azure">Azure Open AI</SelectItem>
                                         <SelectItem value="anthropic">Anthropic</SelectItem>
@@ -200,7 +201,7 @@ export default function SmartOpsPage() {
                                     id="api_key" type="password"
                                     value={providerForm.api_key}
                                     onChange={(e) => setProviderForm({ ...providerForm, api_key: e.target.value })}
-                                    className="col-span-3 bg-slate-950 border-slate-700 text-slate-200"
+                                    className="col-span-3 bg-white border-sky-200 text-slate-800"
                                     placeholder="sk-..."
                                 />
                             </div>
@@ -210,13 +211,13 @@ export default function SmartOpsPage() {
                                     id="base_url" type="text"
                                     value={providerForm.base_url}
                                     onChange={(e) => setProviderForm({ ...providerForm, base_url: e.target.value })}
-                                    className="col-span-3 bg-slate-950 border-slate-700 text-slate-200"
+                                    className="col-span-3 bg-white border-sky-200 text-slate-800"
                                     placeholder="可选，支持私有代理/Azure (Optional, supports private proxy/Azure)"
                                 />
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button type="submit" onClick={handleProviderSave} className="bg-cyan-500 hover:bg-cyan-600 text-slate-950">
+                            <Button type="submit" onClick={handleProviderSave} className="bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-lg shadow-sky-500/20 hover:from-sky-600 hover:to-cyan-600">
                                 保存更新 (Save Update)
                             </Button>
                         </DialogFooter>
@@ -225,16 +226,16 @@ export default function SmartOpsPage() {
             </div>
 
             <Tabs defaultValue="metrics" className="w-full">
-                <TabsList className="bg-slate-900/50 border border-slate-800 p-1">
-                    <TabsTrigger value="metrics" className="text-slate-400 data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-400">
+                <TabsList className="bg-white/80 border border-sky-100 p-1">
+                    <TabsTrigger value="metrics" className="text-slate-600 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
                         <BarChart3 className="w-4 h-4 mr-2" />
                         分析看板 (Metrics Dashboard)
                     </TabsTrigger>
-                    <TabsTrigger value="dashboard" className="text-slate-400 data-[state=active]:bg-cyan-500/10 data-[state=active]:text-cyan-400">
+                    <TabsTrigger value="dashboard" className="text-slate-600 data-[state=active]:bg-cyan-50 data-[state=active]:text-cyan-700">
                         <Cpu className="w-4 h-4 mr-2" />
                         基础算力池 (Model Dashboard)
                     </TabsTrigger>
-                    <TabsTrigger value="routing" className="text-slate-400 data-[state=active]:bg-purple-500/10 data-[state=active]:text-purple-400">
+                    <TabsTrigger value="routing" className="text-slate-600 data-[state=active]:bg-violet-50 data-[state=active]:text-violet-700">
                         <Settings className="w-4 h-4 mr-2" />
                         路由投递网 (Platform Routing)
                     </TabsTrigger>
@@ -243,20 +244,20 @@ export default function SmartOpsPage() {
                 <TabsContent value="dashboard" className="mt-6">
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {models.map((model, idx) => (
-                            <Card key={`${model.model_id}-${model.provider}-${idx}`} className="bg-slate-900 border-slate-800 shadow-xl relative overflow-hidden group hover:border-cyan-500/30 transition-colors">
+                            <Card key={`${model.model_id}-${model.provider}-${idx}`} className="rounded-2xl border-sky-100 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl relative overflow-hidden group hover:border-cyan-500/30 transition-colors">
                                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                                 <CardHeader className="pb-3 relative z-10">
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <CardTitle className="text-lg font-bold text-slate-200 flex items-center gap-2">
+                                            <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                                 {model.model_id}
-                                                {model.capability === 'vision' && <Badge variant="secondary" className="bg-purple-500/10 text-purple-400 border-purple-500/20 text-[10px] px-1.5 py-0">Vision</Badge>}
-                                                {model.capability === 'chat' && <Badge variant="secondary" className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px] px-1.5 py-0">Reasoning</Badge>}
-                                                {model.capability === 'embedding' && <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px] px-1.5 py-0">Vector</Badge>}
+                                                {model.capability === 'vision' && <Badge variant="secondary" className="bg-violet-50 text-violet-700 border-violet-200 text-[10px] px-1.5 py-0">Vision</Badge>}
+                                                {model.capability === 'chat' && <Badge variant="secondary" className="bg-sky-50 text-sky-700 border-sky-200 text-[10px] px-1.5 py-0">Reasoning</Badge>}
+                                                {model.capability === 'embedding' && <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0">Vector</Badge>}
                                             </CardTitle>
-                                            <CardDescription className="text-slate-400 mt-1">{model.provider.toUpperCase()} ENGINE</CardDescription>
+                                            <CardDescription className="text-slate-600 mt-1">{model.provider.toUpperCase()} ENGINE</CardDescription>
                                         </div>
-                                        <Badge variant="outline" className="border-cyan-500/30 text-cyan-400 bg-cyan-500/5">
+                                        <Badge variant="outline" className="border-cyan-200 text-cyan-700 bg-cyan-50">
                                             ${model.cost_per_1k_tokens.toFixed(3)}
                                         </Badge>
                                     </div>
@@ -269,21 +270,21 @@ export default function SmartOpsPage() {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="routing" className="mt-6 border border-slate-800 rounded-xl bg-slate-900/40 p-0 overflow-hidden flex min-h-[500px]">
+                <TabsContent value="routing" className="mt-6 border border-sky-100 rounded-xl bg-white/70 p-0 overflow-hidden flex min-h-[500px]">
                     {/* Sidebar Modules */}
-                    <div className="w-64 border-r border-slate-800 bg-slate-900/60 p-4 space-y-2">
-                        <h3 className="text-sm font-semibold text-slate-400 mb-4 px-2 tracking-wider">业务挂载点 (Business Mount Points)</h3>
+                    <div className="w-64 border-r border-sky-100 bg-white/75 p-4 space-y-2">
+                        <h3 className="text-sm font-semibold text-slate-600 mb-4 px-2 tracking-wider">业务挂载点 (Business Mount Points)</h3>
                         {configs.map(config => (
                             <button
                                 key={config.module}
                                 onClick={() => initRouteForm(config)}
                                 className={`w-full text-left px-4 py-3 rounded-md text-sm transition-colors flex justify-between items-center ${activeModule === config.module
-                                    ? "bg-purple-500/15 text-purple-300 border border-purple-500/30 font-medium"
-                                    : "text-slate-400 hover:bg-slate-800/80 hover:text-slate-300 border border-transparent"
+                                    ? "bg-violet-50 text-violet-700 border border-violet-200 font-medium"
+                                    : "text-slate-600 hover:bg-sky-50/80 hover:text-slate-700 border border-transparent"
                                     }`}
                             >
                                 <span>{getModuleName(config.module)}</span>
-                                {activeModule === config.module && <Zap className="w-3.5 h-3.5 text-purple-400 shrink-0 ml-2" />}
+                                {activeModule === config.module && <Zap className="w-3.5 h-3.5 text-violet-600 shrink-0 ml-2" />}
                             </button>
                         ))}
                     </div>
@@ -293,27 +294,27 @@ export default function SmartOpsPage() {
                         {activeModule ? (
                             <div className="max-w-xl space-y-8 animate-in fade-in duration-300">
                                 <div>
-                                    <h3 className="text-2xl font-bold text-slate-200 flex items-center gap-2">
+                                    <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
                                         {getModuleName(activeModule)}
                                         <Badge variant="outline" className="ml-2 border-emerald-500/30 text-emerald-400 bg-emerald-500/5">生效中 (Active)</Badge>
                                     </h3>
-                                    <p className="text-slate-400 text-sm mt-2">
+                                    <p className="text-slate-600 text-sm mt-2">
                                         在此调整该业务节点使用的基础模型与推理参数，生效周期为即时。 (Adjust the base model and reasoning parameters used by this business node here, effective immediately.)
                                     </p>
                                 </div>
 
-                                <div className="space-y-6 bg-slate-900 p-6 rounded-xl border border-slate-800/50 shadow-inner">
+                                <div className="space-y-6 bg-white/80 p-6 rounded-xl border border-sky-100/50 shadow-inner">
                                     {/* Model Selection */}
                                     <div className="space-y-3">
-                                        <Label className="text-slate-300">投递目标 (Target Model)</Label>
+                                        <Label className="text-slate-700">投递目标 (Target Model)</Label>
                                         <Select
                                             value={routeForm.model_id}
                                             onValueChange={(v) => setRouteForm({ ...routeForm, model_id: v })}
                                         >
-                                            <SelectTrigger className="w-full bg-slate-950 border-slate-700 text-white font-medium h-12">
+                                            <SelectTrigger className="w-full bg-white border-sky-200 text-slate-950 font-medium h-12">
                                                 <SelectValue placeholder="Select a model..." />
                                             </SelectTrigger>
-                                            <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
+                                            <SelectContent className="bg-white/80 border-sky-200 text-slate-800">
                                                 {models.map((m, idx) => (
                                                     <SelectItem key={`${m.model_id}-${m.provider}-${idx}`} value={m.model_id}>
                                                         <div className="flex items-center gap-2">
@@ -328,7 +329,7 @@ export default function SmartOpsPage() {
                                     {/* Temperature Slider */}
                                     <div className="space-y-4 pt-4">
                                         <div className="flex justify-between">
-                                            <Label className="text-slate-300">Temperature (想象力: {routeForm.temperature?.toFixed(1)})</Label>
+                                            <Label className="text-slate-700">Temperature (想象力: {routeForm.temperature?.toFixed(1)})</Label>
                                         </div>
                                         <Slider
                                             value={[routeForm.temperature || 0]}
@@ -345,13 +346,13 @@ export default function SmartOpsPage() {
 
                                     {/* Max Tokens */}
                                     <div className="space-y-3 pt-4">
-                                        <Label className="text-slate-300">截断阈值 (Max Tokens)</Label>
+                                        <Label className="text-slate-700">截断阈值 (Max Tokens)</Label>
                                         <Input
                                             type="number"
                                             max={32000}
                                             value={routeForm.max_tokens || ""}
                                             onChange={(e) => setRouteForm({ ...routeForm, max_tokens: parseInt(e.target.value) || 0 })}
-                                            className="bg-slate-950 border-slate-700 text-slate-200 font-mono"
+                                            className="bg-white border-sky-200 text-slate-800 font-mono"
                                         />
                                     </div>
                                 </div>
@@ -360,7 +361,7 @@ export default function SmartOpsPage() {
                                     <Button
                                         onClick={handleRouteSave}
                                         disabled={savingRoute}
-                                        className="bg-purple-500 hover:bg-purple-600 text-white min-w-[120px]"
+                                        className="bg-gradient-to-r from-sky-500 via-blue-500 to-violet-500 text-white shadow-lg shadow-sky-500/25 hover:from-sky-600 hover:via-blue-600 hover:to-violet-600 min-w-[120px]"
                                     >
                                         {savingRoute ? "更新中... (Updating...)" : <><CheckCircle2 className="w-4 h-4 mr-2" /> 应用策略 (Apply Strategy)</>}
                                     </Button>
@@ -399,42 +400,42 @@ export default function SmartOpsPage() {
                         return (
                             <>
                                 <div className="grid gap-4 md:grid-cols-3">
-                                    <Card className="bg-slate-900 border-slate-800 backdrop-blur-sm bg-opacity-80">
+                                    <Card className="rounded-2xl border-sky-100 bg-white/80 backdrop-blur-sm bg-opacity-80">
                                         <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                            <CardTitle className="text-sm font-medium text-slate-400">总计支出 (7天) (Total Expenditure (7 days))</CardTitle>
+                                            <CardTitle className="text-sm font-medium text-slate-600">总计支出 (7天) (Total Expenditure (7 days))</CardTitle>
                                             <DollarSign className="w-4 h-4 text-emerald-400" />
                                         </CardHeader>
                                         <CardContent>
-                                            <div className="text-2xl font-bold text-slate-100">${totalCost.toFixed(4)}</div>
+                                            <div className="text-2xl font-bold text-slate-900">${totalCost.toFixed(4)}</div>
                                             <p className="text-xs text-slate-500 mt-1">等效 API 账单成本 (Equivalent API Billing Cost)</p>
                                         </CardContent>
                                     </Card>
-                                    <Card className="bg-slate-900 border-slate-800 backdrop-blur-sm bg-opacity-80">
+                                    <Card className="rounded-2xl border-sky-100 bg-white/80 backdrop-blur-sm bg-opacity-80">
                                         <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                            <CardTitle className="text-sm font-medium text-slate-400">资源消耗 (7天) (Resource Consumption (7 days))</CardTitle>
-                                            <Database className="w-4 h-4 text-cyan-400" />
+                                            <CardTitle className="text-sm font-medium text-slate-600">资源消耗 (7天) (Resource Consumption (7 days))</CardTitle>
+                                            <Database className="w-4 h-4 text-cyan-600" />
                                         </CardHeader>
                                         <CardContent>
-                                            <div className="text-2xl font-bold text-slate-100">{(totalTokens / 1000).toFixed(1)}k <span className="text-sm text-slate-500 font-normal">Tokens</span></div>
+                                            <div className="text-2xl font-bold text-slate-900">{(totalTokens / 1000).toFixed(1)}k <span className="text-sm text-slate-500 font-normal">Tokens</span></div>
                                             <p className="text-xs text-slate-500 mt-1">包含 Input/Output 总计 (Total Input/Output Included)</p>
                                         </CardContent>
                                     </Card>
-                                    <Card className="bg-slate-900 border-slate-800 backdrop-blur-sm bg-opacity-80">
+                                    <Card className="rounded-2xl border-sky-100 bg-white/80 backdrop-blur-sm bg-opacity-80">
                                         <CardHeader className="flex flex-row items-center justify-between pb-2">
-                                            <CardTitle className="text-sm font-medium text-slate-400">最高负载网关 (Highest Load Gateway)</CardTitle>
-                                            <TrendingUp className="w-4 h-4 text-purple-400" />
+                                            <CardTitle className="text-sm font-medium text-slate-600">最高负载网关 (Highest Load Gateway)</CardTitle>
+                                            <TrendingUp className="w-4 h-4 text-violet-600" />
                                         </CardHeader>
                                         <CardContent>
-                                            <div className="text-2xl font-bold text-slate-100">{topModel}</div>
+                                            <div className="text-2xl font-bold text-slate-900">{topModel}</div>
                                             <p className="text-xs text-slate-500 mt-1">分担最高流量的模型 (Model sharing the highest traffic)</p>
                                         </CardContent>
                                     </Card>
                                 </div>
 
-                                <Card className="bg-slate-900 border-slate-800 mt-6 backdrop-blur-sm bg-opacity-80">
+                                <Card className="rounded-2xl border-sky-100 bg-white/80 mt-6 backdrop-blur-sm bg-opacity-80">
                                     <CardHeader>
-                                        <CardTitle className="text-lg text-slate-200">每日 Token 消耗聚合分析 (Daily Token Consumption Aggregate Analysis)</CardTitle>
-                                        <CardDescription className="text-slate-400">堆叠比例反映各基础模型当日的请求配额占比 (The stacking ratio reflects the proportion of each base model's request quota on that day)</CardDescription>
+                                        <CardTitle className="text-lg text-slate-800">每日 Token 消耗聚合分析 (Daily Token Consumption Aggregate Analysis)</CardTitle>
+                                        <CardDescription className="text-slate-600">堆叠比例反映各基础模型当日的请求配额占比 (The stacking ratio reflects the proportion of each base model&apos;s request quota on that day)</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         {metrics.length === 0 ? (
@@ -453,7 +454,7 @@ export default function SmartOpsPage() {
                                                             contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
                                                             itemStyle={{ color: '#e2e8f0' }}
                                                             labelStyle={{ color: '#94a3b8', marginBottom: '8px' }}
-                                                            formatter={(value: any, name: any) => [`${value} Tokens`, name]}
+                                                            formatter={(value: number | string | undefined, name: string | undefined) => [`${value ?? 0} Tokens`, name ?? '']}
                                                         />
                                                         <Legend wrapperStyle={{ paddingTop: '20px' }} />
                                                         {uniqueModels.map((modelId, idx) => (

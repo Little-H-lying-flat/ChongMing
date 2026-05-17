@@ -15,9 +15,9 @@ interface ResponseConsoleProps {
 export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
     if (isLoading) {
         return (
-            <div className="mt-6 border-t border-slate-800 pt-6">
-                <div className="flex items-center justify-center p-8 text-slate-400">
-                    <Activity className="h-6 w-6 animate-pulse mr-2 text-indigo-500" />
+            <div className="mt-6 border-t border-sky-100 pt-6">
+                <div className="flex items-center justify-center p-8 text-slate-600">
+                    <Activity className="h-6 w-6 animate-pulse mr-2 text-sky-500" />
                     <span>执行请求中... (Executing Request...)</span>
                 </div>
             </div>
@@ -27,27 +27,27 @@ export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
     if (!result) return null;
 
     return (
-        <div className="mt-6 border-t border-slate-800 pt-6 space-y-4">
-            <h3 className="text-lg font-medium text-slate-200 mb-4 flex items-center gap-2">
+        <div className="mt-6 border-t border-sky-100 pt-6 space-y-4">
+            <h3 className="text-lg font-medium text-slate-900 mb-4 flex items-center gap-2">
                 执行控制台 (Execution Console)
                 {result.success ? (
-                    <Badge className="bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30">成功 (Success)</Badge>
+                    <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100">成功 (Success)</Badge>
                 ) : (
-                    <Badge className="bg-rose-500/20 text-rose-400 hover:bg-rose-500/30">失败 (Failed)</Badge>
+                    <Badge className="border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100">失败 (Failed)</Badge>
                 )}
             </h3>
 
             <div className="grid grid-cols-4 gap-4 mb-4">
-                <Card className="bg-slate-900 border-slate-800">
-                    <CardHeader className="py-3 px-4 pb-0"><CardTitle className="text-xs text-slate-400">总步骤 (Total Steps)</CardTitle></CardHeader>
-                    <CardContent className="py-3 px-4 text-2xl font-semibold text-slate-200">{result.total_steps}</CardContent>
+                <Card className="border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
+                    <CardHeader className="py-3 px-4 pb-0"><CardTitle className="text-xs text-slate-500">总步骤 (Total Steps)</CardTitle></CardHeader>
+                    <CardContent className="py-3 px-4 text-2xl font-semibold text-slate-950">{result.total_steps}</CardContent>
                 </Card>
-                <Card className="bg-slate-900 border-slate-800">
-                    <CardHeader className="py-3 px-4 pb-0"><CardTitle className="text-xs text-slate-400">通过 (Passed)</CardTitle></CardHeader>
+                <Card className="border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
+                    <CardHeader className="py-3 px-4 pb-0"><CardTitle className="text-xs text-slate-500">通过 (Passed)</CardTitle></CardHeader>
                     <CardContent className="py-3 px-4 text-2xl font-semibold text-emerald-400">{result.passed_steps}</CardContent>
                 </Card>
-                <Card className="bg-slate-900 border-slate-800">
-                    <CardHeader className="py-3 px-4 pb-0"><CardTitle className="text-xs text-slate-400">失败 (Failed)</CardTitle></CardHeader>
+                <Card className="border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
+                    <CardHeader className="py-3 px-4 pb-0"><CardTitle className="text-xs text-slate-500">失败 (Failed)</CardTitle></CardHeader>
                     <CardContent className="py-3 px-4 text-2xl font-semibold text-rose-400">{result.failed_steps}</CardContent>
                 </Card>
             </div>
@@ -55,12 +55,12 @@ export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
             {/* Render Step Results */}
             <div className="space-y-4">
                 {result.results.map((r: ExecutionStepResult, idx: number) => (
-                    <Card key={idx} className="bg-slate-950 border-slate-800">
-                        <div className="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                    <Card key={idx} className="overflow-hidden rounded-2xl border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
+                        <div className="p-3 border-b border-sky-100 flex items-center justify-between bg-sky-50/60">
                             <div className="flex items-center gap-3">
                                 {r.status === 'passed' ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <XCircle className="h-5 w-5 text-rose-500" />}
-                                <span className="font-medium text-sm text-slate-200">步骤 (Step) {idx + 1} ({r.step_id})</span>
-                                <Badge variant="outline" className={r.status_code >= 200 && r.status_code < 300 ? "text-emerald-400 border-emerald-500/30" : "text-rose-400 border-rose-500/30"}>
+                                <span className="font-medium text-sm text-slate-900">步骤 (Step) {idx + 1} ({r.step_id})</span>
+                                <Badge variant="outline" className={r.status_code >= 200 && r.status_code < 300 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"}>
                                     {r.status_code || 'Err'}
                                 </Badge>
                             </div>
@@ -71,7 +71,7 @@ export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
                         </div>
                         <div className="p-4 space-y-4">
                             {r.error && (
-                                <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-md text-sm text-rose-400">
+                                <div className="p-3 bg-rose-50 border border-rose-200 rounded-md text-sm text-rose-700">
                                     {r.error}
                                 </div>
                             )}
@@ -80,11 +80,11 @@ export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
                             {r.extracted_values && Object.keys(r.extracted_values).length > 0 && (
                                 <div>
                                     <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2">提取上下文 (Extracted Context)</h4>
-                                    <div className="rounded-md border border-slate-800 bg-slate-900 p-2 overflow-x-auto text-sm">
+                                    <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-3 overflow-x-auto text-sm">
                                         {Object.entries(r.extracted_values).map(([k, v]) => (
                                             <div key={k} className="flex gap-2">
-                                                <span className="text-indigo-400 font-medium">{k}:</span>
-                                                <span className="text-slate-300">{JSON.stringify(v)}</span>
+                                                <span className="text-violet-700 font-medium">{k}:</span>
+                                                <span className="text-slate-700">{JSON.stringify(v)}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -93,12 +93,12 @@ export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
 
                             {/* Tabs for Raw Details */}
                             <Tabs defaultValue="response" className="w-full">
-                                <TabsList className="bg-slate-900 border-slate-800">
-                                    <TabsTrigger value="response" className="text-slate-400 hover:text-slate-200 data-[state=active]:bg-slate-800 data-[state=active]:text-white transition-colors">
+                                <TabsList className="border border-sky-100 bg-sky-50/70">
+                                    <TabsTrigger value="response" className="text-slate-600 hover:text-sky-800 data-[state=active]:bg-white data-[state=active]:text-sky-700 data-[state=active]:shadow-sm transition-colors">
                                         <Database className="h-3 w-3 mr-2" />
                                         返回响应 (Response)
                                     </TabsTrigger>
-                                    <TabsTrigger value="request" className="text-slate-400 hover:text-slate-200 data-[state=active]:bg-slate-800 data-[state=active]:text-white transition-colors">
+                                    <TabsTrigger value="request" className="text-slate-600 hover:text-violet-800 data-[state=active]:bg-white data-[state=active]:text-violet-700 data-[state=active]:shadow-sm transition-colors">
                                         <Send className="h-3 w-3 mr-2" />
                                         发送请求 (Request)
                                     </TabsTrigger>
@@ -121,7 +121,7 @@ export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
                                                     <div className="rounded-md border border-slate-800 overflow-hidden bg-[#1e1e1e] p-2 max-h-96 overflow-y-auto">
                                                         <JsonView
                                                             value={typeof r.response_details.body === 'string'
-                                                                ? (function () { try { return JSON.parse(r.response_details.body) } catch (e) { return r.response_details.body } })()
+                                                                ? (function () { try { return JSON.parse(r.response_details.body as string) } catch (_e) { return r.response_details.body } })()
                                                                 : r.response_details.body}
                                                             style={vscodeTheme}
                                                             shortenTextAfterLength={99999}
@@ -144,7 +144,7 @@ export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
                                             <div className="rounded-md border border-slate-800 overflow-hidden bg-[#1e1e1e] p-2 max-h-96 overflow-y-auto">
                                                 <JsonView
                                                     value={typeof r.assertion_details.actual_response === 'string'
-                                                        ? (function () { try { return JSON.parse(r.assertion_details.actual_response) } catch (e) { return r.assertion_details.actual_response } })()
+                                                        ? (function () { try { return JSON.parse(r.assertion_details.actual_response as string) } catch (_e) { return r.assertion_details.actual_response } })()
                                                         : r.assertion_details.actual_response}
                                                     style={vscodeTheme}
                                                     shortenTextAfterLength={99999}
@@ -160,8 +160,8 @@ export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
                                     {r.request_details ? (
                                         <>
                                             <div className="flex items-center gap-2 mb-2">
-                                                <Badge variant="outline" className="text-indigo-400 border-indigo-500/30 text-xs">{r.request_details.method}</Badge>
-                                                <code className="text-xs text-slate-300 bg-slate-900 px-2 py-1 rounded inline-block break-all">
+                                                <Badge variant="outline" className="bg-violet-50 text-violet-700 border-violet-200 text-xs">{r.request_details.method}</Badge>
+                                                <code className="text-xs text-slate-700 bg-sky-50 border border-sky-100 px-2 py-1 rounded inline-block break-all">
                                                     {r.request_details.url}
                                                 </code>
                                             </div>
@@ -194,8 +194,8 @@ export function ResponseConsole({ result, isLoading }: ResponseConsoleProps) {
 
             {/* Final Context */}
             {result.final_context && Object.keys(result.final_context).length > 0 && (
-                <Card className="bg-slate-900 border-slate-800">
-                    <CardHeader className="py-3 px-4 pb-0"><CardTitle className="text-sm text-slate-400">最终执行上下文 (Final Execution Context)</CardTitle></CardHeader>
+                <Card className="border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
+                    <CardHeader className="py-3 px-4 pb-0"><CardTitle className="text-sm text-slate-600">最终执行上下文 (Final Execution Context)</CardTitle></CardHeader>
                     <CardContent className="p-4">
                         <div className="rounded-md border border-slate-800 overflow-hidden bg-[#1e1e1e] p-2">
                             <JsonView value={result.final_context} style={vscodeTheme} shortenTextAfterLength={99999} collapsed={false} displayDataTypes={false} />

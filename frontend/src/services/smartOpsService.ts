@@ -45,8 +45,8 @@ export const updateModuleConfig = async (data: UpdateAIConfigRequest): Promise<A
     return response.data;
 };
 
-export const updateProviderKey = async (data: ProviderConfigSchema): Promise<any> => {
-    const response = await api.post<any>('/smart-ops/provider', data);
+export const updateProviderKey = async (data: ProviderConfigSchema): Promise<Record<string, unknown>> => {
+    const response = await api.post<Record<string, unknown>>('/smart-ops/provider', data);
     return response.data;
 };
 

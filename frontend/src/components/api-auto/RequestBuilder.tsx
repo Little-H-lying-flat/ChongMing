@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Send, Play, AlignLeft, Variable, CheckSquare } from "lucide-react";
+import { Send, AlignLeft, Variable, CheckSquare } from "lucide-react";
 import { KeyValueEditor } from "./KeyValueEditor";
 import { ApiStep } from "@/services/apiAutoService";
 import {
@@ -23,23 +23,26 @@ interface RequestBuilderProps {
 }
 
 const METHOD_COLORS = {
-    GET: "text-blue-400 font-bold",
-    POST: "text-emerald-400 font-bold",
-    PUT: "text-amber-400 font-bold",
-    DELETE: "text-rose-400 font-bold",
-    PATCH: "text-purple-400 font-bold",
+    GET: "text-blue-700 font-bold",
+    POST: "text-emerald-700 font-bold",
+    PUT: "text-amber-700 font-bold",
+    DELETE: "text-rose-700 font-bold",
+    PATCH: "text-violet-700 font-bold",
 } as Record<string, string>;
 
 export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBuilderProps) {
     const [activeTab, setActiveTab] = useState("params");
 
-    const updateRequest = (field: keyof ApiStep['request'], value: any) => {
+    const updateRequest = (field: keyof ApiStep['request'], value: unknown) => {
         onChange({ ...step, request: { ...(step.request || {}), [field]: value } });
     };
 
-    // Convert Record<string, string> back and forth from KeyValuePair[]
-    const recordToPairs = React.useCallback((record: Record<string, string> = {}) => {
-        return Object.entries(record).map(([key, value]) => ({ key, value }));
+    // Convert Record back and forth from KeyValuePair[]
+    const recordToPairs = React.useCallback((record: Record<string, unknown> = {}) => {
+        return Object.entries(record).map(([key, value]) => ({
+            key,
+            value: typeof value === 'string' ? value : JSON.stringify(value),
+        }));
     }, []);
 
     const pairsToRecord = (pairs: { key: string; value: string }[]) => {
@@ -68,12 +71,12 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
             <div className="flex items-center gap-2">
                 <Select
                     value={step.request?.method || "GET"}
-                    onValueChange={(val: any) => updateRequest("method", val)}
+                    onValueChange={(val: string) => updateRequest("method", val)}
                 >
-                    <SelectTrigger className={`w-32 bg-slate-900 border-slate-700 ${METHOD_COLORS[step.request?.method || "GET"] || ''}`}>
+                    <SelectTrigger className={`w-32 bg-white/85 border-sky-200 shadow-sm ${METHOD_COLORS[step.request?.method || "GET"] || ''}`}>
                         <SelectValue placeholder="Method" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-700">
+                    <SelectContent className="bg-white border-sky-100 shadow-xl">
                         {Object.keys(METHOD_COLORS).map(m => (
                             <SelectItem key={m} value={m} className={METHOD_COLORS[m]}>{m}</SelectItem>
                         ))}
@@ -85,14 +88,14 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
                         value={step.request?.url || ""}
                         onChange={(e) => updateRequest("url", e.target.value)}
                         placeholder="https://api.example.com/v1/users/${user_id}"
-                        className="w-full bg-slate-900 border-slate-700 text-slate-100 font-mono text-sm h-10 pr-4"
+                        className="w-full bg-white/85 border-sky-200 text-slate-900 placeholder:text-slate-400 font-mono text-sm h-10 pr-4 shadow-sm"
                     />
                 </div>
 
                 <Button
                     onClick={onRun}
                     disabled={isExecuting}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white min-w-24 h-10"
+                    className="min-w-24 h-10 bg-gradient-to-r from-sky-500 via-blue-500 to-violet-500 text-white shadow-lg shadow-sky-500/25 hover:from-sky-600 hover:via-blue-600 hover:to-violet-600"
                 >
                     {isExecuting ? (
                         <span className="flex items-center"><span className="animate-spin mr-2">◷</span> 发送中... (Sending...)</span>
@@ -102,17 +105,17 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
                 </Button>
             </div>
 
-            <Card className="bg-slate-900 border-slate-800 rounded-md overflow-hidden">
+            <Card className="overflow-hidden rounded-2xl border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <div className="border-b border-slate-800 bg-slate-950/50 px-2 py-1">
+                    <div className="border-b border-sky-100 bg-sky-50/60 px-2 py-1">
                         <TabsList className="bg-transparent h-9 p-0 space-x-2">
-                            <TabsTrigger value="params" className="data-[state=active]:bg-slate-800 data-[state=active]:text-slate-100 text-slate-400">参数 (Params)</TabsTrigger>
-                            <TabsTrigger value="headers" className="data-[state=active]:bg-slate-800 data-[state=active]:text-slate-100 text-slate-400">请求头 (Headers)</TabsTrigger>
-                            <TabsTrigger value="body" className="data-[state=active]:bg-slate-800 data-[state=active]:text-slate-100 text-slate-400">请求体 (Body)</TabsTrigger>
-                            <TabsTrigger value="extraction" className="data-[state=active]:bg-slate-800 data-[state=active]:text-slate-100 text-indigo-400">
+                            <TabsTrigger value="params" className="text-slate-600 hover:text-sky-800 data-[state=active]:bg-white data-[state=active]:text-sky-700 data-[state=active]:shadow-sm">参数 (Params)</TabsTrigger>
+                            <TabsTrigger value="headers" className="text-slate-600 hover:text-sky-800 data-[state=active]:bg-white data-[state=active]:text-sky-700 data-[state=active]:shadow-sm">请求头 (Headers)</TabsTrigger>
+                            <TabsTrigger value="body" className="text-slate-600 hover:text-sky-800 data-[state=active]:bg-white data-[state=active]:text-sky-700 data-[state=active]:shadow-sm">请求体 (Body)</TabsTrigger>
+                            <TabsTrigger value="extraction" className="text-violet-600/80 hover:text-violet-700 data-[state=active]:bg-violet-50 data-[state=active]:text-violet-700 data-[state=active]:shadow-sm">
                                 <Variable className="h-3 w-3 mr-1" /> 提取 (Extraction)
                             </TabsTrigger>
-                            <TabsTrigger value="assertion" className="data-[state=active]:bg-slate-800 data-[state=active]:text-emerald-400 text-emerald-600/70">
+                            <TabsTrigger value="assertion" className="text-emerald-600/80 hover:text-emerald-700 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm">
                                 <CheckSquare className="h-3 w-3 mr-1" /> 断言 (Assertion)
                             </TabsTrigger>
                         </TabsList>
@@ -140,7 +143,7 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
                             />
                         </TabsContent>
                         <TabsContent value="body" className="m-0 p-0 h-full flex flex-col">
-                            <div className="p-4 bg-slate-900 border-b border-slate-800 text-xs text-slate-400 flex items-center gap-2">
+                            <div className="p-4 bg-slate-950 border-b border-slate-800 text-xs text-slate-300 flex items-center gap-2">
                                 <AlignLeft className="h-4 w-4" /> JSON 载荷 (JSON Payload)
                             </div>
                             <Textarea
@@ -157,8 +160,8 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
                             />
                         </TabsContent>
                         <TabsContent value="extraction" className="m-0 p-4">
-                            <div className="mb-4 text-sm text-slate-400">
-                                提取响应JSON中的字段作为全局变量 (Extract response JSON fields as global variables). Example: <code className="text-indigo-400 bg-indigo-400/10 px-1 rounded">token</code> &larr; <code className="text-amber-400 bg-amber-400/10 px-1 rounded">$.data.access_token</code>)
+                            <div className="mb-4 text-sm text-slate-600">
+                                提取响应JSON中的字段作为全局变量 (Extract response JSON fields as global variables). Example: <code className="text-violet-700 bg-violet-50 px-1 rounded border border-violet-100">token</code> &larr; <code className="text-amber-700 bg-amber-50 px-1 rounded border border-amber-100">$.data.access_token</code>)
                             </div>
                             <KeyValueEditor
                                 pairs={extraction}
@@ -172,18 +175,18 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
                         </TabsContent>
                         <TabsContent value="assertion" className="m-0 p-4 space-y-4">
                             <div className="flex items-center gap-4">
-                                <label className="text-sm font-medium text-slate-300 w-32">预期状态码 (Expected Status):</label>
+                                <label className="text-sm font-medium text-slate-700 w-32">预期状态码 (Expected Status):</label>
                                 <Input
                                     type="number"
                                     value={step.assertion?.status_code || ""}
                                     onChange={e => onChange({ ...step, assertion: { ...step.assertion, json_assertions: step.assertion?.json_assertions || {}, status_code: parseInt(e.target.value) || undefined } })}
                                     placeholder="200"
-                                    className="w-32 bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
+                                    className="w-32 bg-white/85 border-sky-200 text-slate-900 placeholder:text-slate-400 shadow-sm"
                                 />
                             </div>
 
                             <div className="flex items-start gap-4">
-                                <label className="text-sm font-medium text-slate-300 w-32 pt-2">JSON匹配 (JSON Match):</label>
+                                <label className="text-sm font-medium text-slate-700 w-32 pt-2">JSON匹配 (JSON Match):</label>
                                 <div className="flex-1">
                                     <KeyValueEditor
                                         pairs={jsonAssertions}
@@ -198,12 +201,12 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
                             </div>
 
                             <div className="flex items-center gap-4">
-                                <label className="text-sm font-medium text-slate-300 w-32">包含文本 (Contains Text):</label>
+                                <label className="text-sm font-medium text-slate-700 w-32">包含文本 (Contains Text):</label>
                                 <Input
                                     value={step.assertion?.contains || ""}
                                     onChange={e => onChange({ ...step, assertion: { ...step.assertion, json_assertions: step.assertion?.json_assertions || {}, contains: e.target.value } })}
                                     placeholder="Success"
-                                    className="flex-1 bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
+                                    className="flex-1 bg-white/85 border-sky-200 text-slate-900 placeholder:text-slate-400 shadow-sm"
                                 />
                             </div>
                         </TabsContent>

@@ -18,7 +18,7 @@ export interface CompileRequest {
     trace_data?: TraceData;
     strategy?: 'exact' | 'optimized' | 'data_driven' | 'hybrid';
     output_format?: 'pytest' | 'unittest';
-    options?: Record<string, any>;
+    options?: Record<string, unknown>;
 }
 
 export interface CompileResponse {
@@ -72,8 +72,8 @@ export const getScriptHistory = async (scriptId: string): Promise<VersionInfo[]>
     return response.data;
 };
 
-export const healScript = async (scriptId: string, brokenCode: string, errorLog: string): Promise<any> => {
-    const response = await api.post<any>(`/phoenix/scripts/${scriptId}/heal`, {
+export const healScript = async (scriptId: string, brokenCode: string, errorLog: string): Promise<Record<string, unknown>> => {
+    const response = await api.post<Record<string, unknown>>(`/phoenix/scripts/${scriptId}/heal`, {
         script_id: scriptId,
         healing_record_id: `HEAL_${Date.now()}`,
         error_log: errorLog,

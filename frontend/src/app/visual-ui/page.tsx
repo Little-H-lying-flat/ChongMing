@@ -268,19 +268,19 @@ export default function VisualUIPage() {
     };
 
     const statusBadgeClass = (status: VisualUseCase['status']) => {
-        if (status === 'active') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200';
-        if (status === 'archived') return 'border-slate-600 bg-slate-800 text-slate-300';
-        return 'border-amber-500/40 bg-amber-500/10 text-amber-200';
+        if (status === 'active') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+        if (status === 'archived') return 'border-slate-200 bg-slate-100 text-slate-600';
+        return 'border-amber-200 bg-amber-50 text-amber-700';
     };
 
     const renderCaseSkeletons = () => (
         <div className="space-y-2 p-2">
             {[0, 1, 2, 3].map((item) => (
-                <div key={item} className="rounded-md border border-slate-800 bg-slate-900/60 p-3 space-y-3">
-                    <Skeleton className="h-4 w-3/4 bg-slate-800" />
+                <div key={item} className="rounded-xl border border-sky-100 bg-white/70 p-3 space-y-3 shadow-sm">
+                    <Skeleton className="h-4 w-3/4 bg-sky-100" />
                     <div className="flex justify-between gap-3">
-                        <Skeleton className="h-5 w-16 bg-slate-800" />
-                        <Skeleton className="h-4 w-20 bg-slate-800" />
+                        <Skeleton className="h-5 w-16 bg-sky-100" />
+                        <Skeleton className="h-4 w-20 bg-slate-100" />
                     </div>
                 </div>
             ))}
@@ -288,37 +288,37 @@ export default function VisualUIPage() {
     );
 
     const renderEmptyCases = () => (
-        <div className="m-2 rounded-lg border border-dashed border-slate-700 bg-slate-950/60 p-4 text-center space-y-3">
+        <div className="m-2 rounded-2xl border border-dashed border-sky-200 bg-white/70 p-4 text-center space-y-3 shadow-sm">
             <div>
-                <p className="text-sm font-medium text-slate-200">暂无视觉用例 (No visual cases yet)</p>
+                <p className="text-sm font-medium text-slate-900">暂无视觉用例 (No visual cases yet)</p>
                 <p className="text-xs text-slate-500 mt-1">创建一个空白用例，或用 AI 生成未保存草稿开始。 (Create one or start with an AI draft.)</p>
             </div>
-            <Button size="sm" onClick={handleCreateNew} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+            <Button size="sm" onClick={handleCreateNew} className="bg-gradient-to-r from-sky-500 via-blue-500 to-violet-500 text-white shadow-lg shadow-sky-500/20 hover:from-sky-600 hover:via-blue-600 hover:to-violet-600">
                 <Plus className="h-4 w-4 mr-2" />
                 创建用例 (Create Case)
             </Button>
-            <p className="text-[11px] text-violet-300">AI 草稿助手在右侧面板可用。 (AI Draft Assistant is available on the right.)</p>
+            <p className="text-[11px] text-violet-600">AI 草稿助手在右侧面板可用。 (AI Draft Assistant is available on the right.)</p>
         </div>
     );
 
     const renderDraftCard = () => (
         <Collapsible open={draftAssistantOpen} onOpenChange={setDraftAssistantOpen}>
-            <Card className="bg-slate-900 border-slate-800 shadow-xl">
+            <Card className="overflow-hidden rounded-2xl border-white/70 bg-white/80 shadow-[0_24px_70px_-32px_rgba(124,58,237,0.45)] backdrop-blur-xl">
                 <CollapsibleTrigger asChild>
                     <button type="button" className="w-full text-left">
-                        <CardHeader className="pb-3 border-b border-slate-800 hover:bg-slate-800/40 transition-colors">
+                        <CardHeader className="border-b border-violet-100 bg-gradient-to-r from-violet-50 via-fuchsia-50 to-sky-50 pb-3 transition-colors hover:from-violet-100 hover:via-fuchsia-50 hover:to-sky-100">
                             <div className="flex items-start justify-between gap-3">
                                 <div className="space-y-2">
-                                    <CardTitle className="text-base text-indigo-400 flex items-center gap-2">
+                                    <CardTitle className="text-base text-violet-700 flex items-center gap-2">
                                         <Sparkles className="h-4 w-4" />
                                         AI 生成草稿助手 (AI Draft Assistant)
-                                        <Badge variant="outline" className="border-violet-500/40 bg-violet-500/10 text-violet-200">Draft only</Badge>
+                                        <Badge variant="outline" className="border-violet-200 bg-violet-100 text-violet-700">Draft only</Badge>
                                     </CardTitle>
-                                    <p className="text-xs text-slate-500">
+                                    <p className="text-xs text-slate-600">
                                         从自然语言生成未保存草稿；不会自动保存或运行。 (Generate an unsaved draft from natural language.)
                                     </p>
                                 </div>
-                                <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${draftAssistantOpen ? 'rotate-180' : ''}`} />
+                                <ChevronDown className={`h-4 w-4 shrink-0 text-violet-500 transition-transform ${draftAssistantOpen ? 'rotate-180' : ''}`} />
                             </div>
                         </CardHeader>
                     </button>
@@ -329,10 +329,10 @@ export default function VisualUIPage() {
                             value={draftPrompt}
                             onChange={e => setDraftPrompt(e.target.value)}
                             placeholder="例如：打开登录页，输入用户名和密码，点击登录，验证进入首页。 (Describe the UI flow to draft)"
-                            className="min-h-24 bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500"
+                            className="min-h-24 border-violet-200 bg-white/85 text-slate-900 placeholder:text-slate-400 focus-visible:ring-violet-400"
                         />
                         {clarificationQuestions.length > 0 && (
-                            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                                 <div className="font-medium mb-1">需要补充信息 (More details needed)</div>
                                 <ul className="list-disc pl-5 space-y-1">
                                     {clarificationQuestions.map((question, index) => (
@@ -342,7 +342,7 @@ export default function VisualUIPage() {
                             </div>
                         )}
                         <div className="flex justify-end">
-                            <Button onClick={handleGenerateDraft} disabled={isGeneratingDraft} className="bg-violet-600 hover:bg-violet-700 text-white">
+                            <Button onClick={handleGenerateDraft} disabled={isGeneratingDraft} className="bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/25 hover:from-violet-600 hover:to-fuchsia-600">
                                 <Sparkles className="h-4 w-4 mr-2" />
                                 {isGeneratingDraft ? "生成中... (Generating...)" : "生成未保存草稿 (Generate Draft)"}
                             </Button>
@@ -354,15 +354,17 @@ export default function VisualUIPage() {
     );
 
     return (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-screen bg-slate-950 text-slate-200">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.18),transparent_30%),radial-gradient(circle_at_top_right,rgba(168,85,247,0.14),transparent_28%),linear-gradient(135deg,#f8fafc_0%,#eef6ff_45%,#fff7ed_100%)] text-slate-900">
             {/* Left Panel: Case Explorer */}
-            <div className="w-full lg:w-80 lg:shrink-0 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-900 flex flex-col h-auto lg:h-full max-h-[40vh] lg:max-h-none">
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                    <h2 className="font-semibold flex items-center gap-2 text-slate-200">
-                        <Eye className="h-5 w-5 text-indigo-500" />
+            <div className="w-full lg:w-80 lg:shrink-0 border-b lg:border-b-0 lg:border-r border-sky-100/80 bg-white/75 backdrop-blur-xl shadow-[12px_0_40px_-28px_rgba(14,165,233,0.5)] flex flex-col h-auto lg:h-full max-h-[40vh] lg:max-h-none">
+                <div className="p-4 border-b border-sky-100 flex items-center justify-between">
+                    <h2 className="font-semibold flex items-center gap-2 text-slate-900">
+                        <span className="rounded-xl bg-sky-100 p-1.5 text-sky-700" aria-hidden="true">
+                            <Eye className="h-4 w-4" />
+                        </span>
                         视觉UI套件 (Visual UI Suite)
                     </h2>
-                    <Button size="icon" variant="ghost" onClick={handleCreateNew} aria-label="创建新视觉用例 (Create new visual case)">
+                    <Button size="icon" variant="ghost" onClick={handleCreateNew} aria-label="创建新视觉用例 (Create new visual case)" className="text-sky-700 hover:bg-sky-50 hover:text-sky-800">
                         <Plus className="h-4 w-4" />
                     </Button>
                 </div>
@@ -376,7 +378,7 @@ export default function VisualUIPage() {
                             <div
                                 key={vc.id}
                                 onClick={() => selectCase(vc)}
-                                className={`p-3 rounded-md cursor-pointer border transition-colors group ${activeCaseId === vc.id ? 'border-indigo-500 bg-indigo-500/10 text-slate-200' : 'border-transparent bg-transparent hover:bg-slate-800/50 text-slate-300'}`}
+                                className={`p-3 rounded-xl cursor-pointer border transition-all group ${activeCaseId === vc.id ? 'border-sky-300 bg-gradient-to-r from-sky-100 via-white to-violet-100 text-slate-950 shadow-sm ring-1 ring-sky-200' : 'border-transparent bg-white/30 text-slate-700 hover:border-sky-200 hover:bg-white/80 hover:shadow-sm'}`}
                             >
                                 <div className="flex justify-between items-start">
                                     <div className="truncate font-medium text-sm">{vc.name}</div>
@@ -384,7 +386,7 @@ export default function VisualUIPage() {
                                         size="icon"
                                         variant="ghost"
                                         aria-label={`删除视觉用例 ${vc.name} (Delete visual case ${vc.name})`}
-                                        className="h-8 w-8 text-rose-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity hover:text-rose-500 hover:bg-rose-500/10"
+                                        className="h-8 w-8 text-rose-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity hover:bg-rose-50 hover:text-rose-700"
                                         onClick={(e) => handleDeleteClick(vc.id, e)}
                                     >
                                         <Trash2 className="h-4 w-4" />
@@ -392,7 +394,7 @@ export default function VisualUIPage() {
                                 </div>
                                 <div className="text-xs text-slate-500 mt-2 flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-1.5">
-                                        <Badge variant="outline" className="border-slate-700 bg-slate-950 text-slate-300">{vc.steps.length} 步 (Steps)</Badge>
+                                        <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700">{vc.steps.length} 步 (Steps)</Badge>
                                         <Badge variant="outline" className={statusBadgeClass(vc.status)}>{vc.status}</Badge>
                                     </div>
                                     <span className="shrink-0">{format(new Date(vc.updated_at), 'MM-dd HH:mm')}</span>
@@ -412,15 +414,15 @@ export default function VisualUIPage() {
                         {/* Header Controls */}
                         <div className="flex items-center justify-between">
                             <div>
-                                <h1 className="text-2xl font-bold text-slate-100">{currentName || "未命名用例 (Untitled Case)"}</h1>
-                                <p className="text-slate-400 text-sm mt-1">{activeCaseId === 'NEW' ? '创建新用例草稿 (New Case Draft)' : `ID: ${activeCaseId}`}</p>
+                                <h1 className="text-2xl font-bold text-slate-950">{currentName || "未命名用例 (Untitled Case)"}</h1>
+                                <p className="text-slate-500 text-sm mt-1">{activeCaseId === 'NEW' ? '创建新用例草稿 (New Case Draft)' : `ID: ${activeCaseId}`}</p>
                             </div>
                             <div className="flex flex-wrap items-center gap-3">
-                                <Button variant="outline" onClick={handleSave} disabled={isSaving} aria-label="保存视觉用例 (Save visual case)" className="border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
+                                <Button variant="outline" onClick={handleSave} disabled={isSaving} aria-label="保存视觉用例 (Save visual case)" className="border-sky-200 bg-white/75 text-slate-700 shadow-sm hover:bg-sky-50 hover:text-sky-800">
                                     <Save className="h-4 w-4 mr-2" />
                                     {isSaving ? "保存中... (Saving...)" : "保存用例 (Save Case)"}
                                 </Button>
-                                <Button onClick={handleExecute} disabled={isExecuting} aria-label="运行并追踪视觉用例 (Run and track visual case)" className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                                <Button onClick={handleExecute} disabled={isExecuting} aria-label="运行并追踪视觉用例 (Run and track visual case)" className="bg-gradient-to-r from-sky-500 via-blue-500 to-violet-500 text-white shadow-lg shadow-sky-500/25 hover:from-sky-600 hover:via-blue-600 hover:to-violet-600">
                                     <Play className="h-4 w-4 mr-2" />
                                     {isExecuting ? "启动中... (Starting...)" : "运行并追踪 (Run & Track)"}
                                 </Button>
@@ -429,24 +431,24 @@ export default function VisualUIPage() {
 
                         {/* Meta Fields Map */}
                         {/* Meta Fields Map */}
-                        <Card className="bg-slate-900 border-slate-800 shadow-xl">
-                            <CardHeader className="pb-3 border-b border-slate-800">
-                                <CardTitle className="text-base text-indigo-400">用例属性设定 (Case Metadata)</CardTitle>
+                        <Card className="rounded-2xl border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(15,23,42,0.35)] backdrop-blur-xl">
+                            <CardHeader className="pb-3 border-b border-sky-100 bg-gradient-to-r from-sky-50 to-white">
+                                <CardTitle className="text-base text-sky-700">用例属性设定 (Case Metadata)</CardTitle>
                             </CardHeader>
                             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                                 <div className="space-y-1.5">
-                                    <label htmlFor="visual-case-name" className="text-sm font-medium text-slate-400">用例名称 (Case Name)</label>
-                                    <Input id="visual-case-name" value={currentName} onChange={e => setCurrentName(e.target.value)} aria-describedby="visual-case-name-help" className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500" />
+                                    <label htmlFor="visual-case-name" className="text-sm font-medium text-slate-700">用例名称 (Case Name)</label>
+                                    <Input id="visual-case-name" value={currentName} onChange={e => setCurrentName(e.target.value)} aria-describedby="visual-case-name-help" className="border-sky-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:ring-sky-400" />
                                     <p id="visual-case-name-help" className="text-xs text-slate-500">用于左侧列表和执行报告识别该用例。 (Shown in the case list and reports.)</p>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label htmlFor="visual-case-base-url" className="text-sm font-medium text-slate-400">默认环境变量 (Base URL)</label>
-                                    <Input id="visual-case-base-url" value={currentBaseUrl} onChange={e => setCurrentBaseUrl(e.target.value)} aria-describedby="visual-case-base-url-help" placeholder="https://example.com" className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500" />
+                                    <label htmlFor="visual-case-base-url" className="text-sm font-medium text-slate-700">默认环境变量 (Base URL)</label>
+                                    <Input id="visual-case-base-url" value={currentBaseUrl} onChange={e => setCurrentBaseUrl(e.target.value)} aria-describedby="visual-case-base-url-help" placeholder="https://example.com" className="border-sky-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:ring-sky-400" />
                                     <p id="visual-case-base-url-help" className="text-xs text-slate-500">GOTO 步骤未填 URL 时会优先使用这里。 (Used by GOTO when no URL is set.)</p>
                                 </div>
                                 <div className="md:col-span-2 space-y-1.5">
-                                    <label htmlFor="visual-case-description" className="text-sm font-medium text-slate-400">用例描述 (Case Description)</label>
-                                    <Input id="visual-case-description" value={currentDesc} onChange={e => setCurrentDesc(e.target.value)} aria-describedby="visual-case-description-help" placeholder="记录登录/付款等业务逻辑 (e.g. Login/Payment flow)" className="bg-slate-950 border-slate-700 text-slate-100 placeholder:text-slate-500" />
+                                    <label htmlFor="visual-case-description" className="text-sm font-medium text-slate-700">用例描述 (Case Description)</label>
+                                    <Input id="visual-case-description" value={currentDesc} onChange={e => setCurrentDesc(e.target.value)} aria-describedby="visual-case-description-help" placeholder="记录登录/付款等业务逻辑 (e.g. Login/Payment flow)" className="border-sky-200 bg-white text-slate-900 placeholder:text-slate-400 focus-visible:ring-sky-400" />
                                     <p id="visual-case-description-help" className="text-xs text-slate-500">记录业务目的，便于人工确认 AI 草稿。 (Describe the business goal for review.)</p>
                                 </div>
                             </CardContent>
@@ -454,7 +456,7 @@ export default function VisualUIPage() {
 
                         {/* DnD Step Builder */}
                         {/* DnD Step Builder */}
-                        <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
+                        <Card className="overflow-hidden rounded-2xl border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
                             <CardContent className="pt-6">
                                 <StepBuilder steps={currentSteps} onChange={setCurrentSteps} />
                             </CardContent>
@@ -464,23 +466,23 @@ export default function VisualUIPage() {
                 ) : (
                     <div className="max-w-5xl mx-auto space-y-6">
                         {renderDraftCard()}
-                        <div className="h-full flex flex-col items-center justify-center text-muted-foreground py-24">
-                            <Eye className="h-16 w-16 mb-4 text-slate-700 opacity-50" />
-                            <p className="text-lg">选择左侧用例、点击+或用 AI 生成草稿开始编排 (Select a case, click +, or generate an AI draft)</p>
+                        <div className="h-full flex flex-col items-center justify-center rounded-3xl border border-dashed border-sky-200 bg-white/50 py-24 text-center text-slate-500 shadow-sm backdrop-blur">
+                            <Eye className="h-16 w-16 mb-4 text-sky-300" />
+                            <p className="text-lg text-slate-700">选择左侧用例、点击+或用 AI 生成草稿开始编排 (Select a case, click +, or generate an AI draft)</p>
                         </div>
                     </div>
                 )}
             </div>
             <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-                <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <AlertDialogContent className="border-slate-200 bg-white text-slate-900 shadow-2xl">
                     <AlertDialogHeader>
                         <AlertDialogTitle>确定删除此视觉用例吗？ (Delete this visual case?)</AlertDialogTitle>
-                        <AlertDialogDescription className="text-slate-400">
+                        <AlertDialogDescription className="text-slate-600">
                             此操作不可逆，将永久删除该用例的所有业务步骤与数据。 (This action is irreversible. All steps and data will be permanently deleted.)
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-slate-200">取消 (Cancel)</AlertDialogCancel>
+                        <AlertDialogCancel className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900">取消 (Cancel)</AlertDialogCancel>
                         <AlertDialogAction onClick={confirmDelete} className="bg-rose-600 hover:bg-rose-700 text-white border-none">
                             确定删除 (Confirm Delete)
                         </AlertDialogAction>
@@ -488,15 +490,15 @@ export default function VisualUIPage() {
                 </AlertDialogContent>
             </AlertDialog>
             <AlertDialog open={draftConfirmOpen} onOpenChange={setDraftConfirmOpen}>
-                <AlertDialogContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <AlertDialogContent className="border-slate-200 bg-white text-slate-900 shadow-2xl">
                     <AlertDialogHeader>
                         <AlertDialogTitle>用 AI 草稿覆盖当前编辑内容？ (Replace current editor content?)</AlertDialogTitle>
-                        <AlertDialogDescription className="text-slate-400">
+                        <AlertDialogDescription className="text-slate-600">
                             新草稿会替换右侧编辑器里的名称、Base URL 和步骤；不会自动保存或运行。 (The draft replaces the editor content only; it will not save or run automatically.)
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-slate-200">保留当前内容 (Keep Current)</AlertDialogCancel>
+                        <AlertDialogCancel className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900">保留当前内容 (Keep Current)</AlertDialogCancel>
                         <AlertDialogAction onClick={() => pendingDraft && applyDraft(pendingDraft)} className="bg-violet-600 hover:bg-violet-700 text-white border-none">
                             使用新草稿 (Use Draft)
                         </AlertDialogAction>

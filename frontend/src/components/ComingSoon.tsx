@@ -7,27 +7,27 @@ interface ComingSoonProps {
 
 export function ComingSoon({ title }: ComingSoonProps) {
     return (
-        <div className="flex items-center justify-center h-full">
-            <Card className="w-full max-w-md bg-slate-900 border-slate-800 text-slate-100 shadow-2xl">
-                <CardContent className="flex flex-col items-center justify-center p-12 text-center space-y-6">
+        <div className="flex h-full items-center justify-center">
+            <Card className="w-full max-w-md rounded-3xl border-white/70 bg-white/80 text-slate-900 shadow-[0_24px_70px_-32px_rgba(14,165,233,0.45)] backdrop-blur-xl">
+                <CardContent className="flex flex-col items-center justify-center space-y-6 p-12 text-center">
                     <div className="relative">
-                        <div className="absolute -inset-1 rounded-full bg-blue-500/20 blur-xl animate-pulse"></div>
-                        <div className="relative bg-slate-800 p-4 rounded-full border border-slate-700">
-                            <Rocket className="w-12 h-12 text-blue-500" />
+                        <div className="absolute -inset-2 animate-pulse rounded-full bg-sky-400/20 blur-xl"></div>
+                        <div className="relative rounded-full border border-sky-100 bg-gradient-to-br from-sky-50 to-violet-50 p-4 shadow-lg shadow-sky-500/20">
+                            <Rocket className="h-12 w-12 text-sky-600" />
                         </div>
                     </div>
 
                     <div className="space-y-2">
-                        <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+                        <h1 className="bg-gradient-to-r from-sky-600 via-blue-600 to-violet-600 bg-clip-text text-2xl font-bold tracking-tight text-transparent">
                             {title}
                         </h1>
-                        <p className="text-slate-400 text-sm">
+                        <p className="text-sm text-slate-600">
                             该核心业务模块正在研发与接入中... (This module is under development...)
                         </p>
                     </div>
 
-                    <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500/50 w-1/3 animate-[shimmer_2s_infinite]"></div>
+                    <div className="h-1 w-full overflow-hidden rounded-full bg-sky-100">
+                        <div className="h-full w-1/3 animate-[shimmer_2s_infinite] bg-gradient-to-r from-sky-400 via-blue-500 to-violet-500"></div>
                     </div>
                 </CardContent>
             </Card>

@@ -45,26 +45,26 @@ export function KeyValueEditor({ pairs, onChange, placeholderKey = "键 (Key)", 
                         value={pair.key}
                         onChange={(e) => handleChange(index, "key", e.target.value)}
                         placeholder={placeholderKey}
-                        className="flex-1 bg-slate-950 border-slate-700 text-slate-100 h-9 shrink-0 whitespace-nowrap"
+                        className="flex-1 bg-white/85 border-sky-200 text-slate-900 placeholder:text-slate-400 shadow-sm h-9 shrink-0 whitespace-nowrap"
                     />
                     <Input
                         value={pair.value}
                         onChange={(e) => handleChange(index, "value", e.target.value)}
                         placeholder={placeholderValue}
-                        className="flex-1 bg-slate-950 border-slate-700 text-slate-100 h-9"
+                        className="flex-1 bg-white/85 border-sky-200 text-slate-900 placeholder:text-slate-400 shadow-sm h-9"
                     />
                     <Input
                         value={pair.description || ""}
                         onChange={(e) => handleChange(index, "description", e.target.value)}
                         placeholder="描述 可选 (Description (Optional))"
-                        className="flex-1 bg-slate-950 border-slate-700 text-slate-100 h-9"
+                        className="flex-1 bg-white/85 border-sky-200 text-slate-900 placeholder:text-slate-400 shadow-sm h-9"
                     />
-                    <Button variant="ghost" size="icon" onClick={() => handleRemove(index)} className="shrink-0 h-9 w-9 text-slate-400 hover:text-rose-400">
+                    <Button variant="ghost" size="icon" onClick={() => handleRemove(index)} className="shrink-0 h-9 w-9 text-slate-500 hover:bg-rose-50 hover:text-rose-600">
                         <Trash2 className="h-4 w-4" />
                     </Button>
                 </div>
             ))}
-            <Button type="button" variant="outline" size="sm" onClick={handleAdd} className="mt-2 bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-slate-100">
+            <Button type="button" variant="outline" size="sm" onClick={handleAdd} className="mt-2 border-sky-200 bg-white/80 text-slate-700 shadow-sm hover:bg-sky-50 hover:text-sky-800">
                 <Plus className="h-3 w-3 mr-1" /> 添加行 (Add Row)
             </Button>
         </div>
