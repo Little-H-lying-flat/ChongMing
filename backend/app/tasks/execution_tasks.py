@@ -8,45 +8,11 @@ from typing import List
 from celery import shared_task
 from loguru import logger
 
+from app.services.api_case_ir_converter import normalize_api_case_payload_v2, normalize_api_steps_v2
+
 
 def _normalize_dynamic_api_steps(case_data: dict) -> dict:
-    steps = case_data.get("steps")
-    if not isinstance(steps, list):
-        return case_data
-
-    normalized_steps = []
-    changed = False
-    for step in steps:
-        if not isinstance(step, dict):
-            normalized_steps.append(step)
-            continue
-
-        step_type = step.get("step_type")
-        if step_type != "API" or "request" in step:
-            normalized_steps.append(step)
-            continue
-
-        request = {
-            "method": step.get("method", "GET"),
-            "url": step.get("url") or step.get("url_path") or step.get("target") or "/",
-            "headers": step.get("headers") or {},
-            "query_params": step.get("query_params") or {},
-            "body": step.get("body") if "body" in step else step.get("input_data"),
-        }
-        if step.get("timeout_ms") is not None:
-            request["timeout_ms"] = step.get("timeout_ms")
-
-        normalized_step = dict(step)
-        normalized_step["request"] = request
-        normalized_steps.append(normalized_step)
-        changed = True
-
-    if not changed:
-        return case_data
-
-    normalized_case = dict(case_data)
-    normalized_case["steps"] = normalized_steps
-    return normalized_case
+    return normalize_api_case_payload_v2(case_data)
 
 
 @shared_task(bind=True, name="app.tasks.execution_tasks.execute_test_cases")
@@ -138,7 +104,7 @@ def execute_test_cases(
                             stmt = select(TestCase).where(TestCase.id == tc_id)
                             tc_record = (await session.execute(stmt)).scalar_one_or_none()
                             if tc_record:
-                                tc_dict = tc_record.to_tcir()
+                                tc_dict = normalize_api_case_payload_v2(tc_record.to_tcir())
                                 # Convert mode string to enum if necessary for Pydantic
                                 try:
                                     if isinstance(tc_dict.get("mode"), str):
@@ -152,7 +118,9 @@ def execute_test_cases(
                 # 3. Fallback to Legacy Loader (DB/File Mocks)
                 if not tc_ir:
                     tc_ir = TestCaseLoader.load(tc_id)
-                
+                    if tc_ir and isinstance(getattr(tc_ir, "steps", None), list):
+                        tc_ir.steps = normalize_api_steps_v2(tc_ir.steps, getattr(tc_ir.mode, "value", str(tc_ir.mode)))
+
                 if not tc_ir:
                     logger.error(f"[{tc_id}] Not Found in {cases_source}")
                     await _safe_create_step(tc_id, ExecutionStatus.ERROR, {}, 0.0, f"TC Not Found in {cases_source}")

@@ -15,6 +15,7 @@ from app.services.left_pupil.swagger_parser import SwaggerParser
 from app.services.left_pupil.asserter import Asserter, create_rules_from_dict
 from app.services.left_pupil.api_runner import ApiRunner, ApiIRStep, RequestSpec
 from app.models.api_ir import ApiIR, ApiIRChain, create_api_ir
+from app.services.api_case_ir_converter import normalize_api_step_v2
 
 
 router = APIRouter(tags=["Flow 4: Left Pupil (API Automation)"])
@@ -56,41 +57,7 @@ class ApiIRStepModel(BaseModel):
     def normalize_legacy_flat_step(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
-
-        normalized = dict(data)
-        if "id" not in normalized or not normalized.get("id"):
-            normalized["id"] = normalized.get("step_id") or "STEP_001"
-        if "name" not in normalized or not normalized.get("name"):
-            normalized["name"] = normalized.get("description") or normalized["id"]
-
-        if "request" not in normalized:
-            normalized["request"] = {
-                "method": normalized.get("method", "GET"),
-                "url": normalized.get("url") or normalized.get("path") or "/",
-                "headers": normalized.get("headers") or {},
-                "body": normalized.get("body", normalized.get("json_body")),
-                "query_params": normalized.get("query_params") or normalized.get("params") or {},
-                "timeout_ms": normalized.get("timeout_ms") or normalized.get("timeout") or 30000,
-            }
-
-        if "extraction" not in normalized and "extract" in normalized:
-            normalized["extraction"] = normalized.get("extract") or {}
-
-        if "assertion" not in normalized:
-            assertion: Dict[str, Any] = {}
-            if "expected_status_code" in normalized:
-                assertion["status_code"] = normalized.get("expected_status_code")
-            elif "status_code" in normalized:
-                assertion["status_code"] = normalized.get("status_code")
-            if "json_assertions" in normalized:
-                assertion["json_assertions"] = normalized.get("json_assertions") or {}
-            for key in ("contains", "not_contains", "expression"):
-                if key in normalized:
-                    assertion[key] = normalized.get(key)
-            if assertion:
-                normalized["assertion"] = assertion
-
-        return normalized
+        return normalize_api_step_v2(data, "API")
 
     model_config = {
         "json_schema_extra": {

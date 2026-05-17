@@ -26,6 +26,7 @@ from app.schemas.execution import (
     APIIR as SchemaAPIIR
 )
 from app.engines.left_pupil import APIIR as EngineAPIIR, ExecutionResult as APIExecutionResult
+from app.services.api_case_ir_converter import normalize_api_step_v2, normalize_api_steps_v2
 from app.utils.context_injector import render_string
 
 class Dispatcher:
@@ -213,13 +214,21 @@ class Dispatcher:
         # Initialize Context Pool for this execution
         context_pool: Dict[str, Any] = initial_context.copy() if initial_context else {}
         
+        normalized_steps = normalize_api_steps_v2(tc_ir.steps if isinstance(tc_ir.steps, list) else [], getattr(tc_ir.mode, "value", str(tc_ir.mode)))
+
         # 🔍 Pre-scan: Collect ALL ${var_name} references from all steps
         import re as _re
         all_downstream_vars: List[str] = []
-        for s in tc_ir.steps:
-            step_dict = s.model_dump() if hasattr(s, 'model_dump') else (s.dict() if hasattr(s, 'dict') else dict(s))  # type: ignore[union-attr]
-            # Scan URL, body, headers for ${var_name}
-            for field_val in [step_dict.get("url", ""), str(step_dict.get("body", "")), str(step_dict.get("headers", ""))]:
+        for step_dict in normalized_steps:
+            request = step_dict.get("request", {}) if isinstance(step_dict, dict) else {}
+            for field_val in [
+                step_dict.get("url", ""),
+                str(step_dict.get("body", "")),
+                str(step_dict.get("headers", "")),
+                request.get("url", ""),
+                str(request.get("body", "")),
+                str(request.get("headers", "")),
+            ]:
                 all_downstream_vars.extend(_re.findall(r'\$\{(\w+)\}', str(field_val)))
         all_downstream_vars = list(set(all_downstream_vars))  # deduplicate
         if all_downstream_vars:
@@ -227,15 +236,23 @@ class Dispatcher:
         
         logger.info(f"开始执行用例: {tc_ir.id} - {tc_ir.name}")
         
-        for i, step in enumerate(tc_ir.steps):
+        for i, step in enumerate(normalized_steps):
             step_start = time.time()
             
             try:
                 # Compute downstream vars needed by steps AFTER current one
                 downstream_vars_for_step: List[str] = []
-                for future_step in tc_ir.steps[i+1:]:
+                for future_step in normalized_steps[i+1:]:
                     fs_dict = future_step.model_dump() if hasattr(future_step, 'model_dump') else (future_step.dict() if hasattr(future_step, 'dict') else dict(future_step))  # type: ignore[union-attr]
-                    for field_val in [fs_dict.get("url", ""), str(fs_dict.get("body", "")), str(fs_dict.get("headers", ""))]:
+                    request = fs_dict.get("request", {}) if isinstance(fs_dict, dict) else {}
+                    for field_val in [
+                        fs_dict.get("url", ""),
+                        str(fs_dict.get("body", "")),
+                        str(fs_dict.get("headers", "")),
+                        request.get("url", ""),
+                        str(request.get("body", "")),
+                        str(request.get("headers", "")),
+                    ]:
                         downstream_vars_for_step.extend(_re.findall(r'\$\{(\w+)\}', str(field_val)))
                 downstream_vars_for_step = list(set(downstream_vars_for_step))
                 
@@ -327,6 +344,7 @@ class Dispatcher:
     async def _execute_step(self, step: dict, mode: ExecutionMode, context: Optional[Dict[str, Any]] = None, downstream_var_names: Optional[List[str]] = None, execution_id: Optional[str] = None) -> dict:
         """执行单个步骤"""
         step_dict = step.model_dump() if hasattr(step, 'model_dump') else (step.dict() if hasattr(step, 'dict') else dict(step))  # type: ignore[union-attr]
+        step_dict = normalize_api_step_v2(step_dict, mode.value if hasattr(mode, "value") else str(mode))
         logger.debug(f"👀 [Check 1] Dispatcher 接收到的原始 Step: {step_dict}")
 
         # 如果没有显式指定类型，我们可以为其提供 mode 作为备选推断，不过路由器现在更聪明了
@@ -447,9 +465,10 @@ class Dispatcher:
             if not self.left_pupil:
                 raise RuntimeError("左瞳引擎未初始化")
             
-            # 转换断言格式 (RefinedAssertionSpec -> List[Dict])
+            request_spec = step_dict.get("request", {})
             assertion_spec = step_dict.get("assertion", {})
-            assertions_list = step_dict.get("assertions", []) # 兼容直接传递列表的情况
+            extraction_spec = step_dict.get("extraction", {})
+            assertions_list = list(step_dict.get("assertions") or [])
             
             if not assertions_list and assertion_spec:
                 # 1. Status Code
@@ -486,10 +505,10 @@ class Dispatcher:
             runtime_status = None
             runtime_json = {}
             runtime_extract = {}
-            
+
             explicit_status = step_dict.get("expected_status_code")
-            explicit_json = step_dict.get("json_assertions")
-            explicit_extract = step_dict.get("extract")
+            explicit_json = step_dict.get("json_assertions") or assertion_spec.get("json_assertions") or {}
+            explicit_extract = step_dict.get("extract") or extraction_spec or {}
             
             # Condition: Missing explicit status code OR missing extract rules, AND we have a description
             if (explicit_status is None or not explicit_extract) and desc:
@@ -507,14 +526,16 @@ class Dispatcher:
 
             # Use EngineAPIIR which has path_params
             api_ir = EngineAPIIR(
-                method=step_dict.get("method", "GET"),
-                url=step_dict.get("url", ""),
-                headers=step_dict.get("headers", {}),
-                query_params=step_dict.get("params", step_dict.get("query_params", {})),
-                path_params=step_dict.get("path_params", {}),
-                body=step_dict.get("body", step_dict.get("json_body")),
+                method=request_spec.get("method") or step_dict.get("method", "GET"),
+                url=request_spec.get("url") or step_dict.get("url", ""),
+                headers=request_spec.get("headers") or step_dict.get("headers", {}),
+                query_params=request_spec.get("query_params") or step_dict.get("params", step_dict.get("query_params", {})),
+                path_params=request_spec.get("path_params") or step_dict.get("path_params", {}),
+                body=request_spec.get("body") if "body" in request_spec else step_dict.get("body", step_dict.get("json_body")),
+                content_type=request_spec.get("content_type") or step_dict.get("content_type", "application/json"),
+                timeout=(request_spec.get("timeout_ms") or step_dict.get("timeout_ms") or 30000) / 1000,
                 assertions=assertions_list,
-                extract=explicit_extract if explicit_extract else runtime_extract, # Fallback to runtime extraction
+                extract=explicit_extract if explicit_extract else runtime_extract,
                 expected_status_code=explicit_status if explicit_status is not None else runtime_status,
                 json_assertions=explicit_json if explicit_json else runtime_json,
             )

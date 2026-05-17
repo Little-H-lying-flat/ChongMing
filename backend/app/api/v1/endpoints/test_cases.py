@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.services.api_case_ir_converter import normalize_api_case_payload_v2, normalize_api_steps_v2
 from app.services.test_case_service import TestCaseService
 
 router = APIRouter()
@@ -55,7 +56,7 @@ def _to_response(item) -> TCIRResponse:
         mode=mode,
         priority=priority,
         status=status,
-        steps=item.steps,
+        steps=normalize_api_steps_v2(item.steps or [], mode),
         tags=item.tags,
         created_at=item.created_at.isoformat(),
         updated_at=item.updated_at.isoformat(),
@@ -89,7 +90,7 @@ async def create_test_case(tc: TCIRCreate, db: AsyncSession = Depends(get_db)):
     tc_data = tc.model_dump(exclude_none=True)
 
     try:
-        created = await service.create(tc_data)
+        created = await service.create(normalize_api_case_payload_v2(tc_data))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
@@ -112,7 +113,10 @@ async def update_test_case(tc_id: str, tc: TCIRCreate, db: AsyncSession = Depend
     service = TestCaseService(db)
 
     try:
-        item = await service.update(tc_id, tc.model_dump(exclude_unset=True, exclude_none=True))
+        item = await service.update(
+            tc_id,
+            normalize_api_case_payload_v2(tc.model_dump(exclude_unset=True, exclude_none=True)),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

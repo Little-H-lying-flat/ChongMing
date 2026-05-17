@@ -146,6 +146,43 @@ def test_flow3_happy_path_mixed_dispatch(mock_dispatcher_deps):
     assert args[2]["failed"] == 0
 
 
+def test_flow3_nested_only_api_step_reaches_left_pupil_with_flat_api_ir(mock_dispatcher_deps):
+    loader = mock_dispatcher_deps["loader"]
+    left_engine = mock_dispatcher_deps["left"]
+    exec_service = mock_dispatcher_deps["service"]
+
+    steps = [
+        {
+            "id": "STEP_NESTED",
+            "step_type": "API",
+            "name": "Nested API",
+            "request": {
+                "method": "GET",
+                "url": "http://example.test/ping",
+                "headers": {"X-Test": "1"},
+            },
+            "assertion": {
+                "status_code": 200,
+                "json_assertions": {"$.pong": True},
+            },
+            "extraction": {"pong": "$.pong"},
+        }
+    ]
+    tc_ir = create_mock_tcir("TC_NESTED_API", ExecutionMode.API, steps)
+    loader.load.return_value = tc_ir
+
+    execute_test_cases.apply(args=["mock-exec-nested", ["TC_NESTED_API"]], kwargs={"config": {"parallel": False}})
+
+    assert left_engine.execute.call_count == 1
+    api_ir = left_engine.execute.call_args.args[0]
+    assert api_ir.method == "GET"
+    assert api_ir.url == "http://example.test/ping"
+    assert api_ir.expected_status_code == 200
+    assert api_ir.json_assertions == {"$.pong": True}
+    assert api_ir.extract == {"pong": "$.pong"}
+    assert exec_service.create_step_result.call_count == 1
+
+
 def test_flow3_error_path_circuit_breaker(mock_dispatcher_deps):
     """
     Flow 3 Scenario B: Error Path
