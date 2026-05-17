@@ -5,7 +5,7 @@
 """
 
 import re
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import Any, Optional
 from dataclasses import dataclass, field
 
@@ -16,7 +16,7 @@ class VariableRecord:
     key: str
     value: Any
     source: str  # 来源步骤 ID
-    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ContextMemory:

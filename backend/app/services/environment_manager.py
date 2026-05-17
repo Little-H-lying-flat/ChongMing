@@ -13,7 +13,7 @@ import uuid
 import base64
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
@@ -417,7 +417,7 @@ class HealthChecker:
         return HealthReport(
             environment=env.id,
             environment_name=env.name,
-            timestamp=datetime.now(UTC).isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat() + "Z",
             overall_status=overall_status,
             details=details,
         )

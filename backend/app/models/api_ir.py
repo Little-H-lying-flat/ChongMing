@@ -6,7 +6,7 @@ API-IR 协议模型
 
 from typing import Any, Optional
 from dataclasses import dataclass, field
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from enum import Enum
 import json
 import uuid
@@ -166,7 +166,7 @@ class ApiIRChain:
     name: str
     steps: list[ApiIR] = field(default_factory=list)
     description: str = ""
-    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> dict:

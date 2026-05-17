@@ -5,7 +5,7 @@ JWT 认证和权限检查
 对应 Issue #AG-002
 """
 
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -17,7 +17,7 @@ from app.core.config import settings
 
 
 # 安全配置
-SECRET_KEY = "chongming-secret-key-change-in-production"  # 生产环境从 settings 读取
+SECRET_KEY = settings.SECRET_KEY or "dev-only-chongming-secret-key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 小时
 
@@ -56,9 +56,9 @@ def create_access_token(
         JWT 令牌字符串
     """
     if expires_delta:
-        expire = datetime.now(UTC) + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode = {
         "sub": user_id,

@@ -8,7 +8,7 @@
 """
 
 import uuid
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from faker import Faker
@@ -142,7 +142,7 @@ class DataFactory:
         # 计算过期时间
         expires_at = None
         if ttl_seconds:
-            expires_at = datetime.now(UTC) + timedelta(seconds=ttl_seconds)
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
         
         # 创建记录
         record_id = f"dr-{uuid.uuid4().hex[:8]}"
@@ -174,7 +174,7 @@ class DataFactory:
     
     async def cleanup_expired(self, tenant_id: str | None = None) -> int:
         """清理过期数据"""
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         query = (
             update(DataRecord)
             .where(DataRecord.expires_at < now)
@@ -189,7 +189,7 @@ class DataFactory:
     
     async def cleanup_by_batch(self, batch_id: str) -> int:
         """按批次清理数据"""
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         result = await self.db.execute(
             update(DataRecord)
             .where(DataRecord.batch_id == batch_id)
@@ -199,7 +199,7 @@ class DataFactory:
     
     async def delete_cleaned(self, days_old: int = 7) -> int:
         """删除已清理的旧记录"""
-        cutoff = datetime.now(UTC) - timedelta(days=days_old)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days_old)
         result = await self.db.execute(
             delete(DataRecord)
             .where(DataRecord.status == DataStatus.CLEANED)

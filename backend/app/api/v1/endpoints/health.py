@@ -55,8 +55,7 @@ async def health_check(
         try:
             from sqlalchemy import text
 
-            async with asyncio.timeout(2.0):
-                await db.execute(text("SELECT 1"))
+            await asyncio.wait_for(db.execute(text("SELECT 1")), timeout=2.0)
             services["database"] = "ok"
         except Exception:
             services["database"] = "down"
@@ -84,6 +83,9 @@ async def health_check(
             services["redis"] = "unknown"
 
     async def check_omniparser():
+        if not settings.OMNIPARSER_ENABLED:
+            services["omniparser"] = "skipped"
+            return
         services["omniparser"] = await probe_omniparser_health(settings.OMNIPARSER_URL)
 
     await asyncio.gather(
@@ -93,7 +95,7 @@ async def health_check(
         return_exceptions=True,
     )
 
-    overall = "healthy" if all(v == "ok" for k, v in services.items() if k != "redis") else "degraded"
+    overall = "healthy" if all(v in {"ok", "skipped"} for k, v in services.items() if k != "redis") else "degraded"
 
     response = HealthResponse(
         status=overall,

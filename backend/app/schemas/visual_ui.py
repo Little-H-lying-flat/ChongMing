@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -56,3 +56,15 @@ class VisualUseCaseResponse(VisualUseCaseBase):
     steps: List[VisualStepResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+
+class VisualUIDraftRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4000, description="自然语言测试需求")
+    project_id: str = Field("proj-1", description="项目ID")
+    base_url: Optional[str] = Field(None, max_length=500, description="默认 Base URL")
+
+
+class VisualUIDraftResponse(BaseModel):
+    status: Literal["ok", "needs_clarification"]
+    draft: Optional[VisualUseCaseCreate] = None
+    questions: List[str] = Field(default_factory=list)

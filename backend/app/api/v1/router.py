@@ -10,16 +10,16 @@ from app.api.v1.endpoints import (
     health,
     test_cases,
     executions,
-    design,
-    phoenix,
     tasks,
-    api_engine,
     environments,
-    data_factory,
-    left_pupil,
-    turbo,
     smart_ops,
     visual_ui,
+    design,
+    phoenix,
+    turbo,
+    left_pupil,
+    api_engine,
+    data_factory,
 )
 
 api_router = APIRouter()
@@ -45,20 +45,6 @@ api_router.include_router(
     tags=["执行管理"]
 )
 
-# 神经设计层
-api_router.include_router(
-    design.router,
-    prefix="/design",
-    tags=["神经设计层"]
-)
-
-# 凤凰涅槃层
-api_router.include_router(
-    phoenix.router,
-    prefix="/phoenix",
-    tags=["凤凰涅槃层"]
-)
-
 # 任务进度追踪 (Celery)
 api_router.include_router(
     tasks.router,
@@ -66,39 +52,11 @@ api_router.include_router(
     tags=["任务进度"]
 )
 
-# 左瞳引擎 (API 测试)
-api_router.include_router(
-    api_engine.router,
-    prefix="/api-engine",
-    tags=["左瞳引擎"]
-)
-
 # 环境管理
 api_router.include_router(
     environments.router,
     prefix="/environments",
     tags=["环境管理"]
-)
-
-# 数据工厂
-api_router.include_router(
-    data_factory.router,
-    prefix="/data-factory",
-    tags=["数据工厂"]
-)
-
-# 左瞳引擎 v2 (API 测试)
-api_router.include_router(
-    left_pupil.router,
-    prefix="/left-pupil",
-    tags=["左瞳引擎"]
-)
-
-# 涡轮引擎 (性能测试)
-api_router.include_router(
-    turbo.router,
-    prefix="/turbo",
-    tags=["涡轮引擎"]
 )
 
 # 智能运维层 (AI Model Governance)
@@ -113,6 +71,48 @@ api_router.include_router(
     visual_ui.router,
     prefix="/visual-ui",
     tags=["视觉自动化"]
+)
+
+# 需求设计 (Neural Design)
+api_router.include_router(
+    design.router,
+    prefix="/design",
+    tags=["需求设计"]
+)
+
+# 凤凰仓库 (Phoenix)
+api_router.include_router(
+    phoenix.router,
+    prefix="/phoenix",
+    tags=["凤凰仓库"]
+)
+
+# Turbo 性能压测
+api_router.include_router(
+    turbo.router,
+    prefix="/turbo",
+    tags=["Turbo 压测"]
+)
+
+# 左瞳 API 自动化
+api_router.include_router(
+    left_pupil.router,
+    prefix="/left-pupil",
+    tags=["左瞳 API 自动化"]
+)
+
+# API Engine 兼容接口
+api_router.include_router(
+    api_engine.router,
+    prefix="/api-engine",
+    tags=["API Engine 兼容接口"]
+)
+
+# 数据工厂
+api_router.include_router(
+    data_factory.router,
+    prefix="/data-factory",
+    tags=["数据工厂"]
 )
 
 from app.api.v1.endpoints import dashboard

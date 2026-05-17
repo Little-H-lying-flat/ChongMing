@@ -5,7 +5,7 @@
 对应 Issue #AG-003
 """
 
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from fastapi import Request, HTTPException, status
@@ -71,7 +71,7 @@ class RateLimiter:
             # Redis 不可用，放行
             return True, max_requests, 0
         
-        now = datetime.now(UTC).timestamp()
+        now = datetime.now(timezone.utc).timestamp()
         window_start = now - window_seconds
         
         # 使用 Redis 有序集合实现滑动窗口

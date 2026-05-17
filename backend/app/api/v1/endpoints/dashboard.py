@@ -4,7 +4,7 @@ Provides aggregate metrics for frontend overview page.
 """
 
 import math
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends
@@ -76,9 +76,9 @@ def format_time_ago(dt: datetime) -> str:
         return "\u672a\u77e5"
 
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
+        dt = dt.replace(tzinfo=timezone.utc)
 
-    diff = datetime.now(UTC) - dt
+    diff = datetime.now(timezone.utc) - dt
     seconds = diff.total_seconds()
     if seconds < 60:
         return "\u521a\u521a"
@@ -125,8 +125,8 @@ async def get_dashboard_overview(db: AsyncSession = Depends(get_db)):
     )
 
     # 2) Trend (last 7 days)
-    end_dt = datetime.now(UTC)
-    start_dt = datetime.combine((end_dt - timedelta(days=6)).date(), datetime.min.time()).replace(tzinfo=UTC)
+    end_dt = datetime.now(timezone.utc)
+    start_dt = datetime.combine((end_dt - timedelta(days=6)).date(), datetime.min.time()).replace(tzinfo=timezone.utc)
 
     trend_records = (
         await db.execute(

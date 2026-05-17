@@ -738,7 +738,7 @@ class RightPupilEngine:
             if execution_id:
                 from app.api.v1.endpoints.visual_ui import visual_ws_manager
                 try:
-                    asyncio.create_task(
+                    await asyncio.wait_for(
                         visual_ws_manager.broadcast_to_execution(
                             execution_id,
                             {
@@ -746,10 +746,11 @@ class RightPupilEngine:
                                 "step_description": state.get("task_description", ""),
                                 "image_b64": f"data:image/png;base64,{annotated_b64}"
                             }
-                        )
+                        ),
+                        timeout=1.0,
                     )
                 except Exception as e:
-                    pass
+                    logger.warning(f"Failed to publish Visual UI live trace for execution={execution_id}: {e}")
             
             updates.update({
                 "annotated_screenshot": annotated_b64,

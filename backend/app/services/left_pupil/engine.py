@@ -6,7 +6,7 @@ API 测试自动化引擎入口
 
 from typing import Optional
 from dataclasses import dataclass, field
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 import uuid
 
 from app.services.left_pupil.context_memory import ContextMemory
@@ -25,7 +25,7 @@ class ExecutionReport:
     passed_steps: int = 0
     failed_steps: int = 0
     results: list[ExecutionResult] = field(default_factory=list)
-    start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     end_time: Optional[datetime] = None
     duration_ms: float = 0.0
     error: Optional[str] = None
@@ -94,7 +94,7 @@ class LeftPupilEngine:
             执行报告
         """
         report_id = f"RPT_{uuid.uuid4().hex[:8]}"
-        start_time = datetime.now(UTC)
+        start_time = datetime.now(timezone.utc)
         
         try:
             # 导入额外变量
@@ -113,7 +113,7 @@ class LeftPupilEngine:
                     id=report_id,
                     status="error",
                     start_time=start_time,
-                    end_time=datetime.now(UTC),
+                    end_time=datetime.now(timezone.utc),
                     error="未找到相关 API",
                 )
             
@@ -135,7 +135,7 @@ class LeftPupilEngine:
                 id=report_id,
                 status="error",
                 start_time=start_time,
-                end_time=datetime.now(UTC),
+                end_time=datetime.now(timezone.utc),
                 error=str(e),
             )
     
@@ -155,7 +155,7 @@ class LeftPupilEngine:
             执行报告
         """
         report_id = f"RPT_{uuid.uuid4().hex[:8]}"
-        start_time = datetime.now(UTC)
+        start_time = datetime.now(timezone.utc)
         
         try:
             # 导入额外变量
@@ -199,7 +199,7 @@ class LeftPupilEngine:
                     if step_data.get("stop_on_failure", True):
                         break
             
-            end_time = datetime.now(UTC)
+            end_time = datetime.now(timezone.utc)
             return ExecutionReport(
                 id=report_id,
                 status="passed" if failed == 0 else "failed",
@@ -217,7 +217,7 @@ class LeftPupilEngine:
                 id=report_id,
                 status="error",
                 start_time=start_time,
-                end_time=datetime.now(UTC),
+                end_time=datetime.now(timezone.utc),
                 error=str(e),
             )
     
@@ -255,7 +255,7 @@ class LeftPupilEngine:
                 failed += 1
                 break  # 停止执行
         
-        end_time = datetime.now(UTC)
+        end_time = datetime.now(timezone.utc)
         return ExecutionReport(
             id=report_id,
             status="passed" if failed == 0 else "failed",

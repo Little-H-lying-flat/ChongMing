@@ -41,10 +41,12 @@ async def probe_omniparser_health(
         pool=connect_timeout,
     )
     try:
-        async with asyncio.timeout(total_timeout):
+        async def _probe() -> str:
             async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
                 response = await client.get(url)
                 return "ok" if response.status_code == 200 else "loading"
+
+        return await asyncio.wait_for(_probe(), timeout=total_timeout)
     except Exception as exc:
         logger.warning(f"OmniParser health probe failed: {exc}")
         return "down"

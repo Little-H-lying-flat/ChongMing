@@ -6,7 +6,7 @@
 """
 
 import uuid
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from enum import Enum
 
@@ -71,7 +71,7 @@ class DataPool:
         factory = DataFactory(self.db)
         
         # 计算过期时间
-        expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
         
         # 生成数据
         for i in range(size):
@@ -138,7 +138,7 @@ class DataPool:
             record.data = {
                 **record.data,
                 "allocated": True,
-                "allocated_at": datetime.now(UTC).isoformat(),
+                "allocated_at": datetime.now(timezone.utc).isoformat(),
                 "execution_id": execution_id,
             }
             record.execution_id = execution_id
@@ -182,7 +182,7 @@ class DataPool:
             record.data = {
                 **record.data,
                 "allocated": False,
-                "released_at": datetime.now(UTC).isoformat(),
+                "released_at": datetime.now(timezone.utc).isoformat(),
             }
             record.execution_id = None
         
@@ -236,7 +236,7 @@ class DataPool:
         Returns:
             清理的数据条数
         """
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         result = await self.db.execute(
             update(DataRecord)
             .where(DataRecord.schema_name == pool_name)
@@ -279,7 +279,7 @@ class DataPool:
         
         factory = DataFactory(self.db)
         pool_id = f"pool-{uuid.uuid4().hex[:8]}"
-        expires_at = datetime.now(UTC) + timedelta(hours=self.DEFAULT_TTL_HOURS)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=self.DEFAULT_TTL_HOURS)
         
         for _ in range(need_count):
             record_id = f"dr-{uuid.uuid4().hex[:8]}"

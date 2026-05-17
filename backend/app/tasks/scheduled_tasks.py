@@ -5,7 +5,8 @@ Celery Beat 调度的周期性任务
 对应 Issue: #CL-005
 """
 
-from datetime import datetime, timedelta, UTC
+import asyncio
+from datetime import datetime, timedelta, timezone
 
 from celery import shared_task
 from loguru import logger
@@ -24,15 +25,31 @@ def daily_regression():
     # In production: tcs = db.query(TestCase).filter(tag='daily').all()
     target_tc_ids = ["TC_UI_001", "TC_API_001"] # Sample IDs
     
+    execution_id = f"REG_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+    config = {"parallel": True, "source": "daily_regression"}
+
+    async def create_execution_record():
+        from app.services.execution_service import ExecutionService
+        await ExecutionService.create_execution(execution_id, target_tc_ids, config)
+
+    asyncio.run(create_execution_record())
+
     # Trigger Execution Task
-    task = execute_test_cases.delay(
-        tc_ids=target_tc_ids,
-        config={"parallel": True, "source": "daily_regression"}
+    task = execute_test_cases.apply_async(
+        kwargs={
+            "execution_id": execution_id,
+            "tc_ids": target_tc_ids,
+            "config": config,
+        },
+        task_id=execution_id,
+        queue="execution",
+        routing_key="execution",
     )
     
     return {
-        "triggered_at": datetime.now(UTC).isoformat(),
+        "triggered_at": datetime.now(timezone.utc).isoformat(),
         "status": "triggered",
+        "execution_id": execution_id,
         "execution_task_id": task.id,
         "tc_count": len(target_tc_ids),
         "message": f"触发 {len(target_tc_ids)} 个回归测试用例",
@@ -46,7 +63,7 @@ def generate_weekly_report():
     """
     logger.info("开始生成周报...")
     
-    end_date = datetime.now(UTC)
+    end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=7)
     
     # Mock Report Generation
@@ -130,7 +147,7 @@ def cleanup_expired_data():
     # Also clean mocked temporary files if any
     
     return {
-        "cleaned_at": datetime.now(UTC).isoformat(),
+        "cleaned_at": datetime.now(timezone.utc).isoformat(),
         "cleaned_items": cleaned,
         "status": "completed",
         "mode": "dry-run", # Safety first, change to 'live' when verified
@@ -155,7 +172,7 @@ def sync_git_scripts():
     """
     logger.info("开始同步 Git 脚本...")
     return {
-        "synced_at": datetime.now(UTC).isoformat(),
+        "synced_at": datetime.now(timezone.utc).isoformat(),
         "scripts_synced": 0,
         "status": "completed",
     }
