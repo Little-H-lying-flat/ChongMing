@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     QWEN_API_KEY: str = ""
     QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     OPENAI_API_KEY: str = ""
-    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_BASE_URL: str = "http://47.89.252.137:18080/v1"
 
     GEMINI_API_KEY: str = ""
     GEMINI_BASE_URL: str = "http://127.0.0.1:8045/v1"

@@ -237,31 +237,31 @@ class AIModule(str, Enum):
 DEFAULT_MODEL_MAPPING = {
 
     # === 通用 ===
-    AIModule.GENERAL_CHAT: "qwen-turbo",
-    AIModule.GENERAL_SUMMARY: "qwen-turbo",
+    AIModule.GENERAL_CHAT: "gpt-5.5",
+    AIModule.GENERAL_SUMMARY: "gpt-5.5",
     AIModule.RAG_EMBEDDING: "text-embedding-v3",
-    
+
     # === 角色智能体挂载点默认映射 ===
-    # 1. Neural Design (推理为主，qwen3.5-flash 性价比最高)
-    AIModule.AGENT_NEURAL_ADMIN: "qwen3.5-flash",
-    AIModule.AGENT_NEURAL_FINDER: "qwen3.5-flash",
-    AIModule.AGENT_NEURAL_UI_EXPERT: "qwen3.5-flash",
-    AIModule.AGENT_NEURAL_API_EXPERT: "qwen3.5-flash",
-    AIModule.AGENT_NEURAL_MERGER: "qwen3.5-flash",
-    
-    # 2. Left Pupil (API Flow - 分析代码和结构，需强推理)
-    AIModule.AGENT_LEFT_SHERLOCK: "qwen3.5-plus",  # 根因分析需更强能力
-    AIModule.AGENT_LEFT_HEALER: "qwen3.5-plus",    # 载荷自愈需更强能力
-    AIModule.AGENT_LEFT_PERSONA: "qwen3.5-flash",
-    AIModule.AGENT_LEFT_RED_TEAMER: "qwen3.5-plus",
-    AIModule.AGENT_LEFT_JANITOR: "qwen3.5-flash",
-    
-    # 3. Right Pupil (UI Flow - 强视觉依赖)
-    AIModule.AGENT_RIGHT_VISUAL: "qwen3.5-plus",   # 必须 Vision 能力
-    AIModule.AGENT_RIGHT_PERSONA: "qwen3.5-flash",
-    AIModule.AGENT_RIGHT_CRITIC: "qwen3.5-flash",
-    AIModule.AGENT_RIGHT_SHERLOCK: "qwen3.5-plus", # 也可以给文字版
-    AIModule.AGENT_RIGHT_HEALER: "qwen3.5-plus",   # UI 自愈需较强能力
+    # 1. Neural Design
+    AIModule.AGENT_NEURAL_ADMIN: "gpt-5.5",
+    AIModule.AGENT_NEURAL_FINDER: "gpt-5.5",
+    AIModule.AGENT_NEURAL_UI_EXPERT: "gpt-5.5",
+    AIModule.AGENT_NEURAL_API_EXPERT: "gpt-5.5",
+    AIModule.AGENT_NEURAL_MERGER: "gpt-5.5",
+
+    # 2. Left Pupil (API Flow)
+    AIModule.AGENT_LEFT_SHERLOCK: "gpt-5.5",
+    AIModule.AGENT_LEFT_HEALER: "gpt-5.5",
+    AIModule.AGENT_LEFT_PERSONA: "gpt-5.5",
+    AIModule.AGENT_LEFT_RED_TEAMER: "gpt-5.5",
+    AIModule.AGENT_LEFT_JANITOR: "gpt-5.5",
+
+    # 3. Right Pupil (UI Flow)
+    AIModule.AGENT_RIGHT_VISUAL: "gpt-5.5",
+    AIModule.AGENT_RIGHT_PERSONA: "gpt-5.5",
+    AIModule.AGENT_RIGHT_CRITIC: "gpt-5.5",
+    AIModule.AGENT_RIGHT_SHERLOCK: "gpt-5.5",
+    AIModule.AGENT_RIGHT_HEALER: "gpt-5.5",
 }
 
 
