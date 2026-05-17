@@ -4,14 +4,14 @@ export interface ApiRequestSpec {
     method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
     url: string;
     headers: Record<string, string>;
-    body?: any;
+    body?: unknown;
     query_params: Record<string, string>;
     timeout_ms: number;
 }
 
 export interface ApiAssertion {
     status_code?: number;
-    json_assertions: Record<string, any>;
+    json_assertions: Record<string, unknown>;
     contains?: string;
     not_contains?: string;
     expression?: string;
@@ -44,19 +44,19 @@ export interface ExecutionStepResult {
     status: "passed" | "failed" | "error";
     status_code: number;
     duration_ms: number;
-    extracted_values: Record<string, any>;
+    extracted_values: Record<string, unknown>;
     assertion_passed: boolean;
-    assertion_details?: any;
+    assertion_details?: Record<string, unknown>;
     error?: string;
     request_details?: {
         method: string;
         url: string;
         headers: Record<string, string>;
-        body?: any;
+        body?: unknown;
     };
     response_details?: {
         headers: Record<string, string>;
-        body: any;
+        body: unknown;
     };
 }
 
@@ -66,17 +66,17 @@ export interface ChainExecutionResult {
     passed_steps: number;
     failed_steps: number;
     results: ExecutionStepResult[];
-    final_context: Record<string, any>;
+    final_context: Record<string, unknown>;
 }
 
 export const apiAutoService = {
     // 1. 获取用例类
     getCases: (params?: { page?: number, pageSize?: number }) => {
         const queryParams = new URLSearchParams();
-        if (params?.page) queryParams.append('page', params.page.toString());
-        if (params?.pageSize) queryParams.append('pageSize', params.pageSize.toString());
+        queryParams.append('page', (params?.page || 1).toString());
+        queryParams.append('page_size', (params?.pageSize || 100).toString());
         queryParams.append('mode', 'API');
-        return api.get<{ items: ApiTestCase[], total: number }>(`/test-cases?${queryParams.toString()}`);
+        return api.get<{ items: ApiTestCase[], total: number, page: number, page_size: number }>(`/test-cases?${queryParams.toString()}`);
     },
 
     getCaseById: (id: string) => {
@@ -103,7 +103,7 @@ export const apiAutoService = {
     runApiChain: (
         steps: ApiStep[],
         baseUrl: string,
-        context: Record<string, any> = {},
+        context: Record<string, unknown> = {},
         defaultHeaders: Record<string, string> = {},
         envId?: string
     ) => {

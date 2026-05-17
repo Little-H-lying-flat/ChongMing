@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import api from './api';
 
 /**
  * Maps to backend TurboRunConfig (dataclass)
@@ -28,6 +26,19 @@ export interface TurboStats {
   p95_response_time: number;
 }
 
+export interface ApiTestCaseSummary {
+  id: string;
+  name: string;
+  method?: string;
+  url?: string;
+  target_host?: string;
+}
+
+interface TurboRunResponse {
+  test_id: string;
+  status: string;
+}
+
 export const turboService = {
   /**
    * Start a stress test — POST /api/v1/turbo/run
@@ -41,10 +52,11 @@ export const turboService = {
         spawn_rate: config.spawn_rate,
         run_time: config.duration // backend uses run_time
       };
-      const response = await axios.post(`${API_BASE_URL}/api/v1/turbo/run`, payload);
+      const response = await api.post<TurboRunResponse>('/turbo/run', payload);
       return response.data;
-    } catch (e: any) {
-      console.warn("Backend turbo/run failed", e.response?.data || e.message);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: unknown }; message?: string };
+      console.warn("Backend turbo/run failed", err.response?.data || err.message);
       throw e;
     }
   },
@@ -55,9 +67,9 @@ export const turboService = {
    */
   stopStressTest: async (testId: string) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/v1/turbo/stop/${testId}`);
+      const response = await api.post<TurboRunResponse>(`/turbo/stop/${testId}`);
       return response.data;
-    } catch (e) {
+    } catch (_e) {
       console.warn("Backend turbo/stop failed");
       return { test_id: testId, status: "stopped" };
     }
@@ -69,11 +81,11 @@ export const turboService = {
    */
   getTestStats: async (testId: string): Promise<TurboStats> => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/v1/turbo/stats/${testId}`);
+      const response = await api.get<TurboStats>(`/turbo/stats/${testId}`);
       if (response.data) {
         return response.data;
       }
-    } catch (e) {
+    } catch (_e) {
       console.warn("Failed to fetch real stats");
     }
     return {
@@ -93,22 +105,24 @@ export const turboService = {
    * Fetch available API test cases
    * Tries real backend, falls back to mock data for UI development
    */
-  getApiTestCases: async () => {
+  getApiTestCases: async (): Promise<{ items: ApiTestCaseSummary[] }> => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/v1/test-cases?mode=API`);
+      const response = await api.get<{ items?: Record<string, unknown>[] }>('/test-cases?page=1&page_size=100&mode=API');
       const items = response.data.items || [];
-      const formattedItems = items.map((tc: any) => {
-        const firstStep = tc.steps?.[0] || {};
-        const firstStepReq = firstStep.request || firstStep;
+      const formattedItems = items.map((tc: Record<string, unknown>) => {
+        const steps = tc.steps as Record<string, unknown>[] | undefined;
+        const firstStep = steps?.[0] || {};
+        const firstStepReq = (firstStep as Record<string, unknown>).request || firstStep;
+        const req = firstStepReq as Record<string, unknown>;
         return {
-          id: tc.id,
-          name: tc.name,
-          method: firstStepReq.method || "GET",
-          url: firstStepReq.url || firstStepReq.target || "/"
+          id: String(tc.id || ""),
+          name: String(tc.name || "Untitled API Case"),
+          method: String(req.method || "GET"),
+          url: String(req.url || req.target || "/")
         };
       });
       return { items: formattedItems };
-    } catch (e) {
+    } catch (_e) {
       console.warn("Using mock data for API cases since endpoint might not exist yet");
       return {
         items: [

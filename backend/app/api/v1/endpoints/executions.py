@@ -83,11 +83,17 @@ def _extract_payload_required_variables(dynamic_payload: Optional[List[dict]]) -
 
 
 async def _load_execution_environment_context(
-    env_id: Optional[str],
+    env_ref: Optional[str],
     db: AsyncSession,
 ) -> tuple[dict, Optional[str], Optional[str]]:
     manager = EnvironmentManager(db)
-    env = await manager.get(env_id) if env_id else await manager.get_default()
+    env = None
+    if env_ref:
+        env = await manager.get(env_ref)
+        if not env:
+            env = await manager.get_by_name(env_ref)
+    else:
+        env = await manager.get_default()
     if not env:
         return {}, None, None
 
@@ -114,6 +120,7 @@ class ExecutionRequest(BaseModel):
     """执行请求"""
     tc_ids: List[str] = Field(..., description="测试用例 ID 列表", json_schema_extra={"example": ["TC-001", "TC-002"]})
     mode: str = Field("normal", description="执行模式: normal (标准), debug (调试), fast (快速)", json_schema_extra={"example": "normal"})
+    engine: str = Field("right_pupil", description="执行引擎: right_pupil 或 midscene")
     parallel: bool = Field(True, description="是否开启并行执行")
     max_workers: int = Field(5, ge=1, le=20, description="最大并行 Worker 数量")
     env: Optional[str] = Field(None, description="目标运行环境 (如 dev, staging)", json_schema_extra={"example": "staging"})
@@ -192,6 +199,7 @@ async def start_execution(
     # 2. Config Dict
     config = {
         "mode": request.mode,
+        "engine": request.engine,
         "parallel": request.parallel,
         "max_workers": request.max_workers,
         "env": request.env
@@ -224,11 +232,16 @@ async def start_execution(
     
     # 4. Dispatch Task with existing ID
     if _has_active_celery_workers():
-        execute_test_cases.delay(  # type: ignore[misc]  # Celery task
-            execution_id=execution_id,
-            tc_ids=request.tc_ids,
-            config=config,
-            dynamic_payload=request.dynamic_payload
+        execute_test_cases.apply_async(  # type: ignore[misc]  # Celery task
+            kwargs={
+                "execution_id": execution_id,
+                "tc_ids": request.tc_ids,
+                "config": config,
+                "dynamic_payload": request.dynamic_payload,
+            },
+            task_id=execution_id,
+            queue="execution",
+            routing_key="execution",
         )
     else:
         background_tasks.add_task(
@@ -274,7 +287,7 @@ async def get_execution_status(execution_id: str):
         return ExecutionStatus(**db_dict)
 
     # 2. Try Celery
-    task_result = AsyncResult(execution_id)
+    task_result = AsyncResult(execution_id, app=celery)
     
     # 默认值
     status = task_result.status
@@ -336,7 +349,7 @@ async def get_execution_result(execution_id: str):
         return ExecutionResult(**db_dict)
 
     # 2. Try Celery (Fallback)
-    task_result = AsyncResult(execution_id)
+    task_result = AsyncResult(execution_id, app=celery)
     
     if task_result.state == 'SUCCESS':
         data = task_result.result
@@ -499,10 +512,14 @@ async def cancel_execution_endpoint(execution_id: str):
     终止正在运行的执行任务
     """
     # 调用 Celery 的终止方法
-    AsyncResult(execution_id).revoke(terminate=True)
+    AsyncResult(execution_id, app=celery).revoke(terminate=True)
     
     # 也可以发送一个专门的取消任务来清理资源
-    cancel_task.delay(execution_id)  # type: ignore[misc]  # Celery task
+    cancel_task.apply_async(  # type: ignore[misc]  # Celery task
+        args=[execution_id],
+        queue="execution",
+        routing_key="execution",
+    )
     
     return {"message": f"取消请求已发送: {execution_id}"}
 

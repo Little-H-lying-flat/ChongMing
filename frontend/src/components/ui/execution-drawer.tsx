@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { X, CheckCircle, XCircle, Clock, Terminal, ChevronRight, Activity, ArrowRight, Database } from "lucide-react";
@@ -654,7 +655,7 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
                             {/* Gallery Tab */}
                             <TabsContent value="gallery" className="flex-1 overflow-hidden m-0 border-none outline-none p-6 bg-slate-950">
                                 <ScrollArea className="h-full geek-scrollbar pr-4">
-                                    <div className="grid grid-cols-2 gap-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         {data?.cases.flatMap(tc => tc.steps.filter(s => s.details?.screenshot_before || s.details?.screenshot_after).map((s, i) => (
                                             <div key={`${tc.tc_id}-${i}`} className="border border-slate-800 bg-slate-900 rounded-xl p-4 space-y-3 shadow-lg group hover:border-blue-500/50 transition-colors">
                                                 <div className="flex flex-col">
@@ -665,13 +666,13 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
                                                     {s.details?.screenshot_before && (
                                                         <div className="space-y-1.5 flex flex-col items-center">
                                                             <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800">Before</span>
-                                                            <img src={s.details.screenshot_before} alt={`${tc.tc_id} step ${s.step_index + 1} before`} className="rounded-md border border-slate-700 w-full object-cover aspect-video hover:scale-[1.02] transition-transform cursor-crosshair shadow-md" loading="lazy" />
+                                                            <img src={s.details.screenshot_before} alt={`${tc.tc_id} step ${s.step_index + 1} before`} className="rounded-md border border-slate-700 w-full object-cover aspect-video shadow-md" loading="lazy" />
                                                         </div>
                                                     )}
                                                     {s.details?.screenshot_after && (
                                                         <div className="space-y-1.5 flex flex-col items-center">
                                                             <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest bg-slate-950 px-2 py-0.5 rounded-full border border-slate-800">After</span>
-                                                            <img src={s.details.screenshot_after} alt={`${tc.tc_id} step ${s.step_index + 1} after`} className="rounded-md border border-slate-700 w-full object-cover aspect-video hover:scale-[1.02] transition-transform cursor-crosshair shadow-md" loading="lazy" />
+                                                            <img src={s.details.screenshot_after} alt={`${tc.tc_id} step ${s.step_index + 1} after`} className="rounded-md border border-slate-700 w-full object-cover aspect-video shadow-md" loading="lazy" />
                                                         </div>
                                                     )}
                                                     {s.details?.screenshot_before && s.details?.screenshot_after && (
@@ -683,7 +684,7 @@ export function ExecutionDrawer({ executionId, open, onClose }: ExecutionDrawerP
                                             </div>
                                         )))}
                                         {(!data || data.cases.every(tc => !tc.steps.some(s => s.details?.screenshot_before || s.details?.screenshot_after))) && (
-                                            <div className="col-span-2 flex flex-col items-center py-20 text-slate-500 space-y-4">
+                                            <div className="col-span-1 md:col-span-2 flex flex-col items-center py-20 text-slate-500 space-y-4">
                                                 <div className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center">
                                                     <XCircle className="w-8 h-8 text-slate-600" />
                                                 </div>

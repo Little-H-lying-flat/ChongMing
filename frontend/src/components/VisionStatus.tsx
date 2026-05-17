@@ -16,7 +16,7 @@ interface HealthData {
 
 import { api } from "@/services/api";
 
-export function OmniParserStatus() {
+export function VisionStatus() {
     const [health, setHealth] = useState<HealthData | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -24,7 +24,7 @@ export function OmniParserStatus() {
         try {
             const { data } = await api.get<HealthData>("/health");
             setHealth(data);
-        } catch (error) {
+        } catch (_error) {
             // Silently handle fetch failures for background polling 
             // to avoid triggering the Next.js Error Overlay when the backend restarts.
             setHealth(null);
@@ -47,14 +47,14 @@ export function OmniParserStatus() {
                 label: "加载中... (Loading...)",
                 color: "bg-slate-500",
                 icon: <Loader2 className="w-3 h-3 animate-spin" />,
-                description: "检测 OmniParser 状态中... (Detecting OmniParser status...)"
+                description: "检测视觉执行器状态中... (Detecting vision executor status...)"
             };
         }
 
         switch (opStatus) {
             case "ok":
                 return {
-                    label: "OmniParser就绪 (OmniParser Ready)",
+                    label: "视觉执行器就绪 (Vision Ready)",
                     color: "bg-emerald-500",
                     icon: <Activity className="w-3 h-3 text-white" />,
                     description: "视觉解析服务在线且已就绪。 (Visual Parsing Service is online and ready.)"
@@ -64,15 +64,15 @@ export function OmniParserStatus() {
                     label: "模型加载中 (Model Loading)",
                     color: "bg-amber-500",
                     icon: <Loader2 className="w-3 h-3 animate-spin text-white" />,
-                    description: "OmniParser正在启动并加载权重，请稍候。 (OmniParser is starting up and loading weights. Please wait.)"
+                    description: "视觉执行器正在启动，请稍候。 (Vision executor is starting. Please wait.)"
                 };
             case "down":
             default:
                 return {
-                    label: "OmniParser离线 (OmniParser Offline)",
+                    label: "视觉执行器离线 (Vision Offline)",
                     color: "bg-rose-500",
                     icon: <AlertCircle className="w-3 h-3 text-white" />,
-                    description: "OmniParser服务不可达。AI代理将回退至DOM策略。 (OmniParser service is unreachable. AI Agent will fallback to DOM strategy.)"
+                    description: "视觉执行器状态不可用，当前运行会继续使用已配置的执行策略。 (Vision executor status is unavailable; runs continue with the configured strategy.)"
                 };
         }
     };
@@ -87,7 +87,7 @@ export function OmniParserStatus() {
             <div className={`w-2 h-2 rounded-full ${status.color} shadow-[0_0_8px_rgba(0,0,0,0.5)] group-hover:shadow-[0_0_12px_${status.color === 'bg-emerald-500' ? '#10b981' : (status.color === 'bg-amber-500' ? '#f59e0b' : '#f43f5e')}]`} />
             <div className="flex flex-col">
                 <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 group-hover:text-slate-400">
-                    OmniParser
+                    Vision
                 </span>
                 <span className="text-xs font-medium text-slate-300 group-hover:text-white transition-colors">
                     {status.label}

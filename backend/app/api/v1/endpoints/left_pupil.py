@@ -7,7 +7,7 @@
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, status, UploadFile, File
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from loguru import logger
 
 from app.services.left_pupil.context_memory import ContextMemory
@@ -29,8 +29,8 @@ class RequestSpecModel(BaseModel):
     method: str = Field("GET", description="HTTP 方法", json_schema_extra={"example": "GET"})
     url: str = Field(..., description="请求 URL (支持 ${var} 变量)", json_schema_extra={"example": "https://api.example.com/users/${user_id}"})
     headers: Dict[str, str] = Field(default_factory=dict, description="请求头", json_schema_extra={"example": {"Authorization": "Bearer ${token}"}})
-    body: Optional[Dict[str, Any]] = Field(None, description="请求体 (JSON)", json_schema_extra={"example": {"name": "test_user"}})
-    query_params: Dict[str, str] = Field(default_factory=dict, description="查询参数", json_schema_extra={"example": {"page": "1"}})
+    body: Optional[Any] = Field(None, description="请求体 (JSON)", json_schema_extra={"example": {"name": "test_user"}})
+    query_params: Dict[str, Any] = Field(default_factory=dict, description="查询参数", json_schema_extra={"example": {"page": "1"}})
     timeout_ms: int = Field(30000, description="超时时间(毫秒)", json_schema_extra={"example": 5000})
 
 
@@ -50,7 +50,48 @@ class ApiIRStepModel(BaseModel):
     request: RequestSpecModel = Field(..., description="请求详情")
     extraction: Dict[str, str] = Field(default_factory=dict, description="变量提取规则 (变量名 -> JsonPath)", json_schema_extra={"example": {"user_token": "$.data.token"}})
     assertion: Optional[AssertionModel] = Field(None, description="断言配置")
-    
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_flat_step(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+        if "id" not in normalized or not normalized.get("id"):
+            normalized["id"] = normalized.get("step_id") or "STEP_001"
+        if "name" not in normalized or not normalized.get("name"):
+            normalized["name"] = normalized.get("description") or normalized["id"]
+
+        if "request" not in normalized:
+            normalized["request"] = {
+                "method": normalized.get("method", "GET"),
+                "url": normalized.get("url") or normalized.get("path") or "/",
+                "headers": normalized.get("headers") or {},
+                "body": normalized.get("body", normalized.get("json_body")),
+                "query_params": normalized.get("query_params") or normalized.get("params") or {},
+                "timeout_ms": normalized.get("timeout_ms") or normalized.get("timeout") or 30000,
+            }
+
+        if "extraction" not in normalized and "extract" in normalized:
+            normalized["extraction"] = normalized.get("extract") or {}
+
+        if "assertion" not in normalized:
+            assertion: Dict[str, Any] = {}
+            if "expected_status_code" in normalized:
+                assertion["status_code"] = normalized.get("expected_status_code")
+            elif "status_code" in normalized:
+                assertion["status_code"] = normalized.get("status_code")
+            if "json_assertions" in normalized:
+                assertion["json_assertions"] = normalized.get("json_assertions") or {}
+            for key in ("contains", "not_contains", "expression"):
+                if key in normalized:
+                    assertion[key] = normalized.get(key)
+            if assertion:
+                normalized["assertion"] = assertion
+
+        return normalized
+
     model_config = {
         "json_schema_extra": {
             "example": {

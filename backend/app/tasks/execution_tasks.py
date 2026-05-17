@@ -9,7 +9,47 @@ from celery import shared_task
 from loguru import logger
 
 
-@shared_task(bind=True, name="app.tasks.execute_test_cases")
+def _normalize_dynamic_api_steps(case_data: dict) -> dict:
+    steps = case_data.get("steps")
+    if not isinstance(steps, list):
+        return case_data
+
+    normalized_steps = []
+    changed = False
+    for step in steps:
+        if not isinstance(step, dict):
+            normalized_steps.append(step)
+            continue
+
+        step_type = step.get("step_type")
+        if step_type != "API" or "request" in step:
+            normalized_steps.append(step)
+            continue
+
+        request = {
+            "method": step.get("method", "GET"),
+            "url": step.get("url") or step.get("url_path") or step.get("target") or "/",
+            "headers": step.get("headers") or {},
+            "query_params": step.get("query_params") or {},
+            "body": step.get("body") if "body" in step else step.get("input_data"),
+        }
+        if step.get("timeout_ms") is not None:
+            request["timeout_ms"] = step.get("timeout_ms")
+
+        normalized_step = dict(step)
+        normalized_step["request"] = request
+        normalized_steps.append(normalized_step)
+        changed = True
+
+    if not changed:
+        return case_data
+
+    normalized_case = dict(case_data)
+    normalized_case["steps"] = normalized_steps
+    return normalized_case
+
+
+@shared_task(bind=True, name="app.tasks.execution_tasks.execute_test_cases")
 def execute_test_cases(
     self,
     execution_id: str,
@@ -23,9 +63,6 @@ def execute_test_cases(
     try:
         import asyncio
         import traceback
-        from app.engines.dispatcher import Dispatcher
-        from app.engines.right_pupil import RightPupilEngine
-        from app.engines.left_pupil import LeftPupilEngine
         from app.engines.runner.tc_loader import TestCaseLoader
         
         # Imports for Persistence
@@ -36,7 +73,8 @@ def execute_test_cases(
         config = config or {}
         parallel = config.get("parallel", True)
         max_workers = config.get("max_workers", 3)
-        
+        engine = config.get("engine", "right_pupil")
+
         # Use dynamic payload if available
         cases_source = "Dynamic" if dynamic_payload else "DB"
         
@@ -70,6 +108,7 @@ def execute_test_cases(
                     case_data = next((c for c in dynamic_payload if c.get("id") == tc_id), None)
                     if case_data:
                         try:
+                            case_data = _normalize_dynamic_api_steps(case_data)
                             # Construct TCIR from dict
                             mode_str = case_data.get("mode", "UI")
                             # Handle Enum conversion
@@ -119,43 +158,53 @@ def execute_test_cases(
                     await _safe_create_step(tc_id, ExecutionStatus.ERROR, {}, 0.0, f"TC Not Found in {cases_source}")
                     return {"tc_id": tc_id, "status": "error", "error": "TC Not Found"}
                 
-                # Initialize Engines (Fresh Environment per TC)
-                right_pupil = RightPupilEngine()
-                left_pupil = LeftPupilEngine()
-                dispatcher = Dispatcher()
-                dispatcher.attach_engines(right_pupil, left_pupil)
-                
                 result = None
                 ui_session_started = False
-                
-                try:
-                    # Lazy Initialization: CHECK IF UI ENGINE IS NEEDED (STRICT)
-                    dataset_steps = tc_ir.steps if isinstance(tc_ir.steps, list) else []
-                    
-                    mode_str = getattr(tc_ir.mode, "value", str(tc_ir.mode))
-                    ui_needed = mode_str in ("UI", "HYBRID", "ExecutionMode.UI", "ExecutionMode.HYBRID")
-                    
-                    if not ui_needed:
-                        for s in dataset_steps:
-                            # Handle both dict and object (attribute) access
-                            s_type = s.get("step_type") if isinstance(s, dict) else getattr(s, "step_type", None)
-                            
-                            # Strict matching: ONLY if step_type is explicitly "UI"
-                            if s_type == "UI":
-                                ui_needed = True
-                                break
-                    
-                    if ui_needed:
-                         logger.info(f"[{tc_id}] Initializing RightPupilEngine (UI Steps Detected)...")
-                         await right_pupil.start_session(headless=True)
-                         ui_session_started = True
-                    else:
-                         logger.info(f"[{tc_id}] Skipping UI Engine (Pure API / No UI Steps)")
 
-                    async with left_pupil: # Context manager for HTTP client
-                        logger.info(f"[{tc_id}] Executing...")
-                        result = await dispatcher.execute(tc_ir, execution_id, initial_context=initial_context)
-                    
+                try:
+                    if engine == "midscene":
+                        from app.services.midscene_adapter import MidsceneAdapter
+
+                        logger.info(f"[{tc_id}] Executing via MidsceneAdapter...")
+                        result = await MidsceneAdapter().execute(tc_ir, initial_context=initial_context)
+                    else:
+                        from app.engines.dispatcher import Dispatcher
+                        from app.engines.right_pupil import RightPupilEngine
+                        from app.engines.left_pupil import LeftPupilEngine
+
+                        # Initialize Engines (Fresh Environment per TC)
+                        right_pupil = RightPupilEngine()
+                        left_pupil = LeftPupilEngine()
+                        dispatcher = Dispatcher()
+                        dispatcher.attach_engines(right_pupil, left_pupil)
+
+                        # Lazy Initialization: CHECK IF UI ENGINE IS NEEDED (STRICT)
+                        dataset_steps = tc_ir.steps if isinstance(tc_ir.steps, list) else []
+
+                        mode_str = getattr(tc_ir.mode, "value", str(tc_ir.mode))
+                        ui_needed = mode_str in ("UI", "HYBRID", "ExecutionMode.UI", "ExecutionMode.HYBRID")
+
+                        if not ui_needed:
+                            for s in dataset_steps:
+                                # Handle both dict and object (attribute) access
+                                s_type = s.get("step_type") if isinstance(s, dict) else getattr(s, "step_type", None)
+
+                                # Strict matching: ONLY if step_type is explicitly "UI"
+                                if s_type == "UI":
+                                    ui_needed = True
+                                    break
+
+                        if ui_needed:
+                            logger.info(f"[{tc_id}] Initializing RightPupilEngine (UI Steps Detected)...")
+                            await right_pupil.start_session(headless=True)
+                            ui_session_started = True
+                        else:
+                            logger.info(f"[{tc_id}] Skipping UI Engine (Pure API / No UI Steps)")
+
+                        async with left_pupil: # Context manager for HTTP client
+                            logger.info(f"[{tc_id}] Executing...")
+                            result = await dispatcher.execute(tc_ir, execution_id, initial_context=initial_context)
+
                 except Exception as e:
                     logger.error(f"[{tc_id}] Failed: {e}")
                     traceback.print_exc()
@@ -212,7 +261,13 @@ def execute_test_cases(
             try:
                 async with get_db_session() as session:
                     env_manager = EnvironmentManager(session)
-                    env_record = await env_manager.get(env_id) if env_id else await env_manager.get_default()
+                    env_record = None
+                    if env_id:
+                        env_record = await env_manager.get(env_id)
+                        if not env_record:
+                            env_record = await env_manager.get_by_name(env_id)
+                    else:
+                        env_record = await env_manager.get_default()
                     if env_record:
                         for key, var in env_record.variables.items():
                             val = var.get("value", "")
@@ -356,7 +411,7 @@ def execute_test_cases(
         return {"status": "failed", "error": str(e), "traceback": stack_trace}
 
 
-@shared_task(name="app.tasks.execute_adhoc_task")
+@shared_task(name="app.tasks.execution_tasks.execute_adhoc_task")
 def execute_adhoc_task(prompt: str, url: str):
     """
     执行 Ad-hoc UI 任务
@@ -385,7 +440,7 @@ def execute_adhoc_task(prompt: str, url: str):
         logger.error(f"Ad-hoc Task Failed: {e}")
         return {"status": "failed", "error": str(e)}
 
-@shared_task(name="app.tasks.cancel_execution")
+@shared_task(name="app.tasks.execution_tasks.cancel_execution")
 def cancel_execution(execution_id: str):
     """取消执行"""
     logger.info(f"取消执行: {execution_id}")

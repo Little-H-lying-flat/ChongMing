@@ -35,7 +35,9 @@ class Settings(BaseSettings):
 
     # Security
     FIRST_SUPERUSER: str = "admin@example.com"
-    FIRST_SUPERUSER_PASSWORD: str = "password"
+    FIRST_SUPERUSER_PASSWORD: str = ""
+    SECRET_KEY: str = ""
+    ENCRYPTION_KEY: str = ""
 
     # Database
     DATABASE_URL: str = (
@@ -50,10 +52,12 @@ class Settings(BaseSettings):
     CELERY_TASK_ALWAYS_EAGER: bool = False
 
     # AI/LLM
-    QWEN_API_KEY: str = "sk-fecda1b83bfe4208892248adffc7cc38"
+    QWEN_API_KEY: str = ""
     QWEN_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
 
-    GEMINI_API_KEY: str = "sk-fecda1b83bfe4208892248adffc7cc38"
+    GEMINI_API_KEY: str = ""
     GEMINI_BASE_URL: str = "http://127.0.0.1:8045/v1"
 
     MODEL_NEURAL_INTENT: str = "qwen3-max"
@@ -74,6 +78,7 @@ class Settings(BaseSettings):
     MODEL_GENERAL_CHAT: str = "qwen-turbo"
     MODEL_GENERAL_LONG: str = "qwen-long"
     MODEL_EMBEDDING: str = "text-embedding-v3"
+    VISUAL_UI_DRAFT_MODEL: str = ""
 
     # Milvus
     MILVUS_HOST: str = "localhost"
@@ -81,7 +86,12 @@ class Settings(BaseSettings):
 
     # OmniParser
     OMNIPARSER_URL: str = "http://localhost:7861"
+    OMNIPARSER_ENABLED: bool = False
     MOCK_OMNIPARSER: bool = False
+
+    # Midscene Runner
+    MIDSCENE_RUNNER_URL: str = "http://127.0.0.1:8787"
+    MIDSCENE_TIMEOUT_SECONDS: float = 120.0
 
     # Mem0
     MEM0_ENABLED: bool = True
@@ -168,6 +178,12 @@ class Settings(BaseSettings):
             if self.CELERY_TASK_ALWAYS_EAGER:
                 raise ValueError(
                     "Invalid configuration: CELERY_TASK_ALWAYS_EAGER must be false when APP_ENV is staging/prod."
+                )
+            if not self.SECRET_KEY:
+                raise ValueError("Invalid configuration: SECRET_KEY is required when APP_ENV is staging/prod.")
+            if not self.FIRST_SUPERUSER_PASSWORD:
+                raise ValueError(
+                    "Invalid configuration: FIRST_SUPERUSER_PASSWORD is required when APP_ENV is staging/prod."
                 )
 
         if env == "dev" and uses_memory_broker and not self.CELERY_TASK_ALWAYS_EAGER:

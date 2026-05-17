@@ -2,7 +2,7 @@
 
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -106,11 +106,14 @@ async def update_module_config(request: UpdateAIConfigRequest) -> AIModuleConfig
 
 @router.post("/provider", summary="Update Provider Key")
 async def update_provider_config(config: ProviderConfigSchema) -> dict:
-    return await AIConfigService.update_provider_config_db(
-        config.provider,
-        config.api_key,
-        config.base_url,
-    )
+    try:
+        return await AIConfigService.update_provider_config_db(
+            provider=config.provider,
+            api_key=config.api_key,
+            base_url=config.base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/cache/clear", summary="Clear Config Cache")

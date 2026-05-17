@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from unittest.mock import patch, MagicMock
 
 from app.models.base import Base
-from app.models.ai_config import AIModelConfig
+from app.models.ai_config import AIModelConfig, AIProviderConfig
 from app.services.smart_ops.ai_config_service import AIConfigService
-from app.core.ai_models import AIModule, AVAILABLE_MODELS
+from app.core.ai_models import AIModule, AVAILABLE_MODELS, DEFAULT_MODEL_MAPPING, ModelProvider
 
 # --- In-Memory DB Setup ---
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
@@ -65,7 +65,7 @@ async def test_flow6_happy_path_config_update(test_db_session):
     3. Get New Config (Cache Miss -> DB Hit -> New Config)
     """
     module = AIModule.GENERAL_CHAT
-    default_model_id = "qwen-flash" # From DEFAULT_MODEL_MAPPING
+    default_model_id = DEFAULT_MODEL_MAPPING[module]
     new_model_id = "qwen-max"
     
     # 0. Ensure Cache is empty initially
@@ -74,7 +74,7 @@ async def test_flow6_happy_path_config_update(test_db_session):
     # 1. Verify Default State
     config_default = await AIConfigService.get_model_config(module)
     assert config_default.model_id == default_model_id
-    assert config_default.max_tokens == 8192 # Default for qwen-flash
+    assert config_default.max_tokens == AVAILABLE_MODELS[default_model_id].max_tokens
     
     # Verify it's cached now
     assert module.value in AIConfigService._config_cache
@@ -111,25 +111,30 @@ async def test_flow6_happy_path_config_update(test_db_session):
     assert db_record.max_tokens == 100
 
 @pytest.mark.asyncio
-async def test_flow6_provider_api_key_update(test_db_session):
+async def test_flow6_provider_api_key_update(test_db_session, monkeypatch):
     """
     Flow 6 Helper: Test Provider Config Update
     """
     provider = "dashscope"
     new_api_key = "sk-new-secret-key"
-    
-    # Update API Key
+    base_url = "https://dashscope.example/v1"
+    monkeypatch.setattr("app.core.config.settings.ENCRYPTION_KEY", "test_encryption_key_32bytes")
+
     await AIConfigService.update_provider_config_db(
         provider=provider,
-        api_key=new_api_key
+        api_key=new_api_key,
+        base_url=base_url,
     )
-    
-    # Verify DB
+
     from sqlalchemy.future import select
-    from app.models.ai_config import AIProviderConfig
-    
+
     stmt = select(AIProviderConfig).where(AIProviderConfig.provider == provider)
     result = await test_db_session.execute(stmt)
     record = result.scalar_one()
-    
-    assert record.api_key_ciphertext == new_api_key
+
+    assert record.api_key_ciphertext != new_api_key
+    assert record.base_url == base_url
+
+    AIConfigService.clear_cache()
+    config = await AIConfigService.get_provider_config(ModelProvider.DASHSCOPE)
+    assert config == {"api_key": new_api_key, "base_url": base_url}

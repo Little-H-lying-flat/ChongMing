@@ -1,12 +1,14 @@
 
 import asyncio
+import base64
 from typing import Optional, List, Dict, Any
+from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 from sqlalchemy.future import select
 import time
 
 from app.models.ai_config import AIModelConfig, AIProviderConfig, AICostLog
-from app.core.ai_models import AIModule, ModelConfig, AVAILABLE_MODELS, DEFAULT_MODEL_MAPPING, ModelProvider
+from app.core.ai_models import AIModule, ModelConfig, AVAILABLE_MODELS, DEFAULT_MODEL_MAPPING, ModelProvider, get_default_model_id
 from app.core.database import async_session_maker
 from app.models.base import Base
 from loguru import logger
@@ -30,6 +32,35 @@ class AIConfigService:
     _schema_lock: Optional[asyncio.Lock] = None
     _schema_warning: Optional[str] = None
     CACHE_TTL = 300  # 5 minutes
+
+    @classmethod
+    def _init_fernet(cls) -> Fernet | None:
+        from app.core.config import settings
+
+        key = getattr(settings, "ENCRYPTION_KEY", None)
+        if not key:
+            return None
+        if len(key) < 32:
+            key = key.ljust(32, "0")
+        key_bytes = base64.urlsafe_b64encode(key[:32].encode())
+        return Fernet(key_bytes)
+
+    @classmethod
+    def _encrypt_secret(cls, value: str) -> str:
+        fernet = cls._init_fernet()
+        if not fernet:
+            return value
+        return fernet.encrypt(value.encode()).decode()
+
+    @classmethod
+    def _decrypt_secret(cls, value: str) -> str:
+        fernet = cls._init_fernet()
+        if not fernet:
+            return value
+        try:
+            return fernet.decrypt(value.encode()).decode()
+        except Exception:
+            return value
 
     @classmethod
     async def ensure_schema_ready(cls) -> None:
@@ -76,7 +107,7 @@ class AIConfigService:
                     for module in AIModule:
                         if module.value in existing_modules:
                             continue
-                        model_id = DEFAULT_MODEL_MAPPING.get(module)
+                        model_id = get_default_model_id(module)
                         if not model_id or model_id not in AVAILABLE_MODELS:
                             continue
 
@@ -115,8 +146,8 @@ class AIConfigService:
             if module.value in cls._config_cache:
                 return cls._config_cache[module.value]
         
-        # Determine effective model_id from DB or Default
-        model_id = DEFAULT_MODEL_MAPPING.get(module, "qwen-plus")
+        default_model_id = get_default_model_id(module)
+        model_id = default_model_id
         override_config = None
         
         try:
@@ -145,11 +176,17 @@ class AIConfigService:
                 f"AI model config table/query unavailable, fallback to defaults for module={module.value}: {exc}"
             )
 
-        # Validate Model
         if model_id not in AVAILABLE_MODELS:
-            logger.warning(f"Configured model {model_id} not found. Reverting to default.")
-            model_id = "qwen-plus"
-            
+            logger.warning(
+                f"Configured model {model_id} not found for module={module.value}; "
+                f"reverting to default {default_model_id}."
+            )
+            model_id = default_model_id
+            override_config = None
+
+        if model_id not in AVAILABLE_MODELS:
+            raise ValueError(f"Default model {model_id} is not registered for module={module.value}")
+
         base_config = AVAILABLE_MODELS[model_id]
         
         # Apply Overrides (Temperature, MaxTokens)
@@ -178,9 +215,54 @@ class AIConfigService:
         """
         Get API Key & Base URL for provider
         """
-        # Cache check ...
-        # Implementation omitted for brevity, assuming standard env vars as fallback
-        return None 
+        from app.core.config import settings
+
+        cache_key = provider.value
+        cached = cls._provider_cache.get(cache_key)
+        if cached and time.time() - cls._last_cache_update < cls.CACHE_TTL:
+            return cached
+
+        provider_configs = {
+            ModelProvider.DASHSCOPE: {
+                "api_key": settings.QWEN_API_KEY,
+                "base_url": settings.QWEN_BASE_URL,
+            },
+            ModelProvider.OPENAI: {
+                "api_key": settings.OPENAI_API_KEY,
+                "base_url": settings.OPENAI_BASE_URL,
+            },
+            ModelProvider.GEMINI: {
+                "api_key": settings.GEMINI_API_KEY,
+                "base_url": settings.GEMINI_BASE_URL,
+            },
+        }
+        fallback_config = provider_configs.get(provider)
+
+        try:
+            await cls.ensure_schema_ready()
+            async with async_session_maker() as session:
+                stmt = select(AIProviderConfig).where(
+                    AIProviderConfig.provider == provider.value,
+                    AIProviderConfig.is_active == True,
+                )
+                result = await session.execute(stmt)
+                db_config = result.scalar_one_or_none()
+                if db_config and db_config.api_key_ciphertext:
+                    config = {
+                        "api_key": cls._decrypt_secret(db_config.api_key_ciphertext),
+                        "base_url": db_config.base_url or (fallback_config or {}).get("base_url", ""),
+                    }
+                    cls._provider_cache[cache_key] = config
+                    cls._last_cache_update = time.time()
+                    return config
+        except SQLAlchemyError as exc:
+            logger.warning(f"AI provider config unavailable for provider={provider.value}: {exc}")
+
+        if not fallback_config or not fallback_config["api_key"]:
+            return None
+        cls._provider_cache[cache_key] = fallback_config
+        cls._last_cache_update = time.time()
+        return fallback_config
 
     @classmethod
     async def log_cost(cls, module: AIModule, model_id: str, usage: Dict[str, int]):
@@ -219,6 +301,7 @@ class AIConfigService:
     @classmethod
     def clear_cache(cls):
         cls._config_cache.clear()
+        cls._provider_cache.clear()
         cls._last_cache_update = 0
 
     @classmethod
@@ -243,7 +326,7 @@ class AIConfigService:
             )
 
         for module in AIModule:
-            default_model_id = DEFAULT_MODEL_MAPPING.get(module, "qwen-plus")
+            default_model_id = get_default_model_id(module)
             default_config = AVAILABLE_MODELS.get(default_model_id)
 
             db_conf = db_configs.get(module.value)
@@ -333,25 +416,39 @@ class AIConfigService:
         """
         更新提供商配置 (供 API 层使用)
         """
+        if not api_key.strip():
+            raise ValueError("API key must not be empty")
+
+        provider_value = provider.strip().lower()
+        allowed_providers = {item.value for item in ModelProvider if item != ModelProvider.LOCAL}
+        if provider_value not in allowed_providers:
+            raise ValueError(f"Unsupported provider: {provider}")
+
+        encrypted_key = cls._encrypt_secret(api_key)
+
         await cls.ensure_schema_ready()
         async with async_session_maker() as session:
-            stmt = select(AIProviderConfig).where(AIProviderConfig.provider == provider)
+            stmt = select(AIProviderConfig).where(AIProviderConfig.provider == provider_value)
             result = await session.execute(stmt)
             db_conf = result.scalar_one_or_none()
 
             if db_conf:
-                db_conf.api_key_ciphertext = api_key  # TODO: Encrypt
+                db_conf.api_key_ciphertext = encrypted_key
                 db_conf.base_url = base_url
+                db_conf.is_active = True
             else:
                 db_conf = AIProviderConfig(
-                    provider=provider,
-                    api_key_ciphertext=api_key,  # TODO: Encrypt
+                    provider=provider_value,
+                    api_key_ciphertext=encrypted_key,
                     base_url=base_url,
+                    is_active=True,
                 )
                 session.add(db_conf)
 
             await session.commit()
-        return {"status": "success", "provider": provider}
+
+        cls.clear_cache()
+        return {"status": "success", "provider": provider_value}
 
     @classmethod
     async def get_token_metrics(cls, days: int = 7) -> List[Dict[str, Any]]:
