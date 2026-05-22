@@ -47,7 +47,7 @@ flowchart LR
 
     subgraph API[FastAPI API Gateway]
         Router[/api/v1 router]
-        Endpoints[health design executions visual-ui api-engine turbo phoenix smart-ops dashboard]
+        Endpoints[health design executions visual-ui api-engine api-assets turbo phoenix smart-ops dashboard]
         Router --> Endpoints
     end
 
@@ -145,9 +145,17 @@ flowchart LR
 ### Test Case / 用例管理
 
 - 后端入口：`backend/app/api/v1/endpoints/test_cases.py`
-- 服务层：`backend/app/services/test_case_service.py`
+- 服务层：`backend/app/services/test_case_service.py`、`backend/app/services/api_case_ir_converter.py`
 - 模型：`backend/app/models/test_case.py`
-- 作用：持久化 UI/API/HYBRID 测试用例，作为执行、压测和回归的输入。
+- 作用：持久化 UI/API/HYBRID 测试用例，作为执行、压测和回归的输入。API 用例统一归一化为 API Case IR v2，同时保留旧扁平字段兼容 API Auto、Left Pupil 和回归执行。
+
+### API Asset / 接口资产库
+
+- 后端入口：`backend/app/api/v1/endpoints/api_assets.py`
+- 服务层：`backend/app/services/api_asset_service.py`
+- 模型：`backend/app/models/api_asset.py`
+- 复用解析器：`backend/app/services/left_pupil/swagger_parser.py`
+- 作用：持久化 OpenAPI/Swagger 导入或手工维护的接口资产，支持分页搜索、CRUD、重复导入更新，并可通过 `/api-assets/{asset_id}/api-ir-step` 生成标准 API Case IR v2 step。
 
 ### Execution Dispatcher / 执行调度
 
@@ -218,14 +226,26 @@ flowchart LR
   -> 可导入 Visual UI 或作为 dynamic_payload 提交执行
 ```
 
-### 2. 用例执行到结果
+### 2. 接口资产到 API 用例
+
+```text
+OpenAPI/Swagger 文档或手工录入
+  -> POST /api/v1/api-assets/import-openapi 或 POST /api/v1/api-assets
+  -> ApiAssetService 复用 SwaggerParser 解析 method/path/parameters/request_body/responses
+  -> api_assets 表持久化接口资产，重复 source + method + path 导入时更新
+  -> GET /api/v1/api-assets 搜索资产
+  -> GET /api/v1/api-assets/{asset_id}/api-ir-step 生成 API Case IR v2 step
+  -> 可放入 TestCase.steps 或 dynamic_payload 进入回归执行链路
+```
+
+### 3. 用例执行到结果
 
 ```text
 /executions 页面选择 tc_ids
   -> POST /api/v1/executions
   -> ExecutionService.create_execution 写入 PENDING
   -> 有 Celery worker 时 execute_test_cases.delay，否则 FastAPI BackgroundTasks 本地执行
-  -> execute_test_cases 读取用例和环境变量
+  -> execute_test_cases 读取用例和环境变量，并标准化 API Case IR v2
   -> Dispatcher 按 UI/API/HYBRID 分支执行
   -> RightPupilEngine 调 OmniParser/Playwright，LeftPupilEngine 调目标 API
   -> ExecutionService.create_step_result 写入步骤结果和截图引用
@@ -233,7 +253,7 @@ flowchart LR
   -> 前端轮询 GET /api/v1/executions/{id} 和 GET /api/v1/executions/{id}/result
 ```
 
-### 3. 性能压测
+### 4. 性能压测
 
 ```text
 /performance 或 /turbo 页面
@@ -243,7 +263,7 @@ flowchart LR
   -> POST /api/v1/turbo/stop/{test_id} 停止压测
 ```
 
-### 4. 缺陷分析和模型治理
+### 5. 缺陷分析和模型治理
 
 ```text
 /smart-ops 或 /model-config 页面

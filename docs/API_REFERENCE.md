@@ -6,6 +6,7 @@ ChongMing (重明) 是一个下一代智能测试平台，核心能力包括：
 - **Neural Design**: 基于 LLM 的需求分析与用例生成。
 - **Right Pupil**: 视觉驱动的 UI 自动化引擎 (Visual Grounding)。
 - **Left Pupil**: 协议驱动的 API 自动化引擎 (API-IR)。
+- **API Asset**: OpenAPI/Swagger 接口资产库，可生成 API Case IR v2 步骤。
 - **Turbo Engine**: 高并发性能压测引擎。
 - **Smart Ops**: AI 模型治理与成本控制。
 
@@ -241,9 +242,210 @@ ChongMing (重明) 是一个下一代智能测试平台，核心能力包括：
 
 ---
 
-### Flow 5: Turbo Engine (性能压测)
+### Flow 5: API Asset (接口资产库)
 
-#### 5.1 启动压测 (Start Load Test)
+#### 5.1 导入 OpenAPI / Swagger (Import OpenAPI)
+**描述**: 从 inline OpenAPI/Swagger JSON 或远程 URL 导入接口资产；同一 `source_name + method + path` 重复导入时更新现有资产。
+
+- **Method**: `POST`
+- **Path**: `/api-assets/import-openapi`
+
+**Request Body (JSON)**:
+```json
+{
+  "source_name": "catalog-service",
+  "content": {
+    "openapi": "3.0.0",
+    "info": {"title": "Catalog API", "version": "2026.1"},
+    "servers": [{"url": "https://catalog.example.test"}],
+    "paths": {
+      "/products": {
+        "get": {
+          "summary": "List products",
+          "operationId": "listProducts",
+          "tags": ["catalog"],
+          "parameters": [
+            {"name": "q", "in": "query", "schema": {"type": "string"}}
+          ],
+          "responses": {"200": {"description": "OK"}}
+        }
+      }
+    }
+  }
+}
+```
+
+也可以只传 `url`：
+```json
+{
+  "source_name": "catalog-service",
+  "url": "https://example.test/openapi.json"
+}
+```
+
+**Response (200 OK)**:
+```json
+{
+  "success": true,
+  "source_name": "catalog-service",
+  "source_type": "openapi_content",
+  "spec_title": "Catalog API",
+  "spec_version": "2026.1",
+  "base_url": "https://catalog.example.test",
+  "parsed_count": 1,
+  "created_count": 1,
+  "updated_count": 0,
+  "skipped_count": 0,
+  "asset_ids": ["API-ASSET-0E334835"]
+}
+```
+
+#### 5.2 查询接口资产 (List Assets)
+**描述**: 分页查询接口资产，支持关键词、HTTP 方法、标签、来源和废弃状态过滤。
+
+- **Method**: `GET`
+- **Path**: `/api-assets`
+
+**Query Parameters**:
+| Name | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `page` | integer | `1` | 页码 |
+| `page_size` | integer | `20` | 每页数量，最大 200 |
+| `keyword` | string | - | 搜索 method/path/name/summary/description/operation_id/search_text |
+| `method` | string | - | HTTP 方法，如 `GET` / `POST` |
+| `tag` | string | - | 标签关键词 |
+| `source_name` | string | - | 来源名称 |
+| `deprecated` | boolean | - | 是否只查废弃资产 |
+
+**Response (200 OK)**:
+```json
+{
+  "items": [
+    {
+      "id": "API-ASSET-0E334835",
+      "asset_key": "catalog-service:GET /products",
+      "source_name": "catalog-service",
+      "source_type": "openapi_content",
+      "base_url": "https://catalog.example.test",
+      "name": "List products",
+      "method": "GET",
+      "path": "/products",
+      "summary": "List products",
+      "operation_id": "listProducts",
+      "tags": ["catalog"],
+      "parameters": [
+        {"name": "q", "location": "query", "required": false, "schema_type": "string"}
+      ],
+      "request_body": null,
+      "responses": {"200": {"status_code": "200", "description": "OK", "schema": {}}},
+      "deprecated": false
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20
+}
+```
+
+#### 5.3 手工维护接口资产 (Create / Update / Delete Asset)
+**描述**: 手工创建、查看、更新或删除接口资产。手工创建时同一 `source_name + method + path` 已存在会返回 409。
+
+- **Create**: `POST /api-assets`
+- **Detail**: `GET /api-assets/{asset_id}`
+- **Update**: `PUT /api-assets/{asset_id}`
+- **Delete**: `DELETE /api-assets/{asset_id}`
+
+**Create Request Body (JSON)**:
+```json
+{
+  "source_name": "manual-suite",
+  "method": "POST",
+  "path": "/orders",
+  "summary": "Create order",
+  "tags": ["orders"],
+  "request_body": {
+    "content_type": "application/json",
+    "schema": {"type": "object"}
+  },
+  "responses": {
+    "201": {"description": "Created"}
+  }
+}
+```
+
+**Create Response (201 Created)**:
+```json
+{
+  "id": "API-ASSET-12345678",
+  "asset_key": "manual-suite:POST /orders",
+  "source_name": "manual-suite",
+  "source_type": "manual",
+  "name": "Create order",
+  "method": "POST",
+  "path": "/orders",
+  "summary": "Create order",
+  "tags": ["orders"],
+  "deprecated": false
+}
+```
+
+#### 5.4 生成 API Case IR v2 Step (Generate API IR Step)
+**描述**: 将接口资产转换为可放入 `TestCase.steps` 或动态执行 payload 的标准 API Case IR v2 步骤。
+
+- **Method**: `GET`
+- **Path**: `/api-assets/{asset_id}/api-ir-step`
+
+**Response (200 OK)**:
+```json
+{
+  "step": {
+    "id": "STEP_API-ASSET-0E334835",
+    "name": "List products",
+    "description": "List products",
+    "step_type": "API",
+    "protocol": "API-IR",
+    "version": "2.0",
+    "request": {
+      "method": "GET",
+      "url": "/products",
+      "path": "/products",
+      "headers": {},
+      "query_params": {"q": ""},
+      "path_params": {},
+      "body": null,
+      "timeout_ms": 30000,
+      "content_type": "application/json",
+      "base_url": "https://catalog.example.test"
+    },
+    "assertion": {
+      "status_code": 200,
+      "json_assertions": {}
+    },
+    "extraction": {},
+    "metadata": {
+      "source_type": "api_asset",
+      "source_id": "API-ASSET-0E334835",
+      "asset_key": "catalog-service:GET /products",
+      "source_name": "catalog-service",
+      "operation_id": "listProducts",
+      "tags": ["catalog"]
+    },
+    "method": "GET",
+    "url": "/products",
+    "query_params": {"q": ""},
+    "expected_status_code": 200,
+    "json_assertions": {},
+    "extract": {},
+    "assertions": [{"type": "status_code", "expected": 200}]
+  }
+}
+```
+
+---
+
+### Flow 6: Turbo Engine (性能压测)
+
+#### 6.1 启动压测 (Start Load Test)
 **描述**: 启动基于 Locust 的高性能压测任务。
 
 - **Method**: `POST`
@@ -271,7 +473,7 @@ ChongMing (重明) 是一个下一代智能测试平台，核心能力包括：
 }
 ```
 
-#### 5.2 获取压测统计 (Get Stats)
+#### 6.2 获取压测统计 (Get Stats)
 **描述**: 获取实时压测指标 (RPS, Latency)。
 
 - **Method**: `GET`
@@ -291,9 +493,9 @@ ChongMing (重明) 是一个下一代智能测试平台，核心能力包括：
 
 ---
 
-### Flow 6: Smart Ops (模型治理)
+### Flow 7: Smart Ops (模型治理)
 
-#### 6.1 获取模块配置 (Get Module Configs)
+#### 7.1 获取模块配置 (Get Module Configs)
 **描述**: 获取各业务模块 (Planning, Coding) 当前绑定的模型配置。
 
 - **Method**: `GET`
@@ -317,7 +519,7 @@ ChongMing (重明) 是一个下一代智能测试平台，核心能力包括：
 ]
 ```
 
-#### 6.2 更新模型映射 (Update Config)
+#### 7.2 更新模型映射 (Update Config)
 **描述**: 动态切换业务模块使用的 AI 模型。
 
 - **Method**: `POST`

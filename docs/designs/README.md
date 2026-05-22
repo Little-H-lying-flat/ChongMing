@@ -26,6 +26,7 @@
 | 数据工厂 | `backend/app/api/v1/endpoints/data_factory.py`、`backend/app/services/data_factory.py`、`backend/app/services/data_pool.py`、`backend/app/services/data_template.py` | `重明_详细设计说明书_数据工厂模块.txt` |
 | 前端层 | `frontend/src/app/`、`frontend/src/components/`、`frontend/src/services/` | `重明_详细设计说明书_前端层.txt` |
 | 报告和可视化 | `frontend/src/app/executions/`、`frontend/src/components/ui/execution-drawer.tsx`、`backend/app/services/execution_service.py` | `重明_详细设计说明书_报告可视化模块.txt` |
+| UI + API 智能扫描 | `frontend/src/app/`、`frontend/src/services/`、`backend/app/api/v1/endpoints/`、`backend/app/engines/dispatcher.py` | `UI_API智能扫描模式计划书.md` |
 
 ## 分册清单
 
@@ -50,6 +51,7 @@
 | `重明_详细设计说明书_前端层.txt` | 页面模块、服务层和后端接口映射 |
 | `重明_详细设计说明书_报告可视化模块.txt` | 执行结果展示、报告和看板 |
 | `测试用例管理模块实施说明.md` | 测试用例管理实现说明 |
+| `UI_API智能扫描模式计划书.md` | Scope-based UI + API 智能扫描模式的产品目标、边界、验收和阶段路线 |
 
 ## 维护规则
 
