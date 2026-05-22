@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Play, Server, Brain, Settings, Code2, FileText, Gauge, Flame, ShieldAlert } from 'lucide-react'
+import { LayoutDashboard, Play, Server, Brain, Settings, Code2, FileText, Gauge, Flame, ShieldAlert, ScanSearch } from 'lucide-react'
 import { Button } from './ui/button'
 
 const Sidebar = () => {
@@ -16,6 +16,7 @@ const Sidebar = () => {
         { name: '需求设计 (Design)', path: '/design', icon: FileText },
         { name: '接口工厂 (API Auto)', path: '/api-auto', icon: Code2 },
         { name: '视觉UI (Visual UI)', path: '/visual-ui', icon: Server },
+        { name: '智能扫描 (Smart Scan)', path: '/smart-scan', icon: ScanSearch },
         { name: '调度大盘 (Executions)', path: '/executions', icon: Play },
       ],
     },

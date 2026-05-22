@@ -65,6 +65,19 @@ export const api = {
         const data = await res.json();
         return { data };
     },
+    patch: async <T>(url: string, body: unknown): Promise<{ data: T }> => {
+        const res = await api.fetch(url, {
+            method: "PATCH",
+            headers: jsonHeaders,
+            body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+            throw new Error(`API PATCH request failed with status: ${res.status}`);
+        }
+        const data = await res.json();
+        return { data };
+    },
     delete: async (url: string): Promise<void> => {
         const res = await api.fetch(url, {
             method: "DELETE",
