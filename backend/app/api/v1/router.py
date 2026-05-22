@@ -21,6 +21,7 @@ from app.api.v1.endpoints import (
     api_engine,
     api_assets,
     data_factory,
+    scan_campaigns,
 )
 
 api_router = APIRouter()
@@ -121,6 +122,13 @@ api_router.include_router(
     data_factory.router,
     prefix="/data-factory",
     tags=["数据工厂"]
+)
+
+# UI + API 智能扫描 Campaign
+api_router.include_router(
+    scan_campaigns.router,
+    prefix="/scan-campaigns",
+    tags=["智能扫描 Campaign"]
 )
 
 from app.api.v1.endpoints import dashboard

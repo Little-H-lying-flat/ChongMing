@@ -1,0 +1,219 @@
+"""Scan Campaign Phase 1 endpoints."""
+
+from __future__ import annotations
+
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.schemas.scan_campaign import (
+    AssetDraftResponse,
+    GenerateAssetDraftsRequest,
+    GenerateAssetDraftsResponse,
+    GeneratePlanRequest,
+    ReviewItemUpdate,
+    ReviewItemUpdateResponse,
+    ScanCampaignCreate,
+    ScanCampaignListResponse,
+    ScanCampaignPlanResponse,
+    ScanCampaignResponse,
+    ScanCampaignUpdate,
+)
+from app.services.scan_campaign_service import (
+    ScanCampaignConflictError,
+    ScanCampaignNotFoundError,
+    ScanCampaignService,
+    ScanCampaignValidationError,
+)
+
+router = APIRouter()
+
+
+def _service(db: AsyncSession) -> ScanCampaignService:
+    return ScanCampaignService(db)
+
+
+@router.post("", response_model=ScanCampaignResponse, status_code=status.HTTP_201_CREATED)
+async def create_scan_campaign(payload: ScanCampaignCreate, db: AsyncSession = Depends(get_db)):
+    service = _service(db)
+    try:
+        campaign = await service.create(payload.model_dump())
+    except ScanCampaignValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return service.campaign_to_response(campaign)
+
+
+@router.get("", response_model=ScanCampaignListResponse)
+async def list_scan_campaigns(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: Optional[str] = Query(None),
+    keyword: Optional[str] = Query(None),
+    scan_mode: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        items = await service.list(
+            page=page,
+            page_size=page_size,
+            status=status,
+            keyword=keyword,
+            scan_mode=scan_mode,
+        )
+        total = await service.count(status=status, keyword=keyword, scan_mode=scan_mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return ScanCampaignListResponse(
+        items=[ScanCampaignResponse(**service.campaign_to_response(item)) for item in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/{campaign_id}", response_model=ScanCampaignResponse)
+async def get_scan_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    service = _service(db)
+    campaign = await service.get(campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail=f"Campaign {campaign_id} not found")
+    return service.campaign_to_response(campaign)
+
+
+@router.put("/{campaign_id}", response_model=ScanCampaignResponse)
+async def update_scan_campaign(
+    campaign_id: str,
+    payload: ScanCampaignUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        campaign = await service.update(campaign_id, payload.model_dump(exclude_unset=True))
+    except ScanCampaignConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ScanCampaignValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if campaign is None:
+        raise HTTPException(status_code=404, detail=f"Campaign {campaign_id} not found")
+    return service.campaign_to_response(campaign)
+
+
+@router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_scan_campaign(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    service = _service(db)
+    deleted = await service.delete(campaign_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Campaign {campaign_id} not found")
+    return None
+
+
+@router.post("/{campaign_id}/generate-plan", response_model=ScanCampaignPlanResponse)
+async def generate_scan_campaign_plan(
+    campaign_id: str,
+    payload: GeneratePlanRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        plan = await service.generate_plan(
+            campaign_id,
+            regenerate=payload.regenerate,
+            notes=payload.notes,
+        )
+    except ScanCampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ScanCampaignConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ScanCampaignValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    review_items = await service.list_review_items(plan.id)
+    asset_drafts = await service.list_asset_drafts(plan.id)
+    return service.build_plan_response(plan, review_items, asset_drafts)
+
+
+@router.get("/{campaign_id}/plan", response_model=ScanCampaignPlanResponse)
+async def get_latest_scan_campaign_plan(campaign_id: str, db: AsyncSession = Depends(get_db)):
+    service = _service(db)
+    plan = await service.get_latest_plan(campaign_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail=f"Latest plan for Campaign {campaign_id} not found")
+    review_items = await service.list_review_items(plan.id)
+    asset_drafts = await service.list_asset_drafts(plan.id)
+    return service.build_plan_response(plan, review_items, asset_drafts)
+
+
+@router.get("/{campaign_id}/plans/{plan_id}", response_model=ScanCampaignPlanResponse)
+async def get_scan_campaign_plan(campaign_id: str, plan_id: str, db: AsyncSession = Depends(get_db)):
+    service = _service(db)
+    plan = await service.get_plan(campaign_id, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail=f"Plan {plan_id} not found")
+    review_items = await service.list_review_items(plan.id)
+    asset_drafts = await service.list_asset_drafts(plan.id)
+    return service.build_plan_response(plan, review_items, asset_drafts)
+
+
+@router.patch(
+    "/{campaign_id}/plans/{plan_id}/review-items/{review_item_id}",
+    response_model=ReviewItemUpdateResponse,
+)
+async def update_scan_campaign_review_item(
+    campaign_id: str,
+    plan_id: str,
+    review_item_id: str,
+    payload: ReviewItemUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        item, plan_status = await service.update_review_item(
+            campaign_id,
+            plan_id,
+            review_item_id,
+            payload.choice,
+            payload.comment,
+        )
+    except ScanCampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ScanCampaignValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return ReviewItemUpdateResponse(
+        item=service.review_item_to_response(item),
+        plan_status=plan_status,
+    )
+
+
+@router.post(
+    "/{campaign_id}/plans/{plan_id}/generate-asset-drafts",
+    response_model=GenerateAssetDraftsResponse,
+)
+async def generate_scan_campaign_asset_drafts(
+    campaign_id: str,
+    plan_id: str,
+    payload: GenerateAssetDraftsRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        result = await service.generate_asset_drafts(
+            campaign_id,
+            plan_id,
+            asset_types=payload.asset_types,
+            include_only_approved=payload.include_only_approved,
+        )
+    except ScanCampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ScanCampaignValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return GenerateAssetDraftsResponse(
+        api_case_ir_steps=result["api_case_ir_steps"],
+        visual_ui_cases=result["visual_ui_cases"],
+        skipped_items=result["skipped_items"],
+        asset_drafts=[
+            AssetDraftResponse(**service.asset_draft_to_response(draft))
+            for draft in result["asset_drafts"]
+        ],
+    )
