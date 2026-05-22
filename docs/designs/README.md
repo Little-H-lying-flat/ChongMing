@@ -56,6 +56,7 @@
 | `UI_API智能扫描_Phase0计划质量评审.md` | 10 个样例的计划生成质量评审、问题归因和进入 Phase 1 前置条件 |
 | `UI_API智能扫描_Phase1页面信息结构.md` | Phase 1 的 Campaign 创建页、计划预览页和执行前确认页字段结构 |
 | `UI_API智能扫描_Phase1接口与映射规则.md` | Phase 1 的 API 候选匹配、资产草稿映射和后端接口草案 |
+| `UI_API智能扫描_Phase1低保真布局.md` | Phase 1 的 Campaign 创建页、计划预览页和执行前确认页低保真布局 |
 
 ## 维护规则
 
