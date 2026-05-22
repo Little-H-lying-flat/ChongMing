@@ -57,6 +57,7 @@
 | `UI_API智能扫描_Phase1页面信息结构.md` | Phase 1 的 Campaign 创建页、计划预览页和执行前确认页字段结构 |
 | `UI_API智能扫描_Phase1接口与映射规则.md` | Phase 1 的 API 候选匹配、资产草稿映射和后端接口草案 |
 | `UI_API智能扫描_Phase1低保真布局.md` | Phase 1 的 Campaign 创建页、计划预览页和执行前确认页低保真布局 |
+| `UI_API智能扫描_Phase1后端表与接口设计.md` | Phase 1 的 Campaign draft 表结构、后端 service 边界和接口处理流程 |
 
 ## 维护规则
 
