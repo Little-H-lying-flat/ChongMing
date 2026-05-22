@@ -131,6 +131,8 @@ jobs:
     - name: Non-eager Redis Broker Smoke
       env:
         APP_ENV: staging
+        SECRET_KEY: ci-backend-smoke-secret
+        FIRST_SUPERUSER_PASSWORD: ci-backend-smoke-password
         CELERY_BROKER_URL: redis://127.0.0.1:6379/0
         CELERY_TASK_ALWAYS_EAGER: "false"
       run: |
