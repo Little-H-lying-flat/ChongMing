@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Globe, KeyRound, Info, Plus, Pencil, Trash2, HeartPulse, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { Globe, Info, Plus, Pencil, Trash2, HeartPulse, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,13 +11,13 @@ import {
     getEnvironments, createEnvironment, updateEnvironment, deleteEnvironment,
     checkEnvironmentHealth, Environment
 } from "@/services/environmentService";
-import { AIModel, getAvailableModels, updateProviderKey } from "@/services/smartOpsService";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import Link from "next/link";
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState("environments");
@@ -31,21 +31,9 @@ export default function SettingsPage() {
     const [editingEnv, setEditingEnv] = useState<Partial<Environment> | null>(null);
     const [savingEnv, setSavingEnv] = useState(false);
 
-    // ================= 凭证管理 State =================
-    const [models, setModels] = useState<AIModel[]>([]);
-    const [loadingModels, setLoadingModels] = useState(true);
-
-    // 凭证 Dialog
-    const [providerDialogOpen, setProviderDialogOpen] = useState(false);
-    const [selectedProvider, setSelectedProvider] = useState<string>("");
-    const [apiKeyInput, setApiKeyInput] = useState("");
-    const [baseUrlInput, setBaseUrlInput] = useState("");
-    const [savingProvider, setSavingProvider] = useState(false);
-
     // ================= 初始加载 =================
     useEffect(() => {
         fetchEnvironments();
-        fetchModels();
     }, []);
 
     const fetchEnvironments = async () => {
@@ -58,18 +46,6 @@ export default function SettingsPage() {
             toast.error("加载环境列表失败 (Failed to load environments)");
         } finally {
             setLoadingEnvs(false);
-        }
-    };
-
-    const fetchModels = async () => {
-        setLoadingModels(true);
-        try {
-            const data = await getAvailableModels();
-            setModels(data);
-        } catch (_error) {
-            toast.error("加载支持的模型列表失败 (Failed to load models)");
-        } finally {
-            setLoadingModels(false);
         }
     };
 
@@ -134,45 +110,12 @@ export default function SettingsPage() {
         }
     };
 
-    // ================= 凭证管理逻辑 =================
-    const handleUpdateProvider = (provider: string) => {
-        setSelectedProvider(provider);
-        setApiKeyInput("");
-        setBaseUrlInput("");
-        setProviderDialogOpen(true);
-    };
-
-    const saveProviderConfig = async () => {
-        if (!apiKeyInput) {
-            toast.error("API Key不能为空 (API Key cannot be empty)");
-            return;
-        }
-        setSavingProvider(true);
-        try {
-            await updateProviderKey({
-                provider: selectedProvider,
-                api_key: apiKeyInput,
-                base_url: baseUrlInput || undefined
-            });
-            toast.success(`${selectedProvider} 凭证更新成功 (credentials updated)`);
-            setProviderDialogOpen(false);
-            fetchModels(); // 重新加载以验证状态 (虽然后端目前只是内存更新)
-        } catch (_error) {
-            toast.error("更新凭证失败 (Failed to update credentials)");
-        } finally {
-            setSavingProvider(false);
-        }
-    };
-
-    // 获取由后端模型 API 去重后的不重复 Provider 列表
-    const uniqueProviders = Array.from(new Set(models.map(m => m.provider)));
-
     return (
         <div className="space-y-6 max-w-6xl mx-auto">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-slate-950 mb-1">系统配置中心 (System Configuration Center)</h1>
-                    <p className="text-slate-600">管理环境编排、API凭证以及运行引擎配置 (Manage environments, API credentials, and engine config)</p>
+                    <p className="text-slate-600">管理运行环境与基础配置 (Manage runtime environments and basic configuration)</p>
                 </div>
             </div>
 
@@ -180,9 +123,6 @@ export default function SettingsPage() {
                 <TabsList className="bg-white/80 border border-sky-100">
                     <TabsTrigger value="environments" className="data-[state=active]:bg-sky-50 text-slate-700 data-[state=active]:text-slate-950">
                         <Globe className="w-4 h-4 mr-2" /> 环境管理 (Environments)
-                    </TabsTrigger>
-                    <TabsTrigger value="credentials" className="data-[state=active]:bg-sky-50 text-slate-700 data-[state=active]:text-slate-950">
-                        <KeyRound className="w-4 h-4 mr-2" /> 凭证与密钥 (Credentials & Keys)
                     </TabsTrigger>
                     <TabsTrigger value="about" className="data-[state=active]:bg-sky-50 text-slate-700 data-[state=active]:text-slate-950">
                         <Info className="w-4 h-4 mr-2" /> 平台信息 (Platform Info)
@@ -264,53 +204,19 @@ export default function SettingsPage() {
                             )}
                         </CardContent>
                     </Card>
-                </TabsContent>
 
-                {/* =================凭证与密钥 TAB================= */}
-                <TabsContent value="credentials" className="space-y-4">
-                    <Card className="rounded-2xl border-sky-100 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
-                        <CardHeader>
-                            <CardTitle className="text-xl text-slate-900 font-bold">AI模型供应商凭证 (AI Model Provider Credentials)</CardTitle>
-                            <CardDescription className="text-slate-600">配置安全加密后的API密钥 (Configure encrypted API keys to activate LLM neurons)</CardDescription>
+                    <Card className="rounded-2xl border-violet-100 bg-white/80 shadow-[0_20px_60px_-35px_rgba(139,92,246,0.3)] backdrop-blur-xl">
+                        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <CardTitle className="text-lg text-slate-900 font-bold">AI 模型与 Provider 配置已收敛到模型治理</CardTitle>
+                                <CardDescription className="text-slate-600 mt-1">
+                                    系统设置只保留运行环境等基础配置；API Key、Base URL 和模型路由请统一在模型治理页面维护。
+                                </CardDescription>
+                            </div>
+                            <Button asChild variant="outline" className="border-violet-200 bg-white text-violet-700 hover:bg-violet-50 hover:text-violet-800">
+                                <Link href="/model-config">前往模型治理</Link>
+                            </Button>
                         </CardHeader>
-                        <CardContent>
-                            {loadingModels ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    <Skeleton className="h-28 rounded-lg bg-sky-50" />
-                                    <Skeleton className="h-28 rounded-lg bg-sky-50" />
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {uniqueProviders.length === 0 ? (
-                                        <div className="col-span-full py-8 text-center text-slate-500">无法连接到AI控制核心 (Cannot connect to AI control core)</div>
-                                    ) : uniqueProviders.map((provider) => (
-                                        <div key={provider} className="border border-sky-100 rounded-lg p-5 bg-white/50 hover:bg-sky-50/20 transition-colors flex flex-col justify-between">
-                                            <div className="flex items-start justify-between mb-4">
-                                                <div>
-                                                    <h3 className="font-semibold text-slate-950 flex items-center gap-2">
-                                                        {provider === "aliyun" ? "阿里云 DashScope" :
-                                                            provider === "openai" ? "OpenAI" :
-                                                                provider === "gemini" ? "Google Gemini" : provider}
-                                                    </h3>
-                                                    <p className="text-xs text-slate-500 mt-1">支持 {models.filter(m => m.provider === provider).length} 已注册模型 (registered models)</p>
-                                                </div>
-                                                {/* 简化逻辑：这里默认假设有值的模型就算配好了，实际上可以提供一个连通性接口。由于后端采用 env 启动，默认都认为是 configured */}
-                                                <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 bg-emerald-500/10 gap-1 pl-1">
-                                                    <CheckCircle2 className="w-3 h-3" /> 已准备 (Ready)
-                                                </Badge>
-                                            </div>
-
-                                            <div className="flex items-center justify-between mt-auto pt-4 border-t border-sky-100/50">
-                                                <div className="text-xs text-slate-500 font-mono">sk-*******</div>
-                                                <Button variant="outline" size="sm" onClick={() => handleUpdateProvider(provider)} className="h-7 text-xs border-sky-200 bg-white/80 hover:bg-sky-50 text-slate-700 hover:text-slate-950">
-                                                    更新配置 (Update Config)
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </CardContent>
                     </Card>
                 </TabsContent>
 
@@ -435,48 +341,6 @@ export default function SettingsPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* =================弹窗: 凭证更新================= */}
-            <Dialog open={providerDialogOpen} onOpenChange={setProviderDialogOpen}>
-                <DialogContent className="rounded-2xl border-sky-100 bg-white/80 text-slate-950 sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>配置凭证 (Configure Credentials) ({selectedProvider})</DialogTitle>
-                        <DialogDescription className="text-slate-600">
-                            更新此底层大模型提供商的访问密钥，更新后即刻生效。 (Update the access key for this underlying large model provider, effective immediately.)
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="apikey">API Key / Token Base</Label>
-                            <Input
-                                id="apikey"
-                                type="password"
-                                value={apiKeyInput}
-                                onChange={(e) => setApiKeyInput(e.target.value)}
-                                placeholder="sk-..."
-                                className="bg-white border-sky-100 font-mono"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="baseurl">Custom Base URL (可选)</Label>
-                            <Input
-                                id="baseurl"
-                                value={baseUrlInput}
-                                onChange={(e) => setBaseUrlInput(e.target.value)}
-                                placeholder="如果您使用了反向代理例如 OneAPI (If you use a reverse proxy like OneAPI)"
-                                className="bg-white border-sky-100 font-mono text-sm"
-                            />
-                        </div>
-                    </div>
-
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setProviderDialogOpen(false)} className="border-sky-200 bg-transparent text-slate-700">取消 (Cancel)</Button>
-                        <Button onClick={saveProviderConfig} disabled={savingProvider} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                            {savingProvider ? "同步中... (Syncing...)" : "安全部署生效 (Deploy Securely)"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }

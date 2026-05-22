@@ -2,24 +2,38 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Play, Server, Brain, Settings, Code2, FileText, Gauge, Flame, ShieldAlert, Rocket } from 'lucide-react'
+import { LayoutDashboard, Play, Server, Brain, Settings, Code2, FileText, Gauge, Flame, ShieldAlert } from 'lucide-react'
 import { Button } from './ui/button'
 
 const Sidebar = () => {
   const pathname = usePathname()
 
-  const navItems = [
-    { name: '总览大盘 (Overview)', path: '/', icon: LayoutDashboard },
-    { name: '调度大盘 (Executions)', path: '/executions', icon: Play },
-    { name: '视觉UI (Visual UI)', path: '/visual-ui', icon: Server },
-    { name: '接口工厂 (API Auto)', path: '/api-auto', icon: Code2 },
-    { name: '需求设计 (Design)', path: '/design', icon: FileText },
-    { name: '性能压测 (Performance)', path: '/performance', icon: Gauge },
-    { name: '凤凰仓库 (Phoenix)', path: '/phoenix', icon: Flame },
-    { name: '智能运维 (Smart Ops)', path: '/smart-ops', icon: ShieldAlert },
-    { name: '模型治理 (Model Config)', path: '/model-config', icon: Brain },
-    { name: '系统设置 (Settings)', path: '/settings', icon: Settings },
-    { name: 'Turbo 占位 (Turbo)', path: '/turbo', icon: Rocket },
+  const navSections = [
+    {
+      title: '核心链路 (Core Flow)',
+      items: [
+        { name: '总览大盘 (Overview)', path: '/', icon: LayoutDashboard },
+        { name: '需求设计 (Design)', path: '/design', icon: FileText },
+        { name: '接口工厂 (API Auto)', path: '/api-auto', icon: Code2 },
+        { name: '视觉UI (Visual UI)', path: '/visual-ui', icon: Server },
+        { name: '调度大盘 (Executions)', path: '/executions', icon: Play },
+      ],
+    },
+    {
+      title: '治理与配置 (Governance)',
+      items: [
+        { name: '智能运维 (Smart Ops)', path: '/smart-ops', icon: ShieldAlert },
+        { name: '模型治理 (Model Config)', path: '/model-config', icon: Brain },
+        { name: '系统设置 (Settings)', path: '/settings', icon: Settings },
+      ],
+    },
+    {
+      title: '实验功能 (Experimental)',
+      items: [
+        { name: '性能压测 (Performance)', path: '/performance', icon: Gauge },
+        { name: '凤凰仓库 (Phoenix)', path: '/phoenix', icon: Flame },
+      ],
+    },
   ]
 
   return (
@@ -29,25 +43,34 @@ const Sidebar = () => {
         <p className="mt-1 text-xs text-slate-500">智能测试平台 (Intelligent Test Platform)</p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-4 space-y-2 geek-scrollbar">
-        {navItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.path
-          return (
-            <Link key={item.path} href={item.path}>
-              <Button
-                variant={isActive ? 'secondary' : 'ghost'}
-                className={`w-full justify-start gap-3 rounded-xl ${isActive
-                  ? 'border border-sky-200 bg-gradient-to-r from-sky-100 via-white to-violet-100 text-sky-800 shadow-sm'
-                  : 'text-slate-600 hover:bg-sky-50 hover:text-sky-800'
-                  }`}
-              >
-                <Icon className="w-5 h-5" />
-                {item.name}
-              </Button>
-            </Link>
-          )
-        })}
+      <nav className="flex-1 overflow-y-auto p-4 space-y-5 geek-scrollbar">
+        {navSections.map((section) => (
+          <div key={section.title} className="space-y-2">
+            <div className="px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              {section.title}
+            </div>
+            <div className="space-y-1.5">
+              {section.items.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.path
+                return (
+                  <Link key={item.path} href={item.path}>
+                    <Button
+                      variant={isActive ? 'secondary' : 'ghost'}
+                      className={`w-full justify-start gap-3 rounded-xl ${isActive
+                        ? 'border border-sky-200 bg-gradient-to-r from-sky-100 via-white to-violet-100 text-sky-800 shadow-sm'
+                        : 'text-slate-600 hover:bg-sky-50 hover:text-sky-800'
+                        }`}
+                    >
+                      <Icon className="w-5 h-5" />
+                      {item.name}
+                    </Button>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       <div className="space-y-4 border-t border-sky-100 p-4">

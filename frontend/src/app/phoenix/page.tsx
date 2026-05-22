@@ -2,13 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import {
-    Flame, Code2, GitCommit, GitBranch, History, PlayCircle, Plus, BookOpen, Bug, Activity
+    Flame, Code2, GitCommit, GitBranch, History, BookOpen
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
-    ScriptInfo, VersionInfo, getScripts, getScriptCode, getScriptHistory, compileTrace
+    ScriptInfo, VersionInfo, getScripts, getScriptCode, getScriptHistory
 } from "@/services/phoenixService";
 
 export default function PhoenixPage() {
@@ -16,9 +15,8 @@ export default function PhoenixPage() {
     const [selectedScript, setSelectedScript] = useState<ScriptInfo | null>(null);
     const [code, setCode] = useState<string>("");
     const [history, setHistory] = useState<VersionInfo[]>([]);
-    const [activeTab, setActiveTab] = useState<'code' | 'history' | 'heal'>('code');
+    const [activeTab, setActiveTab] = useState<'code' | 'history'>('code');
     const [loading, setLoading] = useState(false);
-    const [compiling, setCompiling] = useState(false);
 
     const fetchScripts = async () => {
         try {
@@ -55,39 +53,6 @@ export default function PhoenixPage() {
         }
     };
 
-    const handleMockCompile = async () => {
-        setCompiling(true);
-        const toastId = toast.loading("正在利用大模型编译执行轨迹为 Pytest 脚本...");
-
-        try {
-            // Mock trace payload similar to what RightPupil would produce
-            const mockTrace = {
-                trace_id: `TRACE_${Date.now()}`,
-                trace_data: {
-                    name: "User Login Flow Trace",
-                    scenario_id: "TC-001",
-                    actions: [
-                        { type: "navigate", target: "https://example.com/login", description: "Open Login Page" },
-                        { type: "click", target: "#username", description: "Click Username Field" },
-                        { type: "input", target: "#username", value: "testuser", description: "Type Username" },
-                        { type: "click", target: "#password", description: "Click Password Field" },
-                        { type: "input", target: "#password", value: "password123", description: "Type Password" },
-                        { type: "click", target: ".submit-btn", description: "Click Login Button" },
-                        { type: "assert", target: ".welcome-msg", value: "Welcome", description: "Verify Login Success" }
-                    ]
-                }
-            };
-
-            await compileTrace(mockTrace);
-            toast.success("轨迹编译成功！", { id: toastId });
-            await fetchScripts();
-        } catch (_error) {
-            toast.error("编译失败", { id: toastId });
-        } finally {
-            setCompiling(false);
-        }
-    };
-
     return (
         <div className="flex h-[calc(100vh-2rem)] overflow-hidden text-slate-900 -m-4">
             {/* 左侧菜单 - 脚本仓库 */}
@@ -99,13 +64,13 @@ export default function PhoenixPage() {
                         </h2>
                         <span className="text-xs text-slate-500">Phoenix Nirvana Vault</span>
                     </div>
-                    <Button variant="outline" size="icon" onClick={handleMockCompile} disabled={compiling} className="border-rose-200 bg-white/80 text-rose-700 shadow-sm hover:bg-rose-50 hover:text-rose-800" title="模拟轨迹编译 (Mock Trace Compile)">
-                        {compiling ? <Activity className="w-4 h-4 animate-spin text-rose-400" /> : <Plus className="w-4 h-4" />}
-                    </Button>
+                    <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                        实验功能
+                    </Badge>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                    {scripts.length === 0 && !compiling ? (
+                    {scripts.length === 0 ? (
                         <div className="text-center p-8 text-slate-500 text-sm">
                             <Code2 className="w-8 h-8 mx-auto mb-2 opacity-20" />
                             <p>暂无编译脚本</p>
@@ -148,11 +113,9 @@ export default function PhoenixPage() {
                                         <GitBranch className="w-3 h-3" /> {selectedScript.file_path}
                                     </p>
                                 </div>
-                                <div className="flex gap-2">
-                                    <Button variant="outline" className="border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-800">
-                                        <PlayCircle className="w-4 h-4 mr-2" /> 执行脚本
-                                    </Button>
-                                </div>
+                                <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                                    脚本固化预览
+                                </Badge>
                             </div>
 
                             {/* Tabs */}
@@ -170,13 +133,6 @@ export default function PhoenixPage() {
                                 >
                                     <div className="flex items-center gap-2"><History className="w-4 h-4" /> 版本与分支历史</div>
                                     {activeTab === 'history' && <div className="absolute bottom-0 left-0 w-full h-[2px] bg-rose-500 rounded-t-full" />}
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('heal')}
-                                    className={`pb-3 text-sm font-medium transition-colors relative ${activeTab === 'heal' ? 'text-rose-700' : 'text-slate-500 hover:text-slate-800'}`}
-                                >
-                                    <div className="flex items-center gap-2"><Bug className="w-4 h-4" /> 自愈修复模拟器</div>
-                                    {activeTab === 'heal' && <div className="absolute bottom-0 left-0 w-full h-[2px] bg-rose-500 rounded-t-full" />}
                                 </button>
                             </div>
                         </div>
@@ -231,26 +187,6 @@ export default function PhoenixPage() {
                                             )}
                                         </div>
                                     )}
-
-                                    {/* Heal Tab (Mock view) */}
-                                    {activeTab === 'heal' && (
-                                        <div className="max-w-2xl mx-auto mt-8 text-center text-slate-600 space-y-4">
-                                            <Bug className="w-16 h-16 mx-auto opacity-20" />
-                                            <h3 className="text-xl font-bold text-slate-900">异常堆栈自愈修复</h3>
-                                            <p className="text-sm">当执行发生异常退出时，凤凰涅槃层会自动分析抛出的 Traceback 与报错上下文，重写对应的元素定位策略并进行代码固化。</p>
-                                            <p className="text-sm bg-slate-900/50 p-4 border border-rose-500/20 text-rose-300 rounded-lg inline-block text-left relative">
-                                                <code>
-                                                    waiting for selector &quot;.submit-btn&quot; to be visible<br />
-                                                    TimeoutError: page.waitForSelector: Timeout 10000ms exceeded.
-                                                </code>
-                                            </p>
-                                            <div className="pt-4">
-                                                <Button disabled variant="outline" className="border-rose-200 text-rose-700 bg-rose-50">
-                                                    模块对接中 (Module Integrating)
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
                                 </>
                             )}
                         </div>
@@ -260,9 +196,7 @@ export default function PhoenixPage() {
                         <BookOpen className="w-16 h-16 mb-4 opacity-20" />
                         <h2 className="text-xl font-medium mb-2">欢迎来到凤凰涅槃层</h2>
                         <p className="text-sm max-w-md text-center">从左侧选择一个脚本进行代码查阅、Git 分支分析或是异常自愈处理。</p>
-                        <Button onClick={handleMockCompile} disabled={compiling} className="mt-8 bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 text-white shadow-lg shadow-rose-500/25 hover:from-rose-600 hover:via-orange-600 hover:to-amber-600">
-                            {compiling ? "编译中..." : "产生一条 Mock 轨迹进行编译测试"}
-                        </Button>
+                        <p className="mt-4 text-xs text-slate-400">脚本固化能力已降级为实验预览，请从真实执行结果或后续 Trace 入口生成脚本。</p>
                     </div>
                 )}
             </div>

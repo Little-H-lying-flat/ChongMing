@@ -1,5 +1,5 @@
-import { ComingSoon } from "@/components/ComingSoon";
+import { redirect } from "next/navigation";
 
 export default function TurboPage() {
-    return <ComingSoon title="性能压测 (Performance Testing)" />;
+    redirect("/performance");
 }

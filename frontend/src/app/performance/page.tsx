@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
+import dynamic from "next/dynamic";
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,11 @@ import { Slider } from "@/components/ui/slider";
 import { Activity, Play, Square, Users, Zap, Clock, AlertTriangle, Target } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { turboService } from "@/services/turboService";
+
+const ResponsiveContainer = dynamic(
+  () => import("recharts").then((mod) => mod.ResponsiveContainer),
+  { ssr: false }
+);
 
 export default function PerformancePage() {
   const [testCases, setTestCases] = useState<{ id: string; name: string; method?: string; url?: string; target_host?: string }[]>([]);
@@ -64,7 +70,7 @@ export default function PerformancePage() {
         spawn_rate: spawnRate,
         duration: durationStr
       });
-      const currentTestId = res.test_id || `mock-${Date.now()}`;
+      const currentTestId = res.test_id;
       setTestId(currentTestId);
 
       // 3. Start Polling
@@ -194,7 +200,7 @@ export default function PerformancePage() {
                   {isRunning ? (
                     <><Square className="w-5 h-5 mr-2 fill-current" /> 紧急停止 (Emergency Stop)</>
                   ) : (
-                    <><Play className="w-5 h-5 mr-2 fill-current" /> 启动压测 🚀 (Start Ignition 🚀)</>
+                    <><Play className="w-5 h-5 mr-2 fill-current" /> 启动压测 (Start Ignition)</>
                   )}
                 </Button>
               </div>
@@ -289,7 +295,7 @@ export default function PerformancePage() {
           </div>
 
           {/* BOTTOM: Real-time Charts */}
-          <div className="flex-1 flex gap-4 min-h-[300px]">
+          <div className="grid grid-cols-2 gap-4 h-[320px]">
             <Card className="flex-1 flex flex-col overflow-hidden rounded-2xl border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
               <CardHeader className="py-3 px-4 shrink-0 border-b border-sky-100">
                 <CardTitle className="text-sm font-medium text-emerald-400 flex items-center gap-2">

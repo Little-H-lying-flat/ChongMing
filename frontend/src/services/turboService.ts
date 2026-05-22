@@ -103,7 +103,6 @@ export const turboService = {
 
   /**
    * Fetch available API test cases
-   * Tries real backend, falls back to mock data for UI development
    */
   getApiTestCases: async (): Promise<{ items: ApiTestCaseSummary[] }> => {
     try {
@@ -123,14 +122,8 @@ export const turboService = {
       });
       return { items: formattedItems };
     } catch (_e) {
-      console.warn("Using mock data for API cases since endpoint might not exist yet");
-      return {
-        items: [
-          { id: "TC_API_001", name: "User Login API", method: "POST", url: "/api/v1/auth/login", target_host: "http://localhost:8000" },
-          { id: "TC_API_002", name: "Fetch Product List", method: "GET", url: "/api/v1/products", target_host: "http://localhost:8000" },
-          { id: "TC_API_003", name: "Create Order (Complex)", method: "POST", url: "/api/v1/orders", target_host: "http://localhost:8000" }
-        ]
-      };
+      console.warn("Failed to fetch API test cases for performance testing");
+      return { items: [] };
     }
   }
 };
