@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Send, AlignLeft, Variable, CheckSquare } from "lucide-react";
+import { Send, AlignLeft, Variable, CheckSquare, Database } from "lucide-react";
 import { KeyValueEditor } from "./KeyValueEditor";
 import { ApiStep } from "@/services/apiAutoService";
 import {
@@ -14,6 +14,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 
 interface RequestBuilderProps {
     step: ApiStep;
@@ -28,6 +29,8 @@ const METHOD_COLORS = {
     PUT: "text-amber-700 font-bold",
     DELETE: "text-rose-700 font-bold",
     PATCH: "text-violet-700 font-bold",
+    HEAD: "text-slate-700 font-bold",
+    OPTIONS: "text-cyan-700 font-bold",
 } as Record<string, string>;
 
 export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBuilderProps) {
@@ -57,6 +60,10 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
     const [headers, setHeaders] = useState(recordToPairs(step.request?.headers || {}));
     const [extraction, setExtraction] = useState(recordToPairs(step.extraction || {}));
     const [jsonAssertions, setJsonAssertions] = useState(recordToPairs(step.assertion?.json_assertions || {}));
+    const sourceType = typeof step.metadata?.source_type === "string" ? step.metadata.source_type : undefined;
+    const sourceName = typeof step.metadata?.source_name === "string" ? step.metadata.source_name : undefined;
+    const operationId = typeof step.metadata?.operation_id === "string" ? step.metadata.operation_id : undefined;
+    const assetKey = typeof step.metadata?.asset_key === "string" ? step.metadata.asset_key : undefined;
 
     // Reset local pairs state when active step changes
     React.useEffect(() => {
@@ -104,6 +111,16 @@ export function RequestBuilder({ step, onChange, onRun, isExecuting }: RequestBu
                     )}
                 </Button>
             </div>
+
+            {sourceType === "api_asset" && (
+                <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-xs text-slate-600">
+                    <Database className="h-3.5 w-3.5 text-violet-600" />
+                    <span className="font-medium text-violet-700">来源: 接口资产库</span>
+                    {sourceName && <Badge variant="secondary" className="bg-white text-slate-600">{sourceName}</Badge>}
+                    {operationId && <span className="font-mono text-slate-500">{operationId}</span>}
+                    {!operationId && assetKey && <span className="font-mono text-slate-500">{assetKey}</span>}
+                </div>
+            )}
 
             <Card className="overflow-hidden rounded-2xl border-white/70 bg-white/80 shadow-[0_20px_60px_-35px_rgba(14,165,233,0.35)] backdrop-blur-xl">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

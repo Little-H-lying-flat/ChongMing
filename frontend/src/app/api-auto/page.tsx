@@ -3,13 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, Code2, Save, PlayCircle, AlertCircle } from "lucide-react";
+import { Plus, Trash2, Code2, Save, PlayCircle, AlertCircle, Database } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
 import { apiAutoService, ApiTestCase, ApiStep, ChainExecutionResult } from '@/services/apiAutoService';
+import type { ApiAsset } from '@/services/apiAssetService';
 import { RequestBuilder } from '@/components/api-auto/RequestBuilder';
 import { ResponseConsole } from '@/components/api-auto/ResponseConsole';
+import { ApiAssetPickerDialog } from '@/components/api-auto/ApiAssetPickerDialog';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -32,20 +34,69 @@ import { getEnvironments, Environment } from '@/services/environmentService';
 const NEW_STEP_TEMPLATE: ApiStep = {
     id: "step_1",
     name: "Request 1",
+    step_type: "API",
     request: {
         method: "GET",
-        url: "https://jsonplaceholder.typicode.com/todos/1",
+        url: "/api/health",
         headers: {
             "Accept": "application/json"
         },
         query_params: {},
-        timeout_ms: 10000
+        path_params: {},
+        timeout_ms: 30000,
+        content_type: "application/json"
     },
     extraction: {},
     assertion: {
         status_code: 200,
         json_assertions: {}
     }
+};
+
+const getUniqueStepId = (baseId: string, existingSteps: ApiStep[]) => {
+    const existingIds = new Set(existingSteps.map(step => step.id));
+    if (!existingIds.has(baseId)) return baseId;
+
+    let suffix = 2;
+    let nextId = `${baseId}_${suffix}`;
+    while (existingIds.has(nextId)) {
+        suffix += 1;
+        nextId = `${baseId}_${suffix}`;
+    }
+    return nextId;
+};
+
+const normalizeImportedAssetStep = (step: ApiStep, existingSteps: ApiStep[]): ApiStep => {
+    const request = step.request || {
+        method: "GET",
+        url: "/",
+        headers: {},
+        query_params: {},
+        timeout_ms: 30000,
+    };
+
+    return {
+        ...step,
+        id: getUniqueStepId(step.id || `asset_step_${Date.now()}`, existingSteps),
+        name: step.name || step.description || "API Asset Step",
+        step_type: "API",
+        request: {
+            ...request,
+            method: request.method || "GET",
+            url: request.url || request.path || "/",
+            headers: request.headers || {},
+            query_params: request.query_params || {},
+            path_params: request.path_params || {},
+            timeout_ms: request.timeout_ms || 30000,
+            content_type: request.content_type || "application/json",
+        },
+        extraction: step.extraction || {},
+        assertion: {
+            ...step.assertion,
+            status_code: step.assertion?.status_code || step.expected_status_code || 200,
+            json_assertions: step.assertion?.json_assertions || step.json_assertions || {},
+        },
+    };
 };
 
 export default function ApiAutoPage() {
@@ -63,6 +114,7 @@ export default function ApiAutoPage() {
 
     const [environments, setEnvironments] = useState<Environment[]>([]);
     const [selectedEnv, setSelectedEnv] = useState<string>("default");
+    const [assetPickerOpen, setAssetPickerOpen] = useState(false);
 
     useEffect(() => {
         loadCases();
@@ -195,6 +247,34 @@ export default function ApiAutoPage() {
         setActiveCase({ ...activeCase, steps: newSteps });
     };
 
+    const handleAddAssetStep = (step: ApiStep, asset: ApiAsset) => {
+        const existingSteps = activeCase?.steps || [];
+        const importedStep = normalizeImportedAssetStep(step, existingSteps);
+
+        if (activeCase) {
+            setActiveCase({ ...activeCase, steps: [...activeCase.steps, importedStep] });
+            setExecResult(null);
+            toast.success("已从资产库添加 Step，请记得保存 (Step added, remember to save)", {
+                description: `${asset.method} ${asset.path}`,
+            });
+            return;
+        }
+
+        const newCase: ApiTestCase = {
+            id: "NEW",
+            name: importedStep.name || asset.summary || asset.name || `${asset.method} ${asset.path}`,
+            description: asset.description || asset.summary || "",
+            mode: "API",
+            priority: "P1",
+            status: "active",
+            tags: ["api-asset", asset.source_name].filter(Boolean),
+            steps: [importedStep],
+        };
+        setActiveCase(newCase);
+        setExecResult(null);
+        toast.success("已从资产库创建未保存 API 集合 (Created unsaved API collection)");
+    };
+
     return (
         <div className="flex h-[calc(100vh-4rem)] overflow-hidden text-slate-900">
             {/* Left Panel: API Case Library */}
@@ -269,6 +349,11 @@ export default function ApiAutoPage() {
                                     </SelectContent>
                                 </Select>
 
+                                <Button variant="outline" size="sm" onClick={() => setAssetPickerOpen(true)} className="border-violet-200 bg-white/80 text-violet-700 shadow-sm hover:bg-violet-50 hover:text-violet-800">
+                                    <Database className="h-4 w-4 mr-2" />
+                                    从资产库添加
+                                </Button>
+
                                 <Button variant="outline" size="sm" onClick={handleSave} disabled={isSaving} className="border-sky-200 bg-white/80 text-slate-700 shadow-sm hover:bg-sky-50 hover:text-sky-800">
                                     <Save className="h-4 w-4 mr-2" />
                                     {isSaving ? "保存中" : "保存"}
@@ -325,12 +410,22 @@ export default function ApiAutoPage() {
 
                     </div>
                 ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-500">
+                    <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center px-6">
                         <Code2 className="h-16 w-16 mb-4 text-sky-300" />
                         <p className="text-lg">选择左侧用例，进入API自动化工作区 (Select a case to enter the API workbench)</p>
+                        <Button onClick={() => setAssetPickerOpen(true)} className="mt-5 bg-gradient-to-r from-sky-500 via-blue-500 to-violet-500 text-white shadow-lg shadow-sky-500/25 hover:from-sky-600 hover:via-blue-600 hover:to-violet-600">
+                            <Database className="h-4 w-4 mr-2" />
+                            从接口资产新建 API 集合
+                        </Button>
                     </div>
                 )}
             </div>
+
+            <ApiAssetPickerDialog
+                open={assetPickerOpen}
+                onOpenChange={setAssetPickerOpen}
+                onSelectStep={handleAddAssetStep}
+            />
 
             <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
                 <AlertDialogContent className="border-slate-200 bg-white text-slate-900 shadow-2xl">

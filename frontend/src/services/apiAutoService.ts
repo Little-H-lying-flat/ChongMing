@@ -1,12 +1,19 @@
 import api from './api';
 
+export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS" | string;
+
 export interface ApiRequestSpec {
-    method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+    method: HttpMethod;
     url: string;
-    headers: Record<string, string>;
+    path?: string;
+    headers: Record<string, unknown>;
     body?: unknown;
-    query_params: Record<string, string>;
+    query_params: Record<string, unknown>;
+    path_params?: Record<string, unknown>;
     timeout_ms: number;
+    content_type?: string;
+    base_url?: string;
+    base_url_ref?: string;
 }
 
 export interface ApiAssertion {
@@ -20,9 +27,18 @@ export interface ApiAssertion {
 export interface ApiStep {
     id: string;
     name: string;
+    description?: string;
+    step_type?: "API" | string;
+    protocol?: string;
+    version?: string;
     request: ApiRequestSpec;
     extraction: Record<string, string>;
     assertion?: ApiAssertion;
+    metadata?: Record<string, unknown>;
+    expected_status_code?: number;
+    json_assertions?: Record<string, unknown>;
+    extract?: Record<string, unknown>;
+    assertions?: unknown[];
 }
 
 export interface ApiTestCase {
@@ -51,11 +67,11 @@ export interface ExecutionStepResult {
     request_details?: {
         method: string;
         url: string;
-        headers: Record<string, string>;
+        headers: Record<string, unknown>;
         body?: unknown;
     };
     response_details?: {
-        headers: Record<string, string>;
+        headers: Record<string, unknown>;
         body: unknown;
     };
 }
