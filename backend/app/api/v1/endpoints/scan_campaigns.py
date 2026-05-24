@@ -9,10 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.schemas.scan_campaign import (
+    AssetDraftListResponse,
     AssetDraftResponse,
+    AssetPromotionListResponse,
+    AssetPromotionResponse,
     GenerateAssetDraftsRequest,
     GenerateAssetDraftsResponse,
     GeneratePlanRequest,
+    PromoteAssetDraftResult,
+    PromoteAssetDraftsRequest,
+    PromoteAssetDraftsResponse,
     ReviewItemUpdate,
     ReviewItemUpdateResponse,
     ScanCampaignCreate,
@@ -183,6 +189,77 @@ async def update_scan_campaign_review_item(
     return ReviewItemUpdateResponse(
         item=service.review_item_to_response(item),
         plan_status=plan_status,
+    )
+
+
+@router.get(
+    "/{campaign_id}/plans/{plan_id}/asset-drafts",
+    response_model=AssetDraftListResponse,
+)
+async def list_scan_campaign_asset_drafts(
+    campaign_id: str,
+    plan_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        drafts = await service.list_asset_drafts_for_plan(campaign_id, plan_id)
+    except ScanCampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return AssetDraftListResponse(
+        items=[AssetDraftResponse(**service.asset_draft_to_response(draft)) for draft in drafts]
+    )
+
+
+@router.get(
+    "/{campaign_id}/plans/{plan_id}/asset-drafts/promotions",
+    response_model=AssetPromotionListResponse,
+)
+async def list_scan_campaign_asset_promotions(
+    campaign_id: str,
+    plan_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        promotions = await service.list_asset_promotions(campaign_id, plan_id)
+    except ScanCampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return AssetPromotionListResponse(
+        items=[AssetPromotionResponse(**service.asset_promotion_to_response(item)) for item in promotions]
+    )
+
+
+@router.post(
+    "/{campaign_id}/plans/{plan_id}/promote-asset-drafts",
+    response_model=PromoteAssetDraftsResponse,
+)
+async def promote_scan_campaign_asset_drafts(
+    campaign_id: str,
+    plan_id: str,
+    payload: PromoteAssetDraftsRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        result = await service.promote_asset_drafts(
+            campaign_id,
+            plan_id,
+            draft_ids=payload.draft_ids,
+            confirmation=payload.confirmation,
+            allow_duplicates=payload.allow_duplicates,
+            visual_project_id=payload.visual_project_id,
+        )
+    except ScanCampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ScanCampaignValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return PromoteAssetDraftsResponse(
+        promoted=[PromoteAssetDraftResult(**item) for item in result["promoted"]],
+        duplicates=[PromoteAssetDraftResult(**item) for item in result["duplicates"]],
+        skipped=[PromoteAssetDraftResult(**item) for item in result["skipped"]],
+        failed=[PromoteAssetDraftResult(**item) for item in result["failed"]],
+        execution_created=bool(result["execution_created"]),
     )
 
 

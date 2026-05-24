@@ -100,6 +100,52 @@ export interface GenerateAssetDraftsResponse {
     asset_drafts: AssetDraft[];
 }
 
+export interface AssetDraftListResponse {
+    items: AssetDraft[];
+}
+
+export interface AssetPromotion {
+    id: string;
+    campaign_id: string;
+    plan_id: string;
+    asset_draft_id: string;
+    draft_type: string;
+    generated_asset_type: string;
+    generated_asset_id: string;
+    status: string;
+    promotion_metadata: JsonObject;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AssetPromotionListResponse {
+    items: AssetPromotion[];
+}
+
+export interface PromoteAssetDraftResult {
+    draft_id: string;
+    asset_type: string;
+    target_type?: string | null;
+    target_id?: string | null;
+    status: string;
+    reason?: string | null;
+}
+
+export interface PromoteAssetDraftsResponse {
+    promoted: PromoteAssetDraftResult[];
+    duplicates: PromoteAssetDraftResult[];
+    skipped: PromoteAssetDraftResult[];
+    failed: PromoteAssetDraftResult[];
+    execution_created: boolean;
+}
+
+export interface PromoteAssetDraftsRequest {
+    draft_ids: string[];
+    confirmation: 'PROMOTE_SELECTED_DRAFTS';
+    allow_duplicates?: boolean;
+    visual_project_id?: string;
+}
+
 export interface ScanCampaignListParams {
     page?: number;
     pageSize?: number;
@@ -161,6 +207,21 @@ export const scanCampaignService = {
         return api.post<GenerateAssetDraftsResponse>(
             `/scan-campaigns/${campaignId}/plans/${planId}/generate-asset-drafts`,
             payload || { asset_types: ['api_case_ir', 'visual_ui_case'], include_only_approved: true },
+        );
+    },
+
+    listAssetDrafts: (campaignId: string, planId: string) => {
+        return api.get<AssetDraftListResponse>(`/scan-campaigns/${campaignId}/plans/${planId}/asset-drafts`);
+    },
+
+    listAssetPromotions: (campaignId: string, planId: string) => {
+        return api.get<AssetPromotionListResponse>(`/scan-campaigns/${campaignId}/plans/${planId}/asset-drafts/promotions`);
+    },
+
+    promoteAssetDrafts: (campaignId: string, planId: string, payload: PromoteAssetDraftsRequest) => {
+        return api.post<PromoteAssetDraftsResponse>(
+            `/scan-campaigns/${campaignId}/plans/${planId}/promote-asset-drafts`,
+            payload,
         );
     },
 };

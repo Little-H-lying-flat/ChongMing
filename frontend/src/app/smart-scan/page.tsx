@@ -13,8 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
+    AssetDraft,
+    AssetPromotion,
     GenerateAssetDraftsResponse,
     JsonObject,
+    PromoteAssetDraftsResponse,
     ReviewItem,
     ScanCampaign,
     ScanCampaignCreate,
@@ -71,6 +74,22 @@ const policyLabels: Record<string, string> = {
     out_of_scope: "超出范围",
 };
 
+const campaignStatusLabels: Record<string, string> = {
+    draft: "Campaign 草稿",
+    plan_generated: "AI 计划已生成",
+    review_saved: "复核已保存",
+    asset_drafts_generated: "资产草稿已生成",
+    needs_revision: "需要修订",
+    archived: "已归档",
+};
+
+const planStatusLabels: Record<string, string> = {
+    generated: "AI 计划已生成",
+    review_saved: "复核已保存",
+    asset_drafts_generated: "资产草稿已生成",
+    superseded: "已被新版本替代",
+};
+
 const splitLines = (value: string) => value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
 
 const joinLines = (value: unknown) => Array.isArray(value)
@@ -97,6 +116,22 @@ const getPolicyClassName = (policy: string) => {
     if (policy === "out_of_scope") return "border-slate-200 bg-slate-50 text-slate-600";
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
 };
+
+const getFriendlyError = (err: unknown) => {
+    const message = (err as { message?: string })?.message || "请稍后重试";
+    if (message.includes("404")) return "当前后端不支持 Smart Scan 接口，请确认运行的是最新后端服务。";
+    if (message.includes("409")) return "当前 Campaign 状态不允许该操作，请刷新后确认是否已生成计划。";
+    if (message.includes("400")) return "请求内容不符合要求，请检查必填字段和范围边界。";
+    if (message.includes("Failed to fetch")) return "无法连接后端服务，请检查后端是否运行或 API 地址配置。";
+    return message;
+};
+
+const EmptyState = ({ title, description }: { title: string; description: string }) => (
+    <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-5 text-sm">
+        <div className="font-medium text-slate-800">{title}</div>
+        <div className="mt-1 text-slate-500">{description}</div>
+    </div>
+);
 
 const JsonPreview = ({ data }: { data: unknown }) => (
     <pre className="max-h-80 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-4 text-xs leading-relaxed text-slate-100">
@@ -176,22 +211,58 @@ export default function SmartScanPage() {
     const [activeCampaign, setActiveCampaign] = useState<ScanCampaign | null>(null);
     const [currentPlan, setCurrentPlan] = useState<ScanCampaignPlan | null>(null);
     const [assetDrafts, setAssetDrafts] = useState<GenerateAssetDraftsResponse | null>(null);
+    const [assetDraftRows, setAssetDraftRows] = useState<AssetDraft[]>([]);
+    const [assetPromotions, setAssetPromotions] = useState<AssetPromotion[]>([]);
+    const [selectedDraftIds, setSelectedDraftIds] = useState<string[]>([]);
+    const [promotionResult, setPromotionResult] = useState<PromoteAssetDraftsResponse | null>(null);
     const [form, setForm] = useState<CampaignFormState>(DEFAULT_FORM);
     const [reviewDrafts, setReviewDrafts] = useState<Record<string, { choice: string; comment: string }>>({});
+    const [activeTab, setActiveTab] = useState("draft");
+    const [lastActionMessage, setLastActionMessage] = useState("Phase 2 可将草稿手动保存为正式资产，但仍然不会执行测试。");
     const [isLoadingList, setIsLoadingList] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
     const [isSavingReview, setIsSavingReview] = useState<string | null>(null);
     const [isGeneratingDrafts, setIsGeneratingDrafts] = useState(false);
+    const [isPromotingDrafts, setIsPromotingDrafts] = useState(false);
+
+    const loadAssetDraftState = React.useCallback(async (campaignId: string, planId: string) => {
+        try {
+            const [draftRes, promotionRes] = await Promise.all([
+                scanCampaignService.listAssetDrafts(campaignId, planId),
+                scanCampaignService.listAssetPromotions(campaignId, planId),
+            ]);
+            setAssetDraftRows(draftRes.data.items || []);
+            setAssetPromotions(promotionRes.data.items || []);
+            setSelectedDraftIds((current) => current.filter((id) => draftRes.data.items.some((draft) => draft.id === id)));
+        } catch (err: unknown) {
+            setAssetDraftRows([]);
+            setAssetPromotions([]);
+            setSelectedDraftIds([]);
+            toast.error("加载资产草稿状态失败", { description: getFriendlyError(err) });
+        }
+    }, []);
 
     const loadLatestPlan = React.useCallback(async (campaignId: string) => {
         try {
             const res = await scanCampaignService.getLatestPlan(campaignId);
             setCurrentPlan(res.data);
+            if (res.data.status === "asset_drafts_generated") {
+                await loadAssetDraftState(campaignId, res.data.plan_id);
+                setActiveTab("drafts");
+            } else if (res.data.manual_review_items.some((item) => item.choice !== "pending")) {
+                setActiveTab("review");
+            } else {
+                setActiveTab("plan");
+            }
         } catch {
             setCurrentPlan(null);
+            setAssetDraftRows([]);
+            setAssetPromotions([]);
+            setSelectedDraftIds([]);
+            setActiveTab("draft");
         }
-    }, []);
+    }, [loadAssetDraftState]);
 
     const loadCampaigns = React.useCallback(async (preferredId?: string) => {
         setIsLoadingList(true);
@@ -204,14 +275,19 @@ export default function SmartScanPage() {
                 setActiveCampaign(selected);
                 setForm(formFromCampaign(selected));
                 setAssetDrafts(null);
+                setPromotionResult(null);
                 void loadLatestPlan(selected.id);
             } else {
                 setActiveCampaign(null);
                 setCurrentPlan(null);
+                setAssetDraftRows([]);
+                setAssetPromotions([]);
+                setSelectedDraftIds([]);
+                setActiveTab("draft");
             }
         } catch (err: unknown) {
-            const error = err as { message?: string };
-            toast.error("加载 Campaign 失败", { description: error.message });
+            toast.error("加载 Campaign 失败", { description: getFriendlyError(err) });
+            setLastActionMessage(getFriendlyError(err));
         } finally {
             setIsLoadingList(false);
         }
@@ -245,6 +321,7 @@ export default function SmartScanPage() {
         setActiveCampaign(campaign);
         setForm(formFromCampaign(campaign));
         setAssetDrafts(null);
+        setPromotionResult(null);
         void loadLatestPlan(campaign.id);
     };
 
@@ -252,7 +329,13 @@ export default function SmartScanPage() {
         setActiveCampaign(null);
         setCurrentPlan(null);
         setAssetDrafts(null);
+        setAssetDraftRows([]);
+        setAssetPromotions([]);
+        setSelectedDraftIds([]);
+        setPromotionResult(null);
         setForm(DEFAULT_FORM);
+        setActiveTab("draft");
+        setLastActionMessage("已进入新建 Campaign 草稿，保存后才能生成 AI 计划。");
     };
 
     const validateForm = () => {
@@ -277,11 +360,13 @@ export default function SmartScanPage() {
             if (activeCampaign && ["draft", "needs_revision"].includes(activeCampaign.status)) {
                 const res = await scanCampaignService.updateCampaign(activeCampaign.id, payload);
                 saved = res.data;
-                toast.success("Campaign 草稿已保存");
+                toast.success("Campaign 草稿已保存", { description: "可继续生成 AI 计划；当前不会执行测试。" });
+                setLastActionMessage("Campaign 草稿已保存，可继续生成 AI 计划。");
             } else {
                 const res = await scanCampaignService.createCampaign(payload);
                 saved = res.data;
-                toast.success("Campaign 草稿已创建");
+                toast.success("Campaign 草稿已创建", { description: "可继续生成 AI 计划；当前不会执行测试。" });
+                setLastActionMessage("Campaign 草稿已创建，可继续生成 AI 计划。");
             }
 
             setActiveCampaign(saved);
@@ -289,7 +374,9 @@ export default function SmartScanPage() {
             await loadCampaigns(saved.id);
             return saved;
         } catch (err: unknown) {
-            toast.error("保存 Campaign 失败", { description: (err as { message?: string }).message });
+            const description = getFriendlyError(err);
+            toast.error("保存 Campaign 失败", { description });
+            setLastActionMessage(description);
             return null;
         } finally {
             setIsSaving(false);
@@ -305,10 +392,14 @@ export default function SmartScanPage() {
         try {
             const res = await scanCampaignService.generatePlan(campaign.id, { notes: form.notes || undefined });
             setCurrentPlan(res.data);
-            toast.success("AI 计划已生成，请先复核风险项");
+            setActiveTab("plan");
+            setLastActionMessage("AI 计划已生成，请先查看候选项和风险项，再进入人工复核。");
+            toast.success("AI 计划已生成", { description: "请先复核风险项；当前不会执行测试。" });
             await loadCampaigns(campaign.id);
         } catch (err: unknown) {
-            toast.error("生成 AI 计划失败", { description: (err as { message?: string }).message });
+            const description = getFriendlyError(err);
+            toast.error("生成 AI 计划失败", { description });
+            setLastActionMessage(description);
         } finally {
             setIsGeneratingPlan(false);
         }
@@ -339,10 +430,13 @@ export default function SmartScanPage() {
                 choice: draft.choice,
                 comment: draft.comment || undefined,
             });
-            toast.success("复核选择已保存");
+            setLastActionMessage(`复核选择已保存：${choiceLabels[draft.choice] || draft.choice}。`);
+            toast.success("复核选择已保存", { description: "该选择只影响草稿生成，不会触发执行。" });
             await loadLatestPlan(activeCampaign.id);
         } catch (err: unknown) {
-            toast.error("保存复核选择失败", { description: (err as { message?: string }).message });
+            const description = getFriendlyError(err);
+            toast.error("保存复核选择失败", { description });
+            setLastActionMessage(description);
         } finally {
             setIsSavingReview(null);
         }
@@ -361,20 +455,90 @@ export default function SmartScanPage() {
                 include_only_approved: true,
             });
             setAssetDrafts(res.data);
+            setAssetDraftRows(res.data.asset_drafts || []);
+            setSelectedDraftIds([]);
+            setPromotionResult(null);
+            setActiveTab("drafts");
+            setLastActionMessage(`资产草稿预览已生成：API ${res.data.api_case_ir_steps.length} 个，Visual UI ${res.data.visual_ui_cases.length} 个。`);
+            await loadAssetDraftState(activeCampaign.id, currentPlan.plan_id);
             await loadLatestPlan(activeCampaign.id);
-            toast.success("资产草稿预览已生成");
+            toast.success("资产草稿预览已生成", { description: "草稿不会自动执行，需确认后才保存为正式资产。" });
         } catch (err: unknown) {
-            toast.error("生成资产草稿预览失败", { description: (err as { message?: string }).message });
+            const description = getFriendlyError(err);
+            toast.error("生成资产草稿预览失败", { description });
+            setLastActionMessage(description);
         } finally {
             setIsGeneratingDrafts(false);
         }
     };
+
+    const handleToggleDraft = (draftId: string) => {
+        setSelectedDraftIds((current) => current.includes(draftId)
+            ? current.filter((id) => id !== draftId)
+            : [...current, draftId]);
+    };
+
+    const handlePromoteDrafts = async () => {
+        if (!activeCampaign || !currentPlan || selectedDraftIds.length === 0) return;
+        const confirmed = window.confirm(`确认保存 ${selectedDraftIds.length} 个草稿为正式资产？\n\n这些资产会进入 API Auto / Visual UI，但不会自动执行测试。已保存过的草稿会被跳过。`);
+        if (!confirmed) return;
+
+        setIsPromotingDrafts(true);
+        try {
+            const res = await scanCampaignService.promoteAssetDrafts(activeCampaign.id, currentPlan.plan_id, {
+                draft_ids: selectedDraftIds,
+                confirmation: 'PROMOTE_SELECTED_DRAFTS',
+                visual_project_id: 'default',
+            });
+            setPromotionResult(res.data);
+            setSelectedDraftIds([]);
+            await loadAssetDraftState(activeCampaign.id, currentPlan.plan_id);
+            const createdCount = res.data.promoted.length;
+            const duplicateCount = res.data.duplicates.length;
+            setLastActionMessage(`正式资产保存完成：新建 ${createdCount} 个，已保存跳过 ${duplicateCount} 个；没有执行测试。`);
+            toast.success("正式资产保存完成", { description: `新建 ${createdCount} 个，已保存跳过 ${duplicateCount} 个；没有执行测试。` });
+        } catch (err: unknown) {
+            const description = getFriendlyError(err);
+            toast.error("保存正式资产失败", { description });
+            setLastActionMessage(description);
+        } finally {
+            setIsPromotingDrafts(false);
+        }
+    };
+
+    const promotionByDraftId = React.useMemo(() => {
+        const map = new Map<string, AssetPromotion>();
+        assetPromotions.forEach((promotion) => map.set(promotion.asset_draft_id, promotion));
+        return map;
+    }, [assetPromotions]);
 
     const renderPolicyBadge = (policy: string) => (
         <Badge variant="outline" className={getPolicyClassName(policy)}>
             {policyLabels[policy] || policy}
         </Badge>
     );
+
+    const currentStageIndex = !activeCampaign
+        ? 1
+        : currentPlan?.status === "asset_drafts_generated" || activeCampaign.status === "asset_drafts_generated"
+            ? 4
+            : currentPlan?.manual_review_items.some((item) => item.choice !== "pending")
+                ? 3
+                : currentPlan
+                    ? 2
+                    : 1;
+
+    const stageItems = [
+        { index: 1, label: "Campaign 草稿" },
+        { index: 2, label: "AI 计划" },
+        { index: 3, label: "人工复核" },
+        { index: 4, label: "资产草稿" },
+    ];
+
+    const planAssetDrafts = currentPlan?.asset_drafts as { api_case_ir_steps?: JsonObject[]; visual_ui_steps?: JsonObject[] } | undefined;
+    const displayedApiDrafts = assetDrafts?.api_case_ir_steps || planAssetDrafts?.api_case_ir_steps || [];
+    const displayedVisualDrafts = assetDrafts?.visual_ui_cases || planAssetDrafts?.visual_ui_steps || [];
+    const displayedDraftRows = assetDraftRows.length ? assetDraftRows : assetDrafts?.asset_drafts || [];
 
     const renderCandidate = (candidate: JsonObject, index: number) => {
         const policy = getText(candidate.policy, "allowed");
@@ -426,6 +590,41 @@ export default function SmartScanPage() {
                     </CardContent>
                 </Card>
 
+                <Card className="border-sky-100 bg-white/85 shadow-lg shadow-sky-100/50">
+                    <CardContent className="space-y-4 px-6">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <div className="text-sm font-semibold text-slate-900">
+                                    {activeCampaign ? activeCampaign.name : "新建 Campaign 草稿"}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-500">
+                                    Campaign：{activeCampaign ? campaignStatusLabels[activeCampaign.status] || activeCampaign.status : "未保存"}
+                                    {currentPlan ? ` · Plan：${planStatusLabels[currentPlan.status] || currentPlan.status}` : " · Plan：未生成"}
+                                </div>
+                            </div>
+                            <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-700">当前阶段 {currentStageIndex} / 4</Badge>
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-4">
+                            {stageItems.map((stage) => (
+                                <button
+                                    key={stage.index}
+                                    type="button"
+                                    onClick={() => setActiveTab(["draft", "plan", "review", "drafts"][stage.index - 1])}
+                                    className={`rounded-xl border px-3 py-2 text-left text-sm transition ${currentStageIndex >= stage.index
+                                        ? "border-sky-200 bg-sky-50 text-sky-800"
+                                        : "border-slate-200 bg-white text-slate-500"
+                                        } ${activeTab === ["draft", "plan", "review", "drafts"][stage.index - 1] ? "ring-2 ring-sky-200" : ""}`}
+                                >
+                                    <span className="font-semibold">{stage.index}. </span>{stage.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                            {lastActionMessage}
+                        </div>
+                    </CardContent>
+                </Card>
+
                 <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
                     <Card className="border-sky-100 bg-white/85 shadow-lg shadow-sky-100/50">
                         <CardHeader className="gap-3">
@@ -442,9 +641,9 @@ export default function SmartScanPage() {
                         </CardHeader>
                         <CardContent className="space-y-3">
                             {isLoadingList ? (
-                                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">正在加载 Campaign...</div>
+                                <EmptyState title="正在加载 Campaign" description="请稍等，正在读取最近的智能扫描草稿。" />
                             ) : campaigns.length === 0 ? (
-                                <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">暂无 Campaign，先创建一个草稿。</div>
+                                <EmptyState title="还没有 Campaign" description="先创建一个扫描范围草稿，Phase 1.5 只会生成计划和草稿。" />
                             ) : campaigns.map((campaign) => (
                                 <button
                                     key={campaign.id}
@@ -460,7 +659,7 @@ export default function SmartScanPage() {
                                             <div className="font-medium text-slate-900">{campaign.name}</div>
                                             <div className="text-xs text-slate-500">{getText(campaign.target.business_module, "未设置模块")}</div>
                                         </div>
-                                        <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">{campaign.status}</Badge>
+                                        <Badge variant="outline" className="border-slate-200 bg-white text-slate-600">{campaignStatusLabels[campaign.status] || campaign.status}</Badge>
                                     </div>
                                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
                                         <span>{getText(campaign.strategy.scan_mode, "-")}</span>
@@ -472,8 +671,8 @@ export default function SmartScanPage() {
                         </CardContent>
                     </Card>
 
-                    <Tabs defaultValue="draft" className="gap-4">
-                        <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-white/70 p-2 shadow-sm md:grid-cols-4">
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
+                        <TabsList className="sticky top-0 z-10 grid h-auto w-full grid-cols-2 gap-2 bg-white/90 p-2 shadow-sm backdrop-blur md:grid-cols-4">
                             <TabsTrigger value="draft" className="gap-2"><FileSearch className="h-4 w-4" />Campaign 草稿</TabsTrigger>
                             <TabsTrigger value="plan" className="gap-2"><Sparkles className="h-4 w-4" />AI 计划</TabsTrigger>
                             <TabsTrigger value="review" className="gap-2"><ListChecks className="h-4 w-4" />人工复核</TabsTrigger>
@@ -564,14 +763,18 @@ export default function SmartScanPage() {
                                         </Field>
                                     </div>
 
+                                    <div className="rounded-xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-800">
+                                        生成 AI 计划只会创建候选流程、API 候选和风险项，不会执行任何测试请求。
+                                    </div>
+
                                     <div className="flex flex-wrap gap-3">
                                         <Button onClick={() => void handleSaveCampaign()} disabled={isSaving} className="gap-2">
                                             <Save className="h-4 w-4" />
-                                            保存 Campaign 草稿
+                                            {isSaving ? "保存中..." : "保存 Campaign 草稿"}
                                         </Button>
                                         <Button variant="secondary" onClick={() => void handleGeneratePlan()} disabled={isSaving || isGeneratingPlan} className="gap-2">
                                             <Sparkles className="h-4 w-4" />
-                                            生成 AI 计划
+                                            {isGeneratingPlan ? "正在生成计划..." : "生成 AI 计划"}
                                         </Button>
                                     </div>
                                 </CardContent>
@@ -581,12 +784,7 @@ export default function SmartScanPage() {
                         <TabsContent value="plan">
                             <div className="space-y-4">
                                 {!currentPlan ? (
-                                    <Card className="border-dashed border-slate-200 bg-white/80">
-                                        <CardContent className="flex items-center gap-3 px-6 text-sm text-slate-500">
-                                            <Sparkles className="h-5 w-5 text-sky-500" />
-                                            请先保存 Campaign 草稿并生成 AI 计划。
-                                        </CardContent>
-                                    </Card>
+                                    <EmptyState title="AI 计划尚未生成" description="请先保存 Campaign 草稿，再点击“生成 AI 计划”。该操作不会执行测试。" />
                                 ) : (
                                     <>
                                         <Card className="border-sky-100 bg-white/90">
@@ -648,9 +846,9 @@ export default function SmartScanPage() {
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     {!currentPlan ? (
-                                        <p className="text-sm text-slate-500">请先生成 AI 计划。</p>
+                                        <EmptyState title="暂无可复核计划" description="请先生成 AI 计划，再处理写操作、条件允许和风险项。" />
                                     ) : currentPlan.manual_review_items.length === 0 ? (
-                                        <p className="text-sm text-slate-500">暂无待复核项。</p>
+                                        <EmptyState title="暂无待复核项" description="当前计划没有需要人工确认的候选项，可以进入资产草稿预览。" />
                                     ) : currentPlan.manual_review_items.map((item) => {
                                         const draft = reviewDrafts[item.id] || { choice: "", comment: "" };
                                         return (
@@ -682,14 +880,14 @@ export default function SmartScanPage() {
                                                         <Field label="备注">
                                                             <Input value={draft.comment} onChange={(event) => updateReviewDraft(item.id, "comment", event.target.value)} />
                                                         </Field>
-                                                        <Button onClick={() => void handleSaveReview(item)} disabled={isSavingReview === item.id} className="gap-2">
+                                                        <Button onClick={() => void handleSaveReview(item)} disabled={isSavingReview === item.id || !draft.choice} className="gap-2">
                                                             <Save className="h-4 w-4" />
-                                                            保存复核选择
+                                                            {isSavingReview === item.id ? "保存中..." : item.choice !== "pending" ? "更新复核选择" : "保存复核选择"}
                                                         </Button>
                                                     </div>
                                                     <div className="flex items-start gap-2 rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs text-amber-700">
                                                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                                                        approve_for_future_execution 只保存未来意向，Phase 1 不触发真实测试流程。
+                                                        approve_for_future_execution 只保存未来意向，Phase 1.5 不触发真实测试流程，执行能力留到 Phase 3。
                                                     </div>
                                                 </CardContent>
                                             </Card>
@@ -709,32 +907,95 @@ export default function SmartScanPage() {
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-800">
-                                        <span>草稿预览只保存到 Scan Campaign 草稿表，不写入正式 API Auto 或 Visual UI 用例。</span>
-                                        <Button onClick={() => void handleGenerateAssetDrafts()} disabled={isGeneratingDrafts || !currentPlan} className="gap-2">
-                                            <Database className="h-4 w-4" />
-                                            生成资产草稿预览
-                                        </Button>
+                                        <span>草稿可在明确确认后保存为正式 API Auto / Visual UI 资产；保存动作不会执行测试。</span>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button onClick={() => void handleGenerateAssetDrafts()} disabled={isGeneratingDrafts || !currentPlan} className="gap-2">
+                                                <Database className="h-4 w-4" />
+                                                {isGeneratingDrafts ? "正在生成草稿..." : displayedApiDrafts.length || displayedVisualDrafts.length ? "重新生成草稿预览" : "生成资产草稿预览"}
+                                            </Button>
+                                            <Button variant="secondary" onClick={() => void handlePromoteDrafts()} disabled={isPromotingDrafts || selectedDraftIds.length === 0} className="gap-2">
+                                                <Save className="h-4 w-4" />
+                                                {isPromotingDrafts ? "正在保存..." : `保存为正式资产${selectedDraftIds.length ? `（${selectedDraftIds.length}）` : ""}`}
+                                            </Button>
+                                        </div>
                                     </div>
 
-                                    {!assetDrafts ? (
-                                        <p className="text-sm text-slate-500">生成后将在这里展示 API Case IR v2、Visual UI 草稿和跳过项。</p>
+                                    {!displayedApiDrafts.length && !displayedVisualDrafts.length && !assetDrafts ? (
+                                        <EmptyState title="资产草稿尚未生成" description="生成后将在这里展示 API Case IR v2、Visual UI 草稿和跳过项。" />
                                     ) : (
                                         <div className="space-y-4">
+                                            <div className="grid gap-3 md:grid-cols-3">
+                                                <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
+                                                    <div className="text-xs text-slate-500">API Case IR v2</div>
+                                                    <div className="mt-1 text-2xl font-bold text-slate-900">{displayedApiDrafts.length}</div>
+                                                </div>
+                                                <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
+                                                    <div className="text-xs text-slate-500">Visual UI 草稿</div>
+                                                    <div className="mt-1 text-2xl font-bold text-slate-900">{displayedVisualDrafts.length}</div>
+                                                </div>
+                                                <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
+                                                    <div className="text-xs text-slate-500">跳过项</div>
+                                                    <div className="mt-1 text-2xl font-bold text-slate-900">{assetDrafts?.skipped_items.length || 0}</div>
+                                                </div>
+                                            </div>
+                                            <Card className="border-slate-200 bg-white py-4">
+                                                <CardHeader><CardTitle className="text-base">可保存草稿</CardTitle></CardHeader>
+                                                <CardContent className="space-y-3">
+                                                    {displayedDraftRows.length === 0 ? (
+                                                        <EmptyState title="缺少完整草稿行" description="请重新生成资产草稿预览，以获取可保存的 draft id。" />
+                                                    ) : displayedDraftRows.map((draft) => {
+                                                        const promotion = promotionByDraftId.get(draft.id);
+                                                        const checked = selectedDraftIds.includes(draft.id);
+                                                        return (
+                                                            <div key={draft.id} className="rounded-xl border border-slate-200 bg-white p-4 text-sm">
+                                                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                                                    <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            className="mt-1 h-4 w-4 rounded border-slate-300"
+                                                                            checked={checked}
+                                                                            disabled={Boolean(promotion)}
+                                                                            onChange={() => handleToggleDraft(draft.id)}
+                                                                        />
+                                                                        <div className="min-w-0 space-y-2">
+                                                                            <div className="flex flex-wrap items-center gap-2">
+                                                                                <Badge variant="secondary">{draft.asset_type}</Badge>
+                                                                                {renderPolicyBadge(draft.policy)}
+                                                                                {draft.risk_level ? <Badge variant="outline">风险：{draft.risk_level}</Badge> : null}
+                                                                                {promotion ? <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">已保存：{promotion.generated_asset_id}</Badge> : null}
+                                                                            </div>
+                                                                            <div className="font-mono text-xs text-slate-500">{draft.id}</div>
+                                                                            <div className="text-xs text-slate-500">来源：{draft.source_type} / {draft.source_item_id}</div>
+                                                                        </div>
+                                                                    </label>
+                                                                </div>
+                                                                <div className="mt-3">
+                                                                    <JsonPreview data={draft.draft_payload} />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </CardContent>
+                                            </Card>
+                                            <Card className="border-slate-200 bg-white py-4">
+                                                <CardHeader><CardTitle className="text-base">保存结果</CardTitle></CardHeader>
+                                                <CardContent><JsonPreview data={promotionResult || { promoted: [], duplicates: [], skipped: [], failed: [], execution_created: false }} /></CardContent>
+                                            </Card>
                                             <Card className="border-slate-200 bg-white py-4">
                                                 <CardHeader><CardTitle className="text-base">API Case IR v2 草稿</CardTitle></CardHeader>
-                                                <CardContent><JsonPreview data={assetDrafts.api_case_ir_steps} /></CardContent>
+                                                <CardContent><JsonPreview data={displayedApiDrafts} /></CardContent>
                                             </Card>
                                             <Card className="border-slate-200 bg-white py-4">
                                                 <CardHeader><CardTitle className="text-base">Visual UI 草稿</CardTitle></CardHeader>
-                                                <CardContent><JsonPreview data={assetDrafts.visual_ui_cases} /></CardContent>
+                                                <CardContent><JsonPreview data={displayedVisualDrafts} /></CardContent>
                                             </Card>
                                             <Card className="border-slate-200 bg-white py-4">
                                                 <CardHeader><CardTitle className="text-base">跳过项</CardTitle></CardHeader>
-                                                <CardContent><JsonPreview data={assetDrafts.skipped_items} /></CardContent>
+                                                <CardContent><JsonPreview data={assetDrafts?.skipped_items || []} /></CardContent>
                                             </Card>
                                             <Card className="border-slate-200 bg-white py-4">
                                                 <CardHeader><CardTitle className="text-base">草稿元信息</CardTitle></CardHeader>
-                                                <CardContent><JsonPreview data={assetDrafts.asset_drafts} /></CardContent>
+                                                <CardContent><JsonPreview data={assetDrafts?.asset_drafts || currentPlan?.asset_drafts || {}} /></CardContent>
                                             </Card>
                                         </div>
                                     )}

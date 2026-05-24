@@ -14,13 +14,18 @@ from app.models.api_asset import ApiAsset
 from app.models.scan_campaign import (
     ScanCampaign,
     ScanCampaignAssetDraft,
+    ScanCampaignAssetPromotion,
     ScanCampaignPlan,
     ScanCampaignPlanStatus,
     ScanCampaignReviewChoice,
     ScanCampaignReviewItem,
     ScanCampaignStatus,
 )
+from app.models.visual_ui import VisualStepAction, VisualUseCaseStatus
+from app.schemas.visual_ui import VisualStepCreate, VisualUseCaseCreate
 from app.services.api_case_ir_converter import normalize_api_step_v2
+from app.services.test_case_service import TestCaseService
+from app.services.visual_ui_service import VisualUIService
 
 
 class ScanCampaignConflictError(ValueError):
@@ -233,6 +238,34 @@ class ScanCampaignService:
         )
         return result.scalars().all()
 
+    async def list_asset_drafts_for_plan(self, campaign_id: str, plan_id: str) -> List[ScanCampaignAssetDraft]:
+        plan = await self.get_plan(campaign_id, plan_id)
+        if plan is None:
+            raise ScanCampaignNotFoundError(f"Plan {plan_id} not found")
+        result = await self.db.execute(
+            select(ScanCampaignAssetDraft)
+            .where(
+                ScanCampaignAssetDraft.campaign_id == campaign_id,
+                ScanCampaignAssetDraft.plan_id == plan_id,
+            )
+            .order_by(ScanCampaignAssetDraft.created_at.asc())
+        )
+        return result.scalars().all()
+
+    async def list_asset_promotions(self, campaign_id: str, plan_id: str) -> List[ScanCampaignAssetPromotion]:
+        plan = await self.get_plan(campaign_id, plan_id)
+        if plan is None:
+            raise ScanCampaignNotFoundError(f"Plan {plan_id} not found")
+        result = await self.db.execute(
+            select(ScanCampaignAssetPromotion)
+            .where(
+                ScanCampaignAssetPromotion.campaign_id == campaign_id,
+                ScanCampaignAssetPromotion.plan_id == plan_id,
+            )
+            .order_by(ScanCampaignAssetPromotion.created_at.asc())
+        )
+        return result.scalars().all()
+
     async def update_review_item(
         self,
         campaign_id: str,
@@ -356,6 +389,94 @@ class ScanCampaignService:
             "asset_drafts": db_drafts,
         }
 
+    async def promote_asset_drafts(
+        self,
+        campaign_id: str,
+        plan_id: str,
+        draft_ids: List[str],
+        confirmation: str,
+        allow_duplicates: bool = False,
+        visual_project_id: Optional[str] = "default",
+    ) -> Dict[str, Any]:
+        if confirmation != "PROMOTE_SELECTED_DRAFTS":
+            raise ScanCampaignValidationError("confirmation 必须为 PROMOTE_SELECTED_DRAFTS")
+        if not draft_ids:
+            raise ScanCampaignValidationError("draft_ids 不能为空")
+        plan = await self.get_plan(campaign_id, plan_id)
+        if plan is None:
+            raise ScanCampaignNotFoundError(f"Plan {plan_id} not found")
+
+        result: dict[str, list[dict[str, Any]] | bool] = {
+            "promoted": [],
+            "duplicates": [],
+            "skipped": [],
+            "failed": [],
+            "execution_created": False,
+        }
+        for draft_id in dict.fromkeys(draft_ids):
+            draft = await self._get_asset_draft(campaign_id, plan_id, draft_id)
+            if draft is None:
+                result["failed"].append(
+                    self._promote_result(draft_id, "unknown", "failed", reason="draft_not_found")
+                )
+                continue
+
+            target_type = self._generated_asset_type(draft.asset_type)
+            if target_type is None:
+                result["skipped"].append(
+                    self._promote_result(draft.id, draft.asset_type, "skipped", reason="unsupported_asset_type")
+                )
+                continue
+
+            existing = await self._find_existing_promotion(draft.id, target_type)
+            if existing:
+                result["duplicates"].append(
+                    self._promote_result(
+                        draft.id,
+                        draft.asset_type,
+                        "duplicate",
+                        target_type=existing.generated_asset_type,
+                        target_id=existing.generated_asset_id,
+                        reason="already_promoted",
+                    )
+                )
+                continue
+
+            blocked_reason = self._promotion_block_reason(draft)
+            if blocked_reason:
+                result["skipped"].append(
+                    self._promote_result(draft.id, draft.asset_type, "skipped", reason=blocked_reason)
+                )
+                continue
+
+            try:
+                if draft.asset_type in {"api_case_ir", "api_case_ir_step"}:
+                    target_id = await self._promote_api_case_ir_draft(draft)
+                else:
+                    target_id = await self._promote_visual_ui_case_draft(draft, visual_project_id or "default")
+                promotion = ScanCampaignAssetPromotion(
+                    id=self._new_id("PROMO"),
+                    campaign_id=campaign_id,
+                    plan_id=plan_id,
+                    asset_draft_id=draft.id,
+                    draft_type=draft.asset_type,
+                    generated_asset_type=target_type,
+                    generated_asset_id=target_id,
+                    status="created",
+                    promotion_metadata=self._promotion_metadata(draft, existing),
+                )
+                self.db.add(promotion)
+                await self.db.commit()
+                result["promoted"].append(
+                    self._promote_result(draft.id, draft.asset_type, "created", target_type=target_type, target_id=target_id)
+                )
+            except ValueError as exc:
+                await self.db.rollback()
+                result["failed"].append(
+                    self._promote_result(draft.id, draft.asset_type, "failed", reason=str(exc))
+                )
+        return result
+
     def build_plan_response(
         self,
         plan: ScanCampaignPlan,
@@ -431,6 +552,218 @@ class ScanCampaignService:
             "skipped_reason": draft.skipped_reason,
             "created_at": draft.created_at,
         }
+
+    def asset_promotion_to_response(self, promotion: ScanCampaignAssetPromotion) -> Dict[str, Any]:
+        return {
+            "id": promotion.id,
+            "campaign_id": promotion.campaign_id,
+            "plan_id": promotion.plan_id,
+            "asset_draft_id": promotion.asset_draft_id,
+            "draft_type": promotion.draft_type,
+            "generated_asset_type": promotion.generated_asset_type,
+            "generated_asset_id": promotion.generated_asset_id,
+            "status": promotion.status,
+            "promotion_metadata": promotion.promotion_metadata or {},
+            "created_at": promotion.created_at,
+            "updated_at": promotion.updated_at,
+        }
+
+    async def _get_asset_draft(
+        self,
+        campaign_id: str,
+        plan_id: str,
+        draft_id: str,
+    ) -> Optional[ScanCampaignAssetDraft]:
+        result = await self.db.execute(
+            select(ScanCampaignAssetDraft).where(
+                ScanCampaignAssetDraft.id == draft_id,
+                ScanCampaignAssetDraft.campaign_id == campaign_id,
+                ScanCampaignAssetDraft.plan_id == plan_id,
+            )
+        )
+        return result.scalars().first()
+
+    async def _find_existing_promotion(
+        self,
+        draft_id: str,
+        target_type: str,
+    ) -> Optional[ScanCampaignAssetPromotion]:
+        result = await self.db.execute(
+            select(ScanCampaignAssetPromotion).where(
+                ScanCampaignAssetPromotion.asset_draft_id == draft_id,
+                ScanCampaignAssetPromotion.generated_asset_type == target_type,
+            )
+        )
+        return result.scalars().first()
+
+    async def _promote_api_case_ir_draft(self, draft: ScanCampaignAssetDraft) -> str:
+        step = normalize_api_step_v2(draft.draft_payload or {}, "API")
+        metadata = step.get("metadata") or {}
+        request = step.get("request") or {}
+        method = str(request.get("method") or step.get("method") or "GET").upper()
+        path = request.get("path") or request.get("url") or step.get("path") or step.get("url") or "/"
+        name = step.get("name") or f"[Smart Scan] {method} {path}"
+        metadata["asset_draft_id"] = draft.id
+        step["metadata"] = metadata
+        test_case = await TestCaseService(self.db).create(
+            {
+                "name": name,
+                "description": "由 Smart Scan 资产草稿保存；Phase 2 不会自动执行。",
+                "mode": "API",
+                "priority": "P2",
+                "status": "draft",
+                "steps": [step],
+                "tags": ["smart-scan", draft.campaign_id, draft.plan_id],
+                "dependencies": [],
+                "variables": {},
+                "source_type": "scan_campaign_asset_draft",
+                "source_id": draft.id,
+            }
+        )
+        return test_case.id
+
+    async def _promote_visual_ui_case_draft(self, draft: ScanCampaignAssetDraft, project_id: str) -> str:
+        payload = draft.draft_payload or {}
+        steps = []
+        for index, step in enumerate(payload.get("steps") or []):
+            action = self._visual_step_action(step.get("action"))
+            steps.append(
+                VisualStepCreate(
+                    step_index=int(step.get("step_index") if step.get("step_index") is not None else index),
+                    action=action,
+                    target_description=self._optional_text(step.get("target_description") or step.get("description")),
+                    value=self._optional_text(step.get("value") or step.get("target")),
+                    screenshot_baseline=self._optional_text(step.get("screenshot_baseline")),
+                )
+            )
+        metadata = payload.get("metadata") or {}
+        description_parts = [payload.get("description") or "由 Smart Scan 资产草稿保存；Phase 2 不会自动执行。"]
+        description_parts.append(
+            f"Smart Scan source: campaign={draft.campaign_id}, plan={draft.plan_id}, draft={draft.id}, flow={metadata.get('flow_id') or draft.source_item_id}"
+        )
+        visual_case = await VisualUIService.create_case(
+            self.db,
+            VisualUseCaseCreate(
+                project_id=project_id,
+                name=payload.get("name") or "[Smart Scan] Visual UI Case",
+                description="\n".join(description_parts),
+                status=VisualUseCaseStatus.draft,
+                base_url=payload.get("base_url"),
+                steps=steps,
+            ),
+        )
+        return visual_case.id
+
+    def _promotion_block_reason(self, draft: ScanCampaignAssetDraft) -> Optional[str]:
+        metadata = draft.draft_metadata or {}
+        payload = draft.draft_payload or {}
+        if draft.policy in {"forbidden", "out_of_scope"}:
+            return f"policy_{draft.policy}"
+        if draft.skipped_reason:
+            return "draft_skipped"
+        if metadata.get("source_type") != "scan_campaign":
+            return "invalid_source_type"
+        if metadata.get("execution_allowed_in_phase") is not False:
+            return "execution_allowed_in_phase_must_be_false"
+        if draft.policy in {"confirmation_required", "conditional_allowed"}:
+            if metadata.get("review_choice") not in {"generate_asset_only", "approve_for_future_execution"}:
+                return "review_choice_required"
+        if draft.asset_type in {"api_case_ir", "api_case_ir_step"}:
+            return self._api_draft_block_reason(payload, metadata)
+        if draft.asset_type == "visual_ui_case":
+            return self._visual_draft_block_reason(payload)
+        return "unsupported_asset_type"
+
+    def _api_draft_block_reason(self, payload: Dict[str, Any], metadata: Dict[str, Any]) -> Optional[str]:
+        request = payload.get("request") or {}
+        method = str(request.get("method") or payload.get("method") or "").upper()
+        path = request.get("path") or request.get("url") or payload.get("path") or payload.get("url")
+        if payload.get("protocol") != "API-IR":
+            return "invalid_api_ir_protocol"
+        if str(payload.get("version") or "") != "2.0":
+            return "invalid_api_ir_version"
+        if not method:
+            return "method_required"
+        if not path:
+            return "path_required"
+        if not metadata.get("campaign_id") or not metadata.get("plan_id"):
+            return "source_metadata_required"
+        if method in WRITE_METHODS and metadata.get("review_choice") in {None, "pending", "skip"}:
+            return "write_review_choice_required"
+        return None
+
+    def _visual_draft_block_reason(self, payload: Dict[str, Any]) -> Optional[str]:
+        if not payload.get("base_url"):
+            return "base_url_required"
+        steps = payload.get("steps") if isinstance(payload.get("steps"), list) else []
+        if not steps:
+            return "visual_steps_required"
+        danger_words = ("删除", "支付", "发短信", "发邮件", "权限", "delete", "payment", "sms", "email", "permission")
+        for step in steps:
+            if not step.get("action"):
+                return "visual_step_action_required"
+            text = f"{step.get('action') or ''} {step.get('target_description') or ''} {step.get('value') or ''}".lower()
+            if any(word in text for word in danger_words):
+                return "dangerous_visual_action"
+            if (step.get("metadata") or {}).get("execution_allowed_in_phase") is not False:
+                return "visual_step_execution_allowed_in_phase_must_be_false"
+        return None
+
+    def _promotion_metadata(
+        self,
+        draft: ScanCampaignAssetDraft,
+        duplicated_from: Optional[ScanCampaignAssetPromotion],
+    ) -> Dict[str, Any]:
+        metadata = dict(draft.draft_metadata or {})
+        metadata.update(
+            {
+                "source_type": "scan_campaign",
+                "campaign_id": draft.campaign_id,
+                "plan_id": draft.plan_id,
+                "asset_draft_id": draft.id,
+                "draft_type": draft.asset_type,
+                "policy": draft.policy,
+                "risk_level": draft.risk_level,
+                "execution_allowed_in_phase": False,
+            }
+        )
+        if duplicated_from:
+            metadata["duplicated_from"] = duplicated_from.generated_asset_id
+        return metadata
+
+    def _promote_result(
+        self,
+        draft_id: str,
+        asset_type: str,
+        status: str,
+        target_type: Optional[str] = None,
+        target_id: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "draft_id": draft_id,
+            "asset_type": asset_type,
+            "target_type": target_type,
+            "target_id": target_id,
+            "status": status,
+            "reason": reason,
+        }
+
+    def _generated_asset_type(self, asset_type: str) -> Optional[str]:
+        if asset_type in {"api_case_ir", "api_case_ir_step"}:
+            return "test_case"
+        if asset_type == "visual_ui_case":
+            return "visual_ui_case"
+        return None
+
+    def _visual_step_action(self, value: Any) -> VisualStepAction:
+        return VisualStepAction(str(value or "").upper())
+
+    def _optional_text(self, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
     def _prepare_campaign_payload(self, data: Dict[str, Any]) -> Dict[str, Any]:
         payload = dict(data)

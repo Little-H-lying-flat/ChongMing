@@ -127,3 +127,49 @@ class GenerateAssetDraftsResponse(BaseModel):
     visual_ui_cases: List[Dict[str, Any]]
     skipped_items: List[Dict[str, Any]]
     asset_drafts: List[AssetDraftResponse]
+
+
+class AssetDraftListResponse(BaseModel):
+    items: List[AssetDraftResponse]
+
+
+class AssetPromotionResponse(BaseModel):
+    id: str
+    campaign_id: str
+    plan_id: str
+    asset_draft_id: str
+    draft_type: str
+    generated_asset_type: str
+    generated_asset_id: str
+    status: str
+    promotion_metadata: Dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssetPromotionListResponse(BaseModel):
+    items: List[AssetPromotionResponse]
+
+
+class PromoteAssetDraftsRequest(BaseModel):
+    draft_ids: List[str] = Field(default_factory=list)
+    confirmation: str
+    allow_duplicates: bool = False
+    visual_project_id: Optional[str] = "default"
+
+
+class PromoteAssetDraftResult(BaseModel):
+    draft_id: str
+    asset_type: str
+    target_type: Optional[str] = None
+    target_id: Optional[str] = None
+    status: str
+    reason: Optional[str] = None
+
+
+class PromoteAssetDraftsResponse(BaseModel):
+    promoted: List[PromoteAssetDraftResult] = Field(default_factory=list)
+    duplicates: List[PromoteAssetDraftResult] = Field(default_factory=list)
+    skipped: List[PromoteAssetDraftResult] = Field(default_factory=list)
+    failed: List[PromoteAssetDraftResult] = Field(default_factory=list)
+    execution_created: bool = False

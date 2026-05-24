@@ -165,3 +165,35 @@ class ScanCampaignAssetDraft(Base):
 
     campaign: Mapped["ScanCampaign"] = relationship("ScanCampaign", back_populates="asset_drafts")
     plan: Mapped["ScanCampaignPlan"] = relationship("ScanCampaignPlan", back_populates="asset_drafts")
+    promotions: Mapped[List["ScanCampaignAssetPromotion"]] = relationship(
+        "ScanCampaignAssetPromotion", back_populates="asset_draft", cascade="all, delete-orphan"
+    )
+
+
+class ScanCampaignAssetPromotion(Base):
+    __tablename__ = "scan_campaign_asset_promotions"
+    __table_args__ = (
+        UniqueConstraint("asset_draft_id", "generated_asset_type", name="uq_scan_campaign_asset_promotion"),
+    )
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    campaign_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("scan_campaigns.id", ondelete="CASCADE"), index=True
+    )
+    plan_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("scan_campaign_plans.id", ondelete="CASCADE"), index=True
+    )
+    asset_draft_id: Mapped[str] = mapped_column(
+        String(50), ForeignKey("scan_campaign_asset_drafts.id", ondelete="CASCADE"), index=True
+    )
+
+    draft_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    generated_asset_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    generated_asset_id: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="created", index=True)
+    promotion_metadata: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    asset_draft: Mapped["ScanCampaignAssetDraft"] = relationship("ScanCampaignAssetDraft", back_populates="promotions")

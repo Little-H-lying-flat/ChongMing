@@ -10,6 +10,7 @@ from app.models.api_asset import ApiAsset
 from app.models.scan_campaign import (
     ScanCampaign,
     ScanCampaignAssetDraft,
+    ScanCampaignAssetPromotion,
     ScanCampaignPlan,
     ScanCampaignReviewItem,
 )
@@ -28,4 +29,5 @@ __all__ = [
     "ScanCampaignPlan",
     "ScanCampaignReviewItem",
     "ScanCampaignAssetDraft",
+    "ScanCampaignAssetPromotion",
 ]

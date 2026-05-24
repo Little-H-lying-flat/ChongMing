@@ -1,5 +1,12 @@
 # 重明 (ChongMing)
 
+## 当前版本
+
+- ChongMing 平台版本：v2.0.0
+- 后端包版本：v2.0.0（`backend/app/__init__.py`）
+- 前端应用版本：v0.1.1（`frontend/package.json`）
+- 当前能力状态：Smart Scan Phase 2 已支持将人工确认的 API / Visual UI 资产草稿保存为正式可编辑资产；Phase 2 不创建 Execution，不自动执行测试。
+
 重明是一个 AI 原生自动化质量工程平台，用一套前后端系统把需求解析、测试用例管理、UI/API 执行、性能压测、视觉回归、缺陷分析和模型治理串起来。当前代码采用前后端分离架构：前端是 Next.js 应用，后端是 FastAPI API 网关，异步执行依赖 Celery，核心测试能力下沉到 Services 和 Engines。
 
 ## 技术栈
