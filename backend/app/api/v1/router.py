@@ -68,7 +68,7 @@ api_router.include_router(
     tags=["智能运维"]
 )
 
-# 视觉自动化 (Visual UI / RightPupil)
+# 视觉自动化 (Visual UI / Midscene)
 api_router.include_router(
     visual_ui.router,
     prefix="/visual-ui",

@@ -434,7 +434,7 @@ class AIClientManager:
             })
         elif image_base64:
             # Important: DashScope requires format like data:image/jpeg;base64,...
-            # RightPupil generates png usually, so ensure format is complete
+            # Ensure raw base64 includes a data URL prefix for vision models.
             if not image_base64.startswith("data:image"):
                 image_base64 = f"data:image/png;base64,{image_base64}"
             content.append({

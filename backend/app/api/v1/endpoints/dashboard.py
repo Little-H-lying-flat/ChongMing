@@ -12,12 +12,13 @@ from pydantic import BaseModel
 from sqlalchemy import desc, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import httpx
+
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.defect import DefectRecord
 from app.models.environment import Environment
 from app.models.execution import Execution, ExecutionStatus
-from app.services.omniparser_health import probe_omniparser_health
 
 router = APIRouter()
 
@@ -30,7 +31,7 @@ class KPIResponse(BaseModel):
     total_executions: int
     global_pass_rate: str
     active_environments: int
-    omniparser_status: str
+    midscene_status: str
     db_status: str
 
 
@@ -89,9 +90,13 @@ def format_time_ago(dt: datetime) -> str:
     return f"{int(seconds // 86400)} \u5929\u524d"
 
 
-async def check_omni_parser() -> str:
-    probe_status = await probe_omniparser_health(settings.OMNIPARSER_URL)
-    return STATUS_OK if probe_status == "ok" else STATUS_ERR
+async def check_midscene_runner() -> str:
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get(f"{settings.MIDSCENE_RUNNER_URL.rstrip('/')}/health")
+        return STATUS_OK if response.status_code == 200 else STATUS_ERR
+    except Exception:
+        return STATUS_ERR
 
 
 @router.get("/overview", response_model=DashboardOverviewResponse)
@@ -114,13 +119,13 @@ async def get_dashboard_overview(db: AsyncSession = Depends(get_db)):
     except Exception:
         db_status = STATUS_ERR
 
-    omni_status = await check_omni_parser()
+    midscene_status = await check_midscene_runner()
 
     kpis = KPIResponse(
         total_executions=total_executions,
         global_pass_rate=global_pass_rate,
         active_environments=active_envs,
-        omniparser_status=omni_status,
+        midscene_status=midscene_status,
         db_status=db_status,
     )
 

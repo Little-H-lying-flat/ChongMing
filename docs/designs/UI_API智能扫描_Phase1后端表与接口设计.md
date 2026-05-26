@@ -13,7 +13,7 @@ Phase 1 后端只负责：
 
 Phase 1 后端不负责：
 - 不执行 UI/API 测试。
-- 不调用 Dispatcher、Left Pupil、Right Pupil 执行引擎。
+- 不调用 Dispatcher、Left Pupil、Midscene 执行引擎。
 - 不创建 Execution 记录。
 - 不自动保存正式 TestCase / VisualUseCase。
 - 不提供 execute、run、schedule、crawl-all、attack-scan 类接口。

@@ -227,14 +227,21 @@ class ExecutionService:
 
     @staticmethod
     async def run_ui_task(prompt: str, url: str) -> List[dict]:
-        """
-        执行 UI 自动化任务 (Right Pupil) - 同步 Debug 模式
+        """执行 UI 自动化任务 (Midscene) - 同步 Debug 模式。"""
+        from app.schemas.execution import ExecutionMode, TCIR
+        from app.services.midscene_adapter import MidsceneAdapter
 
-        封装 RightPupilEngine，避免 API 层直接依赖 engines。
-        """
-        from app.engines.right_pupil import RightPupilEngine
-        engine = RightPupilEngine()
-        return await engine.run_task(prompt, url)
+        tc_ir = TCIR(
+            id="ADHOC_MIDSCENE_UI",
+            name="Ad-hoc Midscene UI Task",
+            mode=ExecutionMode.UI,
+            steps=[
+                {"step_type": "UI", "action": "goto", "url": url, "value": url, "description": f"打开页面 {url}"},
+                {"step_type": "UI", "action": "assert", "description": prompt, "target": prompt},
+            ],
+        )
+        result = await MidsceneAdapter().execute(tc_ir)
+        return [step.details or {} for step in result.step_results]
 
     @staticmethod
     async def get_execution_status_dict(execution_id: str) -> Optional[Dict[str, Any]]:

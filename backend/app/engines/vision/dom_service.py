@@ -1,6 +1,6 @@
 """
 DOM Sensing Service (In-Browser Sensing)
-右瞳引擎端内感知服务
+Visual UI 端内感知服务
 
 负责与 Playwright 页面进行交互，执行 JS 脚本以获取简化的 DOM 结构和元素选择器。
 """
@@ -182,7 +182,7 @@ class DomService:
 
     async def get_dom_hints_from_points(self, page: Page, points: List[Dict[str, float]]) -> List[Dict[str, Any]]:
         """
-        【Right Pupil 3.0: Hybrid Perception】
+        【Visual UI Hybrid Perception】
         根据传入的坐标列表，批量获取元素的极简语义特征 (tag, placeholder, aria-label, innerText)。
         Args:
             points: [{"x": 100.0, "y": 200.0}, ...]

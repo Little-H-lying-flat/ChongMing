@@ -7,7 +7,7 @@ info:
     ## 核心模块
     - **神经设计层**: PRD 解析、用例生成
     - **左瞳引擎**: API 测试执行
-    - **右瞳引擎**: UI 测试执行
+    - **Midscene 视觉执行器**: Visual UI 测试执行
     - **涡轮引擎**: 性能测试
     - **凤凰涅槃层**: 脚本编译
     - **缺陷分析**: 根因分析、修复建议
@@ -36,7 +36,7 @@ tags:
   - name: executions
     description: 测试执行管理
   - name: ui-engine
-    description: 右瞳引擎 - UI 测试
+    description: Midscene 视觉执行器 - UI 测试
   - name: api-engine
     description: 左瞳引擎 - API 测试
   - name: turbo
@@ -275,7 +275,7 @@ paths:
               schema:
                 type: string
 
-  # ==================== 右瞳引擎 (UI) ====================
+  # ==================== Midscene 视觉执行器 (UI) ====================
   /ui-engine/execute:
     post:
       tags: [ui-engine]

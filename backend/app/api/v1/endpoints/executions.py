@@ -6,7 +6,7 @@
 
 from pathlib import Path
 import re
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Depends
 from pydantic import BaseModel, Field
 from celery.result import AsyncResult
@@ -120,7 +120,7 @@ class ExecutionRequest(BaseModel):
     """执行请求"""
     tc_ids: List[str] = Field(..., description="测试用例 ID 列表", json_schema_extra={"example": ["TC-001", "TC-002"]})
     mode: str = Field("normal", description="执行模式: normal (标准), debug (调试), fast (快速)", json_schema_extra={"example": "normal"})
-    engine: str = Field("right_pupil", description="执行引擎: right_pupil 或 midscene")
+    engine: str = Field("midscene", description="执行引擎: midscene")
     parallel: bool = Field(True, description="是否开启并行执行")
     max_workers: int = Field(5, ge=1, le=20, description="最大并行 Worker 数量")
     env: Optional[str] = Field(None, description="目标运行环境 (如 dev, staging)", json_schema_extra={"example": "staging"})
@@ -169,41 +169,23 @@ class DashboardStats(BaseModel):
 
 # ===================== API 端点 =====================
 
-@router.post(
-    "", 
-    response_model=ExecutionResponse, 
-    status_code=202,
-    summary="启动测试执行 (Start Execution)",
-    description="""
-    **Flow 3 核心接口**: 提交一批测试用例进行异步执行。
-    
-    - **调度逻辑**: 
-        1. 解析 TC-IR (中间表示)。
-        2. 根据 `parallel` 参数决定串行或并行。
-        3. 自动分发任务到 Right Pupil (UI) 或 Left Pupil (API) 引擎。
-    - **支持 Dynamic Payload**: 可以通过 `dynamic_payload` 直接传递临时测试用例 (Neural Design)。
-    - **返回值**: `execution_id` 用于后续轮询状态。
-    """
-)
-async def start_execution(
+async def create_and_dispatch_execution(
     request: ExecutionRequest,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    启动测试执行
-    """
-    # 1. Generate Execution ID
+    db: AsyncSession,
+    *,
+    config_overrides: Optional[Dict[str, Any]] = None,
+) -> ExecutionResponse:
     execution_id = f"EXEC_{uuid.uuid4().hex[:8].upper()}"
-    
-    # 2. Config Dict
     config = {
         "mode": request.mode,
         "engine": request.engine,
         "parallel": request.parallel,
         "max_workers": request.max_workers,
-        "env": request.env
+        "env": request.env,
     }
+    if config_overrides:
+        config.update(config_overrides)
 
     required_variables = _extract_payload_required_variables(request.dynamic_payload)
     if required_variables:
@@ -226,11 +208,9 @@ async def start_execution(
                     "env_name": resolved_env_name,
                 },
             )
-    
-    # 3. Synchronous DB Creation (Fixes Race Condition)
+
     await ExecutionService.create_execution(execution_id, request.tc_ids, config)
-    
-    # 4. Dispatch Task with existing ID
+
     if _has_active_celery_workers():
         execute_test_cases.apply_async(  # type: ignore[misc]  # Celery task
             kwargs={
@@ -251,13 +231,40 @@ async def start_execution(
             config,
             request.dynamic_payload,
         )
-    
+
     return ExecutionResponse(
         execution_id=execution_id,
         status="pending",
         total_cases=len(request.tc_ids),
         dashboard_url=f"/executions/{execution_id}",
     )
+
+
+@router.post(
+    "",
+    response_model=ExecutionResponse,
+    status_code=202,
+    summary="启动测试执行 (Start Execution)",
+    description="""
+    **Flow 3 核心接口**: 提交一批测试用例进行异步执行。
+
+    - **调度逻辑**:
+        1. 解析 TC-IR (中间表示)。
+        2. 根据 `parallel` 参数决定串行或并行。
+        3. 自动分发任务到 Midscene (UI) 或 Left Pupil (API) 引擎。
+    - **支持 Dynamic Payload**: 可以通过 `dynamic_payload` 直接传递临时测试用例 (Neural Design)。
+    - **返回值**: `execution_id` 用于后续轮询状态。
+    """
+)
+async def start_execution(
+    request: ExecutionRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    启动测试执行
+    """
+    return await create_and_dispatch_execution(request, background_tasks, db)
 
 
 @router.get("/stats", response_model=DashboardStats, summary="获取大盘高级指标 (Stats)")
@@ -560,22 +567,21 @@ async def delete_execution(execution_id: str):
 @router.post(
     "/ui/run", 
     response_model=List[dict], 
-    tags=["Flow 2: Visual UI (右瞳引擎)"],
+    tags=["Flow 2: Visual UI (Midscene)"],
     summary="UI 任务 (Debug 同步)",
     description="""
-    **Flow 2 调试接口**: 直接在当前进程运行 Playwright 任务（同步阻塞）。
+    **Flow 2 调试接口**: 直接在当前进程运行 Midscene 任务（同步阻塞）。
     
     - **注意**: 仅用于开发调试，生产环境请使用 `/ui/run/async`。
     - **过程**:
         1. 启动 Playwright 浏览器。
-        2. 执行 OmniParser 屏幕解析。
-        3. Visual Grounding 定位元素。
-        4. 执行操作。
+        2. 交给 Midscene 执行视觉动作。
+        3. 返回步骤结果与截图。
     """
 )
 async def run_ui_task(request: UiRunRequest):
     """
-    运行 UI 自动化任务 (Right Pupil) - 同步 Debug 模式
+    运行 UI 自动化任务 (Midscene) - 同步 Debug 模式
     """
     return await ExecutionService.run_ui_task(request.prompt, request.url)
 
@@ -590,7 +596,7 @@ class AdhocTaskResponse(BaseModel):
     "/ui/run/async", 
     response_model=AdhocTaskResponse, 
     status_code=202,
-    tags=["Flow 2: Visual UI (右瞳引擎)"],
+    tags=["Flow 2: Visual UI (Midscene)"],
     summary="UI 任务 (Async 异步)",
     description="""
     **Flow 2 生产接口**: 将 UI 自动化任务投递到 Worker 队列。
@@ -601,7 +607,7 @@ class AdhocTaskResponse(BaseModel):
 )
 async def run_ui_task_async(request: UiRunRequest):
     """
-    运行 UI 自动化任务 (Right Pupil) - 异步生产模式
+    运行 UI 自动化任务 (Midscene) - 异步生产模式
     """
     try:
         from app.tasks.execution_tasks import execute_adhoc_task

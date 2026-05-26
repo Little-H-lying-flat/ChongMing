@@ -1,3 +1,5 @@
+Retired/Superseded note：本文可能包含 RightPupil/OmniParser 旧链路内容；旧链路已移除，当前 Visual UI 执行以 Midscene Runner 和 MidsceneAdapter 为准。
+
 ﻿╔═══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                               ║
 ║                    重  明  架  构  白  皮  书                                  ║

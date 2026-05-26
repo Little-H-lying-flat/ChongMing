@@ -146,6 +146,68 @@ export interface PromoteAssetDraftsRequest {
     visual_project_id?: string;
 }
 
+export interface ConfirmExecutionRequest {
+    promotion_ids: string[];
+    confirmation: 'AUTHORIZE_SMART_SCAN_EXECUTION';
+    mode?: string;
+    engine?: string;
+    parallel?: boolean;
+    max_workers?: number;
+    env?: string;
+}
+
+export interface ConfirmExecutionResponse {
+    execution_created: boolean;
+    execution_id: string;
+    status: string;
+    total_cases: number;
+    dashboard_url: string;
+    selected_promotions: string[];
+    tc_ids: string[];
+    dynamic_payload_count: number;
+    skipped: JsonObject[];
+}
+
+export interface SmartScanExecutionSummaryItem {
+    execution_id: string;
+    status: string;
+    total_cases: number;
+    passed_cases: number;
+    failed_cases: number;
+    skipped_cases: number;
+    pass_rate: number;
+    duration_seconds?: number | null;
+    dynamic_payload_count: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface SmartScanExecutionSummaryResponse {
+    campaign_id: string;
+    plan_id: string;
+    total_executions: number;
+    latest_execution_id?: string | null;
+    latest_status?: string | null;
+    latest_created_at?: string | null;
+    latest_updated_at?: string | null;
+    executions: SmartScanExecutionSummaryItem[];
+    result_breakdown: JsonObject;
+    failure_categories: JsonObject[];
+}
+
+export interface SmartScanReportResponse {
+    campaign_id: string;
+    plan_id: string;
+    generated_at: string;
+    campaign: JsonObject;
+    plan: JsonObject;
+    review: JsonObject;
+    assets: JsonObject;
+    executions: JsonObject;
+    recommendations: string[];
+    markdown: string;
+}
+
 export interface ScanCampaignListParams {
     page?: number;
     pageSize?: number;
@@ -223,5 +285,22 @@ export const scanCampaignService = {
             `/scan-campaigns/${campaignId}/plans/${planId}/promote-asset-drafts`,
             payload,
         );
+    },
+
+    confirmExecution: (campaignId: string, planId: string, payload: ConfirmExecutionRequest) => {
+        return api.post<ConfirmExecutionResponse>(
+            `/scan-campaigns/${campaignId}/plans/${planId}/confirm-execution`,
+            payload,
+        );
+    },
+
+    getExecutionSummary: (campaignId: string, planId: string) => {
+        return api.get<SmartScanExecutionSummaryResponse>(
+            `/scan-campaigns/${campaignId}/plans/${planId}/execution-summary`,
+        );
+    },
+
+    getReport: (campaignId: string, planId: string) => {
+        return api.get<SmartScanReportResponse>(`/scan-campaigns/${campaignId}/plans/${planId}/report`);
     },
 };

@@ -10,7 +10,7 @@ interface HealthData {
         database: string;
         redis: string;
         celery: string;
-        omniparser?: string;
+        midscene?: string;
     };
 }
 
@@ -40,7 +40,7 @@ export function VisionStatus() {
     }, []);
 
     const getStatusInfo = () => {
-        const opStatus = health?.services.omniparser;
+        const opStatus = health?.services.midscene;
 
         if (loading && !health) {
             return {
@@ -57,7 +57,7 @@ export function VisionStatus() {
                     label: "视觉执行器就绪 (Vision Ready)",
                     color: "bg-emerald-500",
                     icon: <Activity className="w-3 h-3 text-white" />,
-                    description: "视觉解析服务在线且已就绪。 (Visual Parsing Service is online and ready.)"
+                    description: "Midscene 视觉执行器在线且已就绪。 (Midscene visual executor is online and ready.)"
                 };
             case "loading":
                 return {

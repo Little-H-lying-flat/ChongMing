@@ -11,7 +11,6 @@ from app.services.phoenix.regression.baseline_manager import BaselineManager
 from app.services.phoenix.regression.auth_manager import AuthFixture
 from app.services.phoenix.regression.visual_comparator import VisualComparator
 from app.services.phoenix.regression.api_comparator import APIComparator
-from app.engines.vision.omni_client import OmniClient
 
 @pytest.fixture
 def baseline_manager(tmp_path):
@@ -57,8 +56,7 @@ def create_image_bytes(color=100):
 
 @pytest.mark.asyncio
 async def test_visual_comparator():
-    mock_omni = AsyncMock(spec=OmniClient)
-    comparator = VisualComparator(mock_omni)
+    comparator = VisualComparator()
     
     img1 = create_image_bytes(100)
     img2 = create_image_bytes(100) # Same

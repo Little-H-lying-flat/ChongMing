@@ -15,7 +15,7 @@
 |---|---|---|
 | API 网关层 | `backend/app/main.py`、`backend/app/api/v1/router.py`、`backend/app/api/v1/endpoints/` | `重明_详细设计说明书_API网关层.txt` |
 | Neural Design | `backend/app/api/v1/endpoints/design.py`、`backend/app/services/neural_design/`、`backend/app/tasks/design_tasks.py` | `重明_详细设计说明书_神经设计层.txt` |
-| Right Pupil / UI | `backend/app/engines/right_pupil/`、`backend/app/engines/vision/`、`backend/app/api/v1/endpoints/visual_ui.py` | `重明_详细设计说明书_右瞳引擎.txt`、`重明_详细设计说明书_智能等待机制.txt` |
+| Midscene / Visual UI | `backend/app/services/midscene_adapter.py`、`backend/app/services/visual_ui_service.py`、`backend/app/api/v1/endpoints/visual_ui.py` | `重明_详细设计说明书_右瞳引擎.txt`（已退役历史方案）、`重明_详细设计说明书_智能等待机制.txt`（已退役历史方案） |
 | Left Pupil / API | `backend/app/engines/left_pupil/`、`backend/app/services/left_pupil/`、`backend/app/api/v1/endpoints/api_engine.py`、`backend/app/api/v1/endpoints/left_pupil.py` | `重明_详细设计说明书_左瞳引擎.txt` |
 | 双模态调度 | `backend/app/engines/dispatcher.py`、`backend/app/tasks/execution_tasks.py`、`backend/app/services/execution_service.py` | `重明_详细设计说明书_双模态执行.txt`、`重明_详细设计说明书_Celery任务调度.txt` |
 | Turbo 性能压测 | `backend/app/api/v1/endpoints/turbo.py`、`backend/app/engines/turbo/`、`deploy/locust/` | `重明_详细设计说明书_涡轮引擎.txt` |
@@ -36,7 +36,7 @@
 | `重明技术规格书.txt` | 平台级规格、能力清单、约束 |
 | `重明_详细设计说明书_API网关层.txt` | FastAPI 入口、路由聚合、接口治理 |
 | `重明_详细设计说明书_神经设计层.txt` | PRD/需求解析、场景生成、评审和编排 |
-| `重明_详细设计说明书_右瞳引擎.txt` | UI 自动化、视觉定位、多智能体协同 |
+| `重明_详细设计说明书_右瞳引擎.txt` | 已退役历史方案：RightPupil/OmniParser 旧 UI 自动化设计，当前实现以 Midscene 为准 |
 | `重明_详细设计说明书_左瞳引擎.txt` | API 自动化、依赖规划、断言和变量提取 |
 | `重明_详细设计说明书_双模态执行.txt` | UI/API/HYBRID 执行分支和 Dispatcher 策略 |
 | `重明_详细设计说明书_涡轮引擎.txt` | 性能压测脚本生成、数据合成和 Locust 执行 |

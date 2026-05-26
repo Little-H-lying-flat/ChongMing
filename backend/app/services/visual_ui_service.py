@@ -25,7 +25,7 @@ class VisualUIService:
             return VisualUIDraftResponse(status="needs_clarification", questions=["请描述要生成的 UI 测试流程。"])
 
         response = await get_ai_manager().invoke(
-            AIModule.AGENT_RIGHT_VISUAL,
+            AIModule.AGENT_NEURAL_UI_EXPERT,
             [
                 Message(role="system", content=VisualUIService._draft_system_prompt()),
                 Message(role="user", content=VisualUIService._draft_user_prompt(data, prompt)),

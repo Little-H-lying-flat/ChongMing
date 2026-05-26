@@ -525,7 +525,7 @@ Phase 1 完成时必须满足：
 
 Phase 1 不做：
 - 不执行 Campaign。
-- 不直接调用 Left Pupil / Right Pupil。
+- 不直接调用 Left Pupil / Midscene。
 - 不生成真实执行记录。
 - 不自动保存 API Case / UI Case。
 - 不做全站爬取。

@@ -12,10 +12,10 @@ async def test_vision():
     provider = DefaultAIConfigProvider()
     ai_manager = init_ai_manager(provider)
     
-    print("Sending vision request to Right Pupil Grounding model...")
+    print("Sending vision request to Visual UI draft model...")
     try:
         res = await ai_manager.invoke_vision(
-            module=AIModule.RIGHT_PUPIL_GROUNDING,
+            module=AIModule.AGENT_NEURAL_UI_EXPERT,
             prompt="Describe this image",
             image_url="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png"
         )

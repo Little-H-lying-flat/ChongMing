@@ -14,12 +14,12 @@
 |---|---|---|
 | 全局任务池 | 全仓库 | `00_任务总览.md` |
 | Neural Design | `backend/app/api/v1/endpoints/design.py`、`backend/app/services/neural_design/`、`backend/app/tasks/design_tasks.py` | `01_神经设计层_issues.md` |
-| Right Pupil / UI | `backend/app/engines/right_pupil/`、`backend/app/engines/vision/`、`frontend/src/app/visual-ui/` | `02_右瞳引擎_issues.md` |
+| Midscene / Visual UI | `backend/app/services/midscene_adapter.py`、`backend/app/services/visual_ui_service.py`、`frontend/src/app/visual-ui/` | `02_右瞳引擎_issues.md`（已退役历史任务） |
 | Left Pupil / API | `backend/app/engines/left_pupil/`、`backend/app/services/left_pupil/`、`frontend/src/app/api-auto/` | `03_左瞳引擎_issues.md` |
 | Turbo | `backend/app/api/v1/endpoints/turbo.py`、`backend/app/engines/turbo/`、`deploy/locust/` | `04_涡轮引擎_issues.md` |
 | Phoenix | `backend/app/api/v1/endpoints/phoenix.py`、`backend/app/services/phoenix/`、`backend/app/tasks/phoenix_tasks.py` | `05_凤凰涅槃层_issues.md` |
 | Smart Ops / 缺陷分析 | `backend/app/api/v1/endpoints/smart_ops.py`、`backend/app/services/smart_ops/` | `06_缺陷分析智能体_issues.md` |
-| 自愈中心 | `backend/app/engines/right_pupil/agents/healer.py`、`backend/app/engines/left_pupil/agents/api_healer.py` | `07_自愈中心_issues.md` |
+| 自愈中心 | `backend/app/engines/left_pupil/agents/api_healer.py` | `07_自愈中心_issues.md` |
 | 智能等待 | `backend/app/engines/vision/smart_waiter.py` | `08_智能等待机制_issues.md` |
 | VRT 视觉回归 | `backend/app/services/phoenix/regression/visual_comparator.py` | `09_VRT视觉回归_issues.md` |
 | Celery 任务调度 | `backend/app/worker.py`、`backend/app/tasks/`、`backend/app/api/v1/endpoints/tasks.py` | `10_Celery任务调度_issues.md` |
@@ -35,7 +35,7 @@
 |---|---|
 | `00_任务总览.md` | 全局任务池和阶段目标 |
 | `01_神经设计层_issues.md` | 需求解析、场景生成、评审链路问题 |
-| `02_右瞳引擎_issues.md` | UI 自动化稳定性、视觉定位、自愈问题 |
+| `02_右瞳引擎_issues.md` | 已退役历史任务：RightPupil/OmniParser 旧 UI 自动化问题，当前实现以 Midscene 为准 |
 | `03_左瞳引擎_issues.md` | API 链路、依赖规划、断言、变量提取问题 |
 | `04_涡轮引擎_issues.md` | 压测脚本、数据合成、实时统计问题 |
 | `05_凤凰涅槃层_issues.md` | 轨迹编译、脚本固化、回归治理问题 |

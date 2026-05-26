@@ -32,7 +32,7 @@ class MasterRouter:
     async def route(self, step: Dict[str, Any]) -> str:
         """
         Routes the step through the Fast/Slow paths.
-        Returns: "LEFT_PUPIL", "RIGHT_PUPIL", or "UNKNOWN"
+        Returns: "LEFT_PUPIL", "MIDSCENE", or "UNKNOWN"
         """
         step_signature = self._get_step_hash(step)
         
@@ -84,7 +84,7 @@ class MasterRouter:
         # 1. Explicit Declarations
         st = step.get("step_type")
         if st == "API": return "LEFT_PUPIL"
-        if st == "UI": return "RIGHT_PUPIL"
+        if st == "UI": return "MIDSCENE"
 
         # 2. Feature Sniffing
         action = str(step.get("action", "")).lower()
@@ -100,17 +100,17 @@ class MasterRouter:
             # It's an API request structure
             return "LEFT_PUPIL"
 
-        # Right Pupil (UI Engine) Signatures
+        # UI Engine Signatures
         ui_keywords = ["click", "type", "hover", "scroll", "screenshot", "navigate", "assert_visible", "wait_for"]
         if any(keyword in action for keyword in ui_keywords):
-            return "RIGHT_PUPIL"
+            return "MIDSCENE"
         if step.get("selector") or step.get("xpath"):
-            return "RIGHT_PUPIL"
+            return "MIDSCENE"
             
         # Description sniffing (very obvious keywords)
         desc = str(step.get("description", "")).lower()
         if "click" in desc or "type into" in desc or "button" in desc:
-            return "RIGHT_PUPIL"
+            return "MIDSCENE"
         if "request" in desc and "status code" in desc:
             return "LEFT_PUPIL"
 

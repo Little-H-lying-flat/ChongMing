@@ -12,38 +12,38 @@ def _reset_health_cache() -> None:
 
 
 @pytest.mark.asyncio
-async def test_health_and_dashboard_are_consistent_when_omniparser_ok(client):
+async def test_health_and_dashboard_are_consistent_when_midscene_ok(client):
     _reset_health_cache()
     with patch(
-        "app.api.v1.endpoints.health.probe_omniparser_health",
+        "app.api.v1.endpoints.health.check_midscene_runner",
         AsyncMock(return_value="ok"),
     ), patch(
-        "app.api.v1.endpoints.dashboard.probe_omniparser_health",
-        AsyncMock(return_value="ok"),
+        "app.api.v1.endpoints.dashboard.check_midscene_runner",
+        AsyncMock(return_value=dashboard_endpoint.STATUS_OK),
     ):
         health_resp = await client.get("/api/v1/health")
         dashboard_resp = await client.get("/api/v1/dashboard/overview")
 
     assert health_resp.status_code == 200
     assert dashboard_resp.status_code == 200
-    assert health_resp.json()["services"]["omniparser"] == "ok"
-    assert dashboard_resp.json()["kpis"]["omniparser_status"] == dashboard_endpoint.STATUS_OK
+    assert health_resp.json()["services"]["midscene"] == "ok"
+    assert dashboard_resp.json()["kpis"]["midscene_status"] == dashboard_endpoint.STATUS_OK
 
 
 @pytest.mark.asyncio
-async def test_health_and_dashboard_are_consistent_when_omniparser_down(client):
+async def test_health_and_dashboard_are_consistent_when_midscene_down(client):
     _reset_health_cache()
     with patch(
-        "app.api.v1.endpoints.health.probe_omniparser_health",
+        "app.api.v1.endpoints.health.check_midscene_runner",
         AsyncMock(return_value="down"),
     ), patch(
-        "app.api.v1.endpoints.dashboard.probe_omniparser_health",
-        AsyncMock(return_value="down"),
+        "app.api.v1.endpoints.dashboard.check_midscene_runner",
+        AsyncMock(return_value=dashboard_endpoint.STATUS_ERR),
     ):
         health_resp = await client.get("/api/v1/health")
         dashboard_resp = await client.get("/api/v1/dashboard/overview")
 
     assert health_resp.status_code == 200
     assert dashboard_resp.status_code == 200
-    assert health_resp.json()["services"]["omniparser"] == "down"
-    assert dashboard_resp.json()["kpis"]["omniparser_status"] == dashboard_endpoint.STATUS_ERR
+    assert health_resp.json()["services"]["midscene"] == "down"
+    assert dashboard_resp.json()["kpis"]["midscene_status"] == dashboard_endpoint.STATUS_ERR

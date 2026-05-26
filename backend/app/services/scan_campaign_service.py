@@ -8,9 +8,11 @@ from urllib.parse import urlparse
 import uuid
 
 from sqlalchemy import delete, func, or_, select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.api_asset import ApiAsset
+from app.models.execution import Execution, ExecutionStep
 from app.models.scan_campaign import (
     ScanCampaign,
     ScanCampaignAssetDraft,
@@ -21,7 +23,7 @@ from app.models.scan_campaign import (
     ScanCampaignReviewItem,
     ScanCampaignStatus,
 )
-from app.models.visual_ui import VisualStepAction, VisualUseCaseStatus
+from app.models.visual_ui import VisualStepAction, VisualUseCase, VisualUseCaseStatus
 from app.schemas.visual_ui import VisualStepCreate, VisualUseCaseCreate
 from app.services.api_case_ir_converter import normalize_api_step_v2
 from app.services.test_case_service import TestCaseService
@@ -42,6 +44,8 @@ class ScanCampaignValidationError(ValueError):
 
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 READ_METHODS = {"GET", "HEAD", "OPTIONS"}
+PHASE3_CONFIRMATION = "AUTHORIZE_SMART_SCAN_EXECUTION"
+PHASE3_MAX_PROMOTIONS = 5
 FORBIDDEN_KEYWORDS = (
     "delete",
     "payment",
@@ -389,6 +393,186 @@ class ScanCampaignService:
             "asset_drafts": db_drafts,
         }
 
+    async def build_phase3_execution_payload(
+        self,
+        campaign_id: str,
+        plan_id: str,
+        promotion_ids: List[str],
+        confirmation: str,
+        *,
+        mode: str,
+        engine: str,
+        parallel: bool,
+        max_workers: int,
+        env: Optional[str],
+    ) -> Dict[str, Any]:
+        if confirmation != PHASE3_CONFIRMATION:
+            raise ScanCampaignValidationError(f"confirmation 必须为 {PHASE3_CONFIRMATION}")
+        selected_ids = list(dict.fromkeys(promotion_ids))
+        if not selected_ids:
+            raise ScanCampaignValidationError("promotion_ids 不能为空")
+        if len(selected_ids) > PHASE3_MAX_PROMOTIONS:
+            raise ScanCampaignValidationError(f"单次最多确认执行 {PHASE3_MAX_PROMOTIONS} 个资产")
+
+        campaign = await self.get(campaign_id)
+        if campaign is None:
+            raise ScanCampaignNotFoundError(f"Campaign {campaign_id} not found")
+        plan = await self.get_plan(campaign_id, plan_id)
+        if plan is None:
+            raise ScanCampaignNotFoundError(f"Plan {plan_id} not found")
+        if plan.status == ScanCampaignPlanStatus.SUPERSEDED:
+            raise ScanCampaignConflictError("已被 superseded 的 Plan 不能创建执行")
+
+        result = await self.db.execute(
+            select(ScanCampaignAssetPromotion)
+            .options(selectinload(ScanCampaignAssetPromotion.asset_draft))
+            .where(
+                ScanCampaignAssetPromotion.id.in_(selected_ids),
+                ScanCampaignAssetPromotion.campaign_id == campaign_id,
+                ScanCampaignAssetPromotion.plan_id == plan_id,
+            )
+        )
+        promotion_by_id = {item.id: item for item in result.scalars().all()}
+        missing = [promotion_id for promotion_id in selected_ids if promotion_id not in promotion_by_id]
+        if missing:
+            raise ScanCampaignValidationError(f"promotion not found: {', '.join(missing)}")
+
+        review_items = await self.list_review_items(plan_id)
+        review_choice_by_target = {item.target_id: self._enum_value(item.choice) for item in review_items}
+
+        tc_ids: list[str] = []
+        dynamic_payload: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        for promotion_id in selected_ids:
+            promotion = promotion_by_id[promotion_id]
+            draft = promotion.asset_draft
+            if draft is None:
+                raise ScanCampaignValidationError(f"source draft not found for promotion {promotion_id}")
+            candidate_id = (promotion.promotion_metadata or {}).get("candidate_id") or (draft.draft_metadata or {}).get("candidate_id")
+            review_choice = review_choice_by_target.get(candidate_id) if candidate_id else None
+            self._validate_phase3_promotion(campaign, promotion, draft, review_choice)
+            if promotion.generated_asset_type == "test_case":
+                tc_ids.append(promotion.generated_asset_id)
+            elif promotion.generated_asset_type == "visual_ui_case":
+                dynamic_case = await self._visual_promotion_to_dynamic_case(campaign, promotion, draft)
+                tc_ids.append(dynamic_case["id"])
+                dynamic_payload.append(dynamic_case)
+            else:
+                skipped.append(
+                    {
+                        "promotion_id": promotion.id,
+                        "generated_asset_type": promotion.generated_asset_type,
+                        "reason": "unsupported_generated_asset_type",
+                    }
+                )
+
+        if not tc_ids:
+            raise ScanCampaignValidationError("没有可执行资产")
+
+        return {
+            "tc_ids": tc_ids,
+            "dynamic_payload": dynamic_payload,
+            "selected_promotions": selected_ids,
+            "skipped": skipped,
+            "config_overrides": {
+                "source": "smart_scan_phase3",
+                "campaign_id": campaign_id,
+                "plan_id": plan_id,
+                "promotion_ids": selected_ids,
+                "authorization": {
+                    "confirmation": PHASE3_CONFIRMATION,
+                    "authorized_at": self._utcnow().isoformat(),
+                },
+                "safety": {
+                    "allowed_domains": campaign.boundaries.get("allowed_domains") or [],
+                    "allowed_paths": campaign.boundaries.get("allowed_paths") or [],
+                    "environment_safety": campaign.data_policy.get("environment_safety"),
+                    "write_policy": campaign.data_policy.get("write_policy"),
+                },
+                "dynamic_payload_count": len(dynamic_payload),
+                "phase3_mode": mode,
+                "phase3_engine": engine,
+                "phase3_parallel": parallel,
+                "phase3_max_workers": max_workers,
+                "phase3_env": env,
+            },
+        }
+
+    async def get_execution_summary(self, campaign_id: str, plan_id: str) -> Dict[str, Any]:
+        campaign = await self.get(campaign_id)
+        if campaign is None:
+            raise ScanCampaignNotFoundError(f"Campaign {campaign_id} not found")
+        plan = await self.get_plan(campaign_id, plan_id)
+        if plan is None:
+            raise ScanCampaignNotFoundError(f"Plan {plan_id} not found")
+
+        result = await self.db.execute(select(Execution).order_by(Execution.created_at.desc()))
+        executions = [
+            execution
+            for execution in result.scalars().all()
+            if (execution.config or {}).get("source") == "smart_scan_phase3"
+            and (execution.config or {}).get("campaign_id") == campaign_id
+            and (execution.config or {}).get("plan_id") == plan_id
+        ]
+        execution_ids = [execution.id for execution in executions]
+        steps_by_execution: dict[str, list[ExecutionStep]] = {execution_id: [] for execution_id in execution_ids}
+        if execution_ids:
+            step_result = await self.db.execute(select(ExecutionStep).where(ExecutionStep.execution_id.in_(execution_ids)))
+            for step in step_result.scalars().all():
+                steps_by_execution.setdefault(step.execution_id, []).append(step)
+
+        items = [self._execution_summary_item(execution) for execution in executions]
+        breakdown = self._result_breakdown(executions)
+        failure_categories = self._failure_categories(steps_by_execution)
+        latest = items[0] if items else None
+        return {
+            "campaign_id": campaign_id,
+            "plan_id": plan_id,
+            "total_executions": len(items),
+            "latest_execution_id": latest["execution_id"] if latest else None,
+            "latest_status": latest["status"] if latest else None,
+            "latest_created_at": latest["created_at"] if latest else None,
+            "latest_updated_at": latest["updated_at"] if latest else None,
+            "executions": items,
+            "result_breakdown": breakdown,
+            "failure_categories": failure_categories,
+        }
+
+    async def build_smart_scan_report(self, campaign_id: str, plan_id: str) -> Dict[str, Any]:
+        campaign = await self.get(campaign_id)
+        if campaign is None:
+            raise ScanCampaignNotFoundError(f"Campaign {campaign_id} not found")
+        plan = await self.get_plan(campaign_id, plan_id)
+        if plan is None:
+            raise ScanCampaignNotFoundError(f"Plan {plan_id} not found")
+
+        review_items = await self.list_review_items(plan_id)
+        drafts = await self.list_asset_drafts_for_plan(campaign_id, plan_id)
+        promotions = await self.list_asset_promotions(campaign_id, plan_id)
+        summary = await self.get_execution_summary(campaign_id, plan_id)
+        review_counts = self._review_choice_counts(review_items)
+        assets = {
+            "draft_count": len(drafts),
+            "promotion_count": len(promotions),
+            "api_test_cases": [item.generated_asset_id for item in promotions if item.generated_asset_type == "test_case"],
+            "visual_ui_cases": [item.generated_asset_id for item in promotions if item.generated_asset_type == "visual_ui_case"],
+            "promotions": [self.asset_promotion_to_response(item) for item in promotions],
+        }
+        recommendations = self._report_recommendations(summary, review_counts, assets)
+        report = {
+            "campaign_id": campaign_id,
+            "plan_id": plan_id,
+            "generated_at": self._utcnow(),
+            "campaign": self.campaign_to_response(campaign),
+            "plan": self.build_plan_response(plan, review_items, drafts),
+            "review": {"total": len(review_items), "choice_counts": review_counts},
+            "assets": assets,
+            "executions": summary,
+            "recommendations": recommendations,
+        }
+        report["markdown"] = self._report_markdown(report)
+        return report
+
     async def promote_asset_drafts(
         self,
         campaign_id: str,
@@ -568,6 +752,143 @@ class ScanCampaignService:
             "updated_at": promotion.updated_at,
         }
 
+    def _execution_summary_item(self, execution: Execution) -> Dict[str, Any]:
+        total = execution.total_cases or 0
+        passed = execution.passed_cases or 0
+        failed = execution.failed_cases or 0
+        return {
+            "execution_id": execution.id,
+            "status": self._enum_value(execution.status),
+            "total_cases": total,
+            "passed_cases": passed,
+            "failed_cases": failed,
+            "skipped_cases": execution.skipped_cases or 0,
+            "pass_rate": round(passed / total, 4) if total else 0,
+            "duration_seconds": round((execution.duration_ms or 0) / 1000, 3) if execution.duration_ms else None,
+            "dynamic_payload_count": int((execution.config or {}).get("dynamic_payload_count") or 0),
+            "created_at": execution.created_at,
+            "updated_at": execution.updated_at,
+        }
+
+    def _result_breakdown(self, executions: List[Execution]) -> Dict[str, Dict[str, int]]:
+        api = {"total": 0, "passed": 0, "failed": 0}
+        visual_ui = {"total": 0, "passed": 0, "failed": 0}
+        for execution in executions:
+            visual_total = int((execution.config or {}).get("dynamic_payload_count") or 0)
+            api_total = max((execution.total_cases or 0) - visual_total, 0)
+            api["total"] += api_total
+            visual_ui["total"] += visual_total
+            passed = execution.passed_cases or 0
+            failed = execution.failed_cases or 0
+            api["passed"] += min(passed, api_total)
+            api["failed"] += min(failed, api_total)
+            visual_ui["passed"] += max(passed - api_total, 0)
+            visual_ui["failed"] += max(failed - api_total, 0)
+        return {"api": api, "visual_ui": visual_ui}
+
+    def _failure_categories(self, steps_by_execution: Dict[str, List[ExecutionStep]]) -> List[Dict[str, Any]]:
+        buckets: dict[str, dict[str, Any]] = {}
+        for execution_id, steps in steps_by_execution.items():
+            for step in steps:
+                if self._enum_value(step.status) in {"passed", "skipped"}:
+                    continue
+                category = self._failure_category(step)
+                bucket = buckets.setdefault(category, {"category": category, "count": 0, "examples": []})
+                bucket["count"] += 1
+                if len(bucket["examples"]) < 3:
+                    bucket["examples"].append(
+                        {
+                            "execution_id": execution_id,
+                            "tc_id": step.tc_id,
+                            "status": self._enum_value(step.status),
+                            "error": step.error_message,
+                        }
+                    )
+        return sorted(buckets.values(), key=lambda item: item["count"], reverse=True)
+
+    def _failure_category(self, step: ExecutionStep) -> str:
+        text = f"{step.error_message or ''} {step.step_results or {}}".lower()
+        if "assert" in text or "断言" in text or "status_code" in text:
+            return "api_assertion_failed"
+        if "locator" in text or "selector" in text or "element" in text or "元素" in text:
+            return "ui_locator_failure"
+        if "navigate" in text or "timeout" in text or "url" in text or "导航" in text:
+            return "ui_navigation_failed"
+        if "safety" in text or "forbidden" in text or "not allowed" in text or "安全" in text:
+            return "safety_blocked"
+        if "network" in text or "connection" in text or "env" in text or "环境" in text:
+            return "network_or_environment"
+        if self._enum_value(step.status) == "error":
+            return "executor_error"
+        return "unknown"
+
+    def _review_choice_counts(self, review_items: List[ScanCampaignReviewItem]) -> Dict[str, int]:
+        counts = {"pending": 0, "skip": 0, "generate_asset_only": 0, "approve_for_future_execution": 0}
+        for item in review_items:
+            choice = self._enum_value(item.choice)
+            counts[choice] = counts.get(choice, 0) + 1
+        return counts
+
+    def _report_recommendations(self, summary: Dict[str, Any], review: Dict[str, int], assets: Dict[str, Any]) -> List[str]:
+        recommendations: list[str] = []
+        if summary["total_executions"] == 0:
+            recommendations.append("尚未创建 Phase 3 执行，可在执行确认页选择已保存资产并重新授权。")
+        if summary["failure_categories"]:
+            recommendations.append("存在失败执行项，请优先查看失败归因和 Execution 详情。")
+        if review.get("generate_asset_only", 0):
+            recommendations.append("部分复核项仅生成资产草稿，如需执行需重新选择保存未来执行意向。")
+        if assets["promotion_count"] == 0:
+            recommendations.append("尚未保存正式资产，请先完成 Phase 2。")
+        if not recommendations:
+            recommendations.append("当前 Smart Scan 已形成计划、复核、资产和执行结果闭环。")
+        return recommendations
+
+    def _report_markdown(self, report: Dict[str, Any]) -> str:
+        campaign = report["campaign"]
+        plan = report["plan"]
+        review = report["review"]
+        assets = report["assets"]
+        executions = report["executions"]
+        latest = executions.get("latest_execution_id") or "-"
+        latest_status = executions.get("latest_status") or "-"
+        return "\n".join(
+            [
+                "# Smart Scan Report",
+                "",
+                "## Campaign",
+                f"- Name: {campaign.get('name')}",
+                f"- Target: {(campaign.get('target') or {}).get('base_url')}",
+                f"- Allowed Domains: {', '.join((campaign.get('boundaries') or {}).get('allowed_domains') or [])}",
+                f"- Allowed Paths: {', '.join((campaign.get('boundaries') or {}).get('allowed_paths') or [])}",
+                "",
+                "## AI Plan",
+                f"- Plan ID: {plan.get('plan_id')}",
+                f"- Version: {plan.get('version')}",
+                f"- API Candidates: {len(plan.get('api_candidates') or [])}",
+                f"- Risk Items: {len(plan.get('risk_items') or [])}",
+                "",
+                "## Manual Review",
+                f"- Total: {review.get('total')}",
+                f"- Approved for Future Execution: {(review.get('choice_counts') or {}).get('approve_for_future_execution', 0)}",
+                f"- Generate Asset Only: {(review.get('choice_counts') or {}).get('generate_asset_only', 0)}",
+                f"- Skipped: {(review.get('choice_counts') or {}).get('skip', 0)}",
+                "",
+                "## Formal Assets",
+                f"- API TestCases: {len(assets.get('api_test_cases') or [])}",
+                f"- Visual UI Cases: {len(assets.get('visual_ui_cases') or [])}",
+                f"- Promotions: {assets.get('promotion_count')}",
+                "",
+                "## Authorized Executions",
+                f"- Total Executions: {executions.get('total_executions')}",
+                f"- Latest Execution: {latest}",
+                f"- Latest Status: {latest_status}",
+                "",
+                "## Recommendations",
+                *[f"- {item}" for item in report.get("recommendations") or []],
+                "",
+            ]
+        )
+
     async def _get_asset_draft(
         self,
         campaign_id: str,
@@ -654,8 +975,162 @@ class ScanCampaignService:
         )
         return visual_case.id
 
-    def _promotion_block_reason(self, draft: ScanCampaignAssetDraft) -> Optional[str]:
-        metadata = draft.draft_metadata or {}
+    def _validate_phase3_promotion(
+        self,
+        campaign: ScanCampaign,
+        promotion: ScanCampaignAssetPromotion,
+        draft: ScanCampaignAssetDraft,
+        review_choice: Optional[str],
+    ) -> None:
+        if promotion.status != "created":
+            raise ScanCampaignValidationError(f"promotion {promotion.id} 状态不可执行")
+        metadata = promotion.promotion_metadata or {}
+        if metadata.get("source_type") != "scan_campaign":
+            raise ScanCampaignValidationError(f"promotion {promotion.id} 来源不合法")
+        if metadata.get("campaign_id") != campaign.id or metadata.get("plan_id") != promotion.plan_id:
+            raise ScanCampaignValidationError(f"promotion {promotion.id} 来源 Campaign/Plan 不匹配")
+        if draft.policy in {"forbidden", "out_of_scope"}:
+            raise ScanCampaignValidationError(f"draft {draft.id} policy 不允许执行: {draft.policy}")
+        if draft.policy in {"confirmation_required", "conditional_allowed"}:
+            if review_choice != "approve_for_future_execution":
+                raise ScanCampaignValidationError("需要选择保存未来执行意向后才能进入 Phase 3 执行确认")
+        blocked_reason = self._promotion_block_reason(draft, review_choice)
+        if blocked_reason:
+            raise ScanCampaignValidationError(f"draft {draft.id} 不可执行: {blocked_reason}")
+        if draft.asset_type in {"api_case_ir", "api_case_ir_step"}:
+            self._validate_phase3_api_boundaries(campaign, draft.draft_payload or {})
+        elif draft.asset_type == "visual_ui_case":
+            self._validate_phase3_visual_boundaries(campaign, draft.draft_payload or {})
+
+    def _validate_phase3_api_boundaries(self, campaign: ScanCampaign, payload: Dict[str, Any]) -> None:
+        request = payload.get("request") or {}
+        method = str(request.get("method") or payload.get("method") or "").upper()
+        path = str(request.get("path") or request.get("url") or payload.get("path") or payload.get("url") or "")
+        if method == "DELETE":
+            raise ScanCampaignValidationError("Phase 3 不允许 DELETE 请求")
+        if method in WRITE_METHODS and self._is_readonly_campaign(campaign):
+            raise ScanCampaignValidationError("只读环境不允许执行写请求")
+        self._assert_path_allowed(campaign, path)
+        joined = f"{method} {path} {payload.get('name') or ''} {payload.get('description') or ''}".lower()
+        if any(word in joined for word in FORBIDDEN_KEYWORDS):
+            raise ScanCampaignValidationError("Phase 3 阻止危险 API 动作")
+
+    def _validate_phase3_visual_boundaries(self, campaign: ScanCampaign, payload: Dict[str, Any]) -> None:
+        base_url = str(payload.get("base_url") or "")
+        steps = payload.get("steps") if isinstance(payload.get("steps"), list) else []
+        goto_url = next((str(step.get("value") or "") for step in steps if str(step.get("action") or "").upper() == "GOTO"), "")
+        target_url = self._resolve_visual_url(campaign, goto_url or base_url)
+        if not target_url:
+            raise ScanCampaignValidationError("Visual UI 资产缺少 base_url 或 GOTO URL")
+        self._assert_domain_allowed(campaign, target_url)
+        parsed_path = urlparse(target_url).path or "/"
+        self._assert_path_allowed(campaign, parsed_path)
+        for step in steps:
+            text = f"{step.get('action') or ''} {step.get('target_description') or ''} {step.get('value') or ''}".lower()
+            if any(word in text for word in FORBIDDEN_KEYWORDS):
+                raise ScanCampaignValidationError("Phase 3 阻止危险 Visual UI 动作")
+
+    def _is_readonly_campaign(self, campaign: ScanCampaign) -> bool:
+        data_policy = campaign.data_policy or {}
+        return data_policy.get("environment_safety") == "production-readonly" or data_policy.get("write_policy") == "readonly"
+
+    def _resolve_visual_url(self, campaign: ScanCampaign, value: str) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return text
+        if urlparse(text).scheme:
+            return text
+        base_url = str((campaign.target or {}).get("base_url") or "").strip()
+        if not base_url:
+            return text
+        parsed_base = urlparse(base_url)
+        origin = f"{parsed_base.scheme}://{parsed_base.netloc}"
+        if text.startswith("/"):
+            return f"{origin}{text}"
+        base_path = parsed_base.path.rstrip("/")
+        return f"{origin}{base_path}/{text}"
+
+    def _assert_domain_allowed(self, campaign: ScanCampaign, value: str) -> None:
+        allowed_domains = [str(item).lower() for item in (campaign.boundaries or {}).get("allowed_domains") or []]
+        parsed = urlparse(value)
+        host = (parsed.hostname or "").lower()
+        if not host or host not in allowed_domains:
+            raise ScanCampaignValidationError(f"目标域名不在允许范围内: {host or value}")
+
+    def _assert_path_allowed(self, campaign: ScanCampaign, value: str) -> None:
+        allowed_paths = [self._normalize_path(item) for item in self._string_list((campaign.boundaries or {}).get("allowed_paths"))]
+        parsed = urlparse(value)
+        path = self._normalize_path(parsed.path or value or "/")
+        if not allowed_paths or not self._is_path_allowed(path, allowed_paths):
+            raise ScanCampaignValidationError(f"path_not_allowed path={path} allowed_paths={allowed_paths}")
+
+    def _normalize_path(self, value: str) -> str:
+        text = str(value or "").strip() or "/"
+        parsed = urlparse(text)
+        path = parsed.path or text
+        if not path.startswith("/"):
+            path = f"/{path}"
+        return path
+
+    async def _visual_promotion_to_dynamic_case(
+        self,
+        campaign: ScanCampaign,
+        promotion: ScanCampaignAssetPromotion,
+        draft: ScanCampaignAssetDraft,
+    ) -> Dict[str, Any]:
+        result = await self.db.execute(
+            select(VisualUseCase)
+            .options(selectinload(VisualUseCase.steps))
+            .where(VisualUseCase.id == promotion.generated_asset_id)
+        )
+        visual_case = result.scalars().first()
+        if visual_case is None:
+            raise ScanCampaignValidationError(f"Visual UI asset not found: {promotion.generated_asset_id}")
+        self._validate_phase3_visual_boundaries(campaign, draft.draft_payload or {})
+        steps = [self._visual_step_to_dynamic_step(campaign, visual_case.base_url, step) for step in visual_case.steps]
+        if not steps:
+            raise ScanCampaignValidationError(f"Visual UI asset has no steps: {promotion.generated_asset_id}")
+        return {
+            "id": f"SC-VIS-{visual_case.id}",
+            "name": visual_case.name,
+            "description": visual_case.description,
+            "mode": "UI",
+            "priority": "P2",
+            "tags": ["smart-scan", campaign.id, promotion.plan_id, "visual-ui"],
+            "steps": steps,
+        }
+
+    def _visual_step_to_dynamic_step(self, campaign: ScanCampaign, base_url: Optional[str], step: Any) -> Dict[str, Any]:
+        action = self._enum_value(step.action).upper()
+        description = step.target_description or step.value or action
+        if action == "GOTO":
+            target_url = self._resolve_visual_url(campaign, step.value or base_url or "")
+            return {
+                "step_type": "UI",
+                "action": "navigate",
+                "description": f"打开页面 {target_url}",
+                "url": target_url,
+                "value": target_url,
+            }
+        action_map = {
+            "CLICK": "click",
+            "TYPE": "type",
+            "WAIT": "wait",
+            "ASSERT": "assert",
+            "SCROLL": "scroll",
+        }
+        return {
+            "step_type": "UI",
+            "action": action_map.get(action, action.lower()),
+            "description": description,
+            "target": step.target_description,
+            "value": step.value,
+        }
+
+    def _promotion_block_reason(self, draft: ScanCampaignAssetDraft, review_choice: Optional[str] = None) -> Optional[str]:
+        metadata = dict(draft.draft_metadata or {})
+        if review_choice is not None:
+            metadata["review_choice"] = review_choice
         payload = draft.draft_payload or {}
         if draft.policy in {"forbidden", "out_of_scope"}:
             return f"policy_{draft.policy}"

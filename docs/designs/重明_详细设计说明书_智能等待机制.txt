@@ -1,4 +1,7 @@
-重明 (ChongMing) 详细设计说明书：智能等待机制 (Smart Wait Mechanism)
+重明 (ChongMing) 详细设计说明书：智能等待机制 (Smart Wait Mechanism)（已退役历史方案）
+
+Retired/Superseded：本文描述的是 RightPupil/OmniParser 旧链路中的等待机制。旧链路已移除，当前 Visual UI 执行以 Midscene Runner 和 MidsceneAdapter 为准。
+
 所属层级：执行层 (Execution Layer) - 右瞳引擎子模块
 版本：v1.0
 架构师：Chief Architect of Neural-Phoenix

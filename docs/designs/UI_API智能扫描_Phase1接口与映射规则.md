@@ -8,7 +8,7 @@
 2. AI plan 到 API / UI 资产草稿的映射规则。
 3. Campaign draft、AI plan、人工确认和资产草稿的后端接口草案。
 
-Phase 1 仍然不提供执行接口，不调用 Left Pupil / Right Pupil 执行测试。
+Phase 1 仍然不提供执行接口，不调用 Left Pupil / Midscene 执行测试。
 
 ## 2. API 候选来源标记
 
@@ -351,7 +351,7 @@ Phase 1 所有生成的 API/UI 资产都只能是 draft，不能进入真实执�
 规则：
 - 不执行测试。
 - 不自动保存 API Case / UI Case。
-- 不调用 Left Pupil / Right Pupil。
+- 不调用 Left Pupil / Midscene。
 - 只生成计划、候选项、风险项和人工复核项。
 
 ### 9.3 获取 plan

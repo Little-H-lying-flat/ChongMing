@@ -165,7 +165,7 @@ NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
 |---|---|---|
 | Design | `/api/v1/design` | `services/neural_design`、`tasks/design_tasks.py` |
 | Executions | `/api/v1/executions` | `ExecutionService`、`execute_test_cases`、`Dispatcher` |
-| Visual UI | `/api/v1/visual-ui` | `VisualUIService`、`RightPupilEngine`、`Vision` |
+| Visual UI | `/api/v1/visual-ui` | `VisualUIService`、`MidsceneAdapter`、Midscene Runner |
 | API Auto | `/api/v1/api-engine`、`/api/v1/left-pupil` | `services/left_pupil`、`LeftPupilEngine` |
 | Performance/Turbo | `/api/v1/turbo` | `TurboEngine`、Locust |
 | Phoenix | `/api/v1/phoenix` | `services/phoenix`、`tasks/phoenix_tasks.py` |

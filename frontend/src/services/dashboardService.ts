@@ -4,7 +4,7 @@ export interface KPIParams {
     total_executions: number;
     global_pass_rate: string;
     active_environments: number;
-    omniparser_status: string;
+    midscene_status: string;
     db_status: string;
 }
 

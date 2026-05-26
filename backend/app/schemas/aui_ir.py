@@ -1,6 +1,5 @@
 """
 AUI-IR (Abstract User Interface Intermediate Representation)
-右瞳引擎视觉协议定义
 
 用于描述基于视觉的 UI 自动化动作和定位策略。
 """

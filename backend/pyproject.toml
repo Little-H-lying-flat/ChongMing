@@ -93,11 +93,6 @@ dev = [
     "pre-commit>=3.6.0",
     "import-linter>=2.0",
 ]
-omniparser = [
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
-    "ultralytics>=8.0.0",
-]
 
 [project.scripts]
 chongming = "app.main:main"

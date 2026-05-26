@@ -84,10 +84,10 @@ export default function OverviewPage() {
       color: "text-violet-600"
     },
     {
-      title: "引擎神经元状态 (Engine Neuron Status)",
-      value: kpis.omniparser_status,
-      trend: "双瞳视觉解析 (Dual Pupil Vision)",
-      isUp: kpis.omniparser_status === "正常",
+      title: "视觉执行器状态 (Vision Executor Status)",
+      value: kpis.midscene_status,
+      trend: "Midscene 视觉执行 (Midscene Vision)",
+      isUp: kpis.midscene_status === "正常",
       icon: BrainCircuit,
       color: "text-cyan-600"
     },

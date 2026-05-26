@@ -30,10 +30,10 @@ Your job is to classify a test step into one of two execution engines:
 1. LEFT_PUPIL (API Engine): Handles HTTP requests, database queries, data setup, assertions on JSON responses.
     - Keywords: GET, POST, payload, status code, latency, headers.
     
-2. RIGHT_PUPIL (UI Engine): Handles Browser interactions, visual regression, DOM manipulation.
+2. MIDSCENE (UI Engine): Handles browser interactions, visual checks, screenshots, CSS selectors, and page load assertions.
     - Keywords: Click, verify text on screen, screenshot, CSS selector, page load.
-    
-Output JSON only: {"engine_type": "LEFT_PUPIL" | "RIGHT_PUPIL", "reasoning": "..."}
+
+Output JSON only: {"engine_type": "LEFT_PUPIL" | "MIDSCENE", "reasoning": "..."}
 """,
             llm_config=llm_config,
             human_input_mode="NEVER"
@@ -64,7 +64,7 @@ Output JSON only: {"engine_type": "LEFT_PUPIL" | "RIGHT_PUPIL", "reasoning": "..
             
             engine_type = result.get("engine_type", "UNKNOWN")
             # Enforce valid types
-            if engine_type not in ["LEFT_PUPIL", "RIGHT_PUPIL"]:
+            if engine_type not in ["LEFT_PUPIL", "MIDSCENE"]:
                 engine_type = "UNKNOWN"
             
             return {

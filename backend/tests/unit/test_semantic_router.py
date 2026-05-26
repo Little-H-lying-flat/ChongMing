@@ -1,14 +1,14 @@
 import pytest
 import time
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock
 
 from app.engines.master_dispatcher.router import MasterRouter, routing_cache
 
 @pytest.fixture
 def master_router():
-    router = MasterRouter()
-    # Mock the AI agent for deterministic tests
+    router = MasterRouter.__new__(MasterRouter)
+    router.ai_agent = Mock()
     router.ai_agent.analyze = AsyncMock(return_value={"engine_type": "LEFT_PUPIL", "reasoning": "Mocked AI Decision"})
     return router
 
@@ -36,7 +36,7 @@ async def test_fast_path_ui(master_router):
     decision = await master_router.route({"action": "click", "selector": "#btn-submit"})
     end = time.time()
     
-    assert decision == "RIGHT_PUPIL"
+    assert decision == "MIDSCENE"
     assert (end - start) < 0.05
     master_router.ai_agent.analyze.assert_not_called()
 
@@ -58,7 +58,7 @@ async def test_latency_and_caching(master_router):
     """L3 - Cache hit and latency benchmark test"""
     async def slow_ai(step):
         await asyncio.sleep(0.1) # Simulate network call
-        return {"engine_type": "RIGHT_PUPIL", "reasoning": "Mocked Slow AI Decision"}
+        return {"engine_type": "MIDSCENE", "reasoning": "Mocked Slow AI Decision"}
         
     master_router.ai_agent.analyze = AsyncMock(side_effect=slow_ai)
     
@@ -69,7 +69,7 @@ async def test_latency_and_caching(master_router):
     decision1 = await master_router.route(step)
     end1 = time.time()
     
-    assert decision1 == "RIGHT_PUPIL"
+    assert decision1 == "MIDSCENE"
     assert (end1 - start1) >= 0.1 # Should take at least 100ms
     master_router.ai_agent.analyze.assert_called_once()
     
@@ -78,7 +78,7 @@ async def test_latency_and_caching(master_router):
     decision2 = await master_router.route(step)
     end2 = time.time()
     
-    assert decision2 == "RIGHT_PUPIL"
+    assert decision2 == "MIDSCENE"
     assert (end2 - start2) < 0.05 # Should hit cache instantly
     # Confirm AI was NOT called a second time
     master_router.ai_agent.analyze.assert_called_once()

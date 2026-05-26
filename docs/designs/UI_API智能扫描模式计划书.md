@@ -136,7 +136,7 @@ UI + API 智能扫描模式不是一个单纯的开发功能，也不是把爬�
 
 5. 调度执行
    - Left Pupil 执行 API
-   - Right Pupil 执行 UI
+   - Midscene 执行 UI
    - Dispatcher 负责模式分发
 
 6. 结果分析
@@ -214,7 +214,7 @@ UI + API 智能扫描模式不是一个单纯的开发功能，也不是把爬�
 | Executions | 发起 Campaign 下的批量执行 |
 | Dispatcher | 按 API / UI / HYBRID 分发执行 |
 | Left Pupil | 执行 API 自动化 |
-| Right Pupil | 执行 UI 自动化 |
+| Midscene | 执行 UI 自动化 |
 | Smart Ops | 聚合失败原因、风险和修复建议 |
 | Phoenix | 后续将稳定流程固化为可复用脚本 |
 

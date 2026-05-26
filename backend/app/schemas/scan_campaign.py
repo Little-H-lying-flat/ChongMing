@@ -173,3 +173,76 @@ class PromoteAssetDraftsResponse(BaseModel):
     skipped: List[PromoteAssetDraftResult] = Field(default_factory=list)
     failed: List[PromoteAssetDraftResult] = Field(default_factory=list)
     execution_created: bool = False
+
+
+class ConfirmScanCampaignExecutionRequest(BaseModel):
+    promotion_ids: List[str] = Field(default_factory=list)
+    confirmation: str
+    mode: str = "normal"
+    engine: str = "midscene"
+    parallel: bool = False
+    max_workers: int = Field(1, ge=1, le=3)
+    env: Optional[str] = None
+
+
+class ConfirmScanCampaignExecutionResponse(BaseModel):
+    execution_created: bool
+    execution_id: str
+    status: str
+    total_cases: int
+    dashboard_url: str
+    selected_promotions: List[str]
+    tc_ids: List[str]
+    dynamic_payload_count: int = 0
+    skipped: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class SmartScanExecutionSummaryItem(BaseModel):
+    execution_id: str
+    status: str
+    total_cases: int
+    passed_cases: int = 0
+    failed_cases: int = 0
+    skipped_cases: int = 0
+    pass_rate: float = 0
+    duration_seconds: Optional[float] = None
+    dynamic_payload_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class SmartScanResultBreakdown(BaseModel):
+    api: Dict[str, int]
+    visual_ui: Dict[str, int]
+
+
+class SmartScanFailureCategory(BaseModel):
+    category: str
+    count: int
+    examples: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class SmartScanExecutionSummaryResponse(BaseModel):
+    campaign_id: str
+    plan_id: str
+    total_executions: int
+    latest_execution_id: Optional[str] = None
+    latest_status: Optional[str] = None
+    latest_created_at: Optional[datetime] = None
+    latest_updated_at: Optional[datetime] = None
+    executions: List[SmartScanExecutionSummaryItem]
+    result_breakdown: SmartScanResultBreakdown
+    failure_categories: List[SmartScanFailureCategory]
+
+
+class SmartScanReportResponse(BaseModel):
+    campaign_id: str
+    plan_id: str
+    generated_at: datetime
+    campaign: Dict[str, Any]
+    plan: Dict[str, Any]
+    review: Dict[str, Any]
+    assets: Dict[str, Any]
+    executions: Dict[str, Any]
+    recommendations: List[str]
+    markdown: str

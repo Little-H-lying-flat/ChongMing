@@ -21,7 +21,7 @@ deploy/
 
 ## Docker Compose 拓扑
 
-`docker-compose.yml` 使用 `chongming-net` bridge 网络，并定义 PostgreSQL、Redis、ChromaDB、Milvus、OmniParser、Locust、监控和前后端服务。主配置按 production-like 方式运行，不启用源码挂载或热重载；本地开发热更新使用 `docker-compose.dev.yml` 显式叠加。
+`docker-compose.yml` 使用 `chongming-net` bridge 网络，并定义 PostgreSQL、Redis、ChromaDB、Milvus、Midscene Runner、Locust、监控和前后端服务。主配置按 production-like 方式运行，不启用源码挂载或热重载；本地开发热更新使用 `docker-compose.dev.yml` 显式叠加。
 
 ```mermaid
 flowchart LR
@@ -35,7 +35,7 @@ flowchart LR
     API --> Redis[(redis :6379)]
     API --> Chroma[(chromadb :8000 internal / :8001 host)]
     API --> Milvus[(milvus :19530)]
-    API --> Omni[omniparser :7861]
+    API --> Midscene[midscene-runner :8787]
 
     Redis --> WorkerUI[worker-ui]
     Redis --> WorkerAPI[worker-api]
@@ -44,7 +44,7 @@ flowchart LR
     Redis --> Beat[celery-beat]
     Redis --> Flower[flower :5555]
 
-    WorkerUI --> Omni
+    WorkerUI --> Midscene
     WorkerAPI --> API
     WorkerTurbo --> LocustMaster[locust-master :8089]
     LocustMaster --> LocustWorker[locust-worker replicas]
@@ -62,7 +62,7 @@ flowchart LR
 |---|---:|---|---|
 | `api-gateway` | `8000` | FastAPI API 网关，挂载 `/api/v1` | PostgreSQL、Redis、ChromaDB、Milvus |
 | `frontend` | `3000` | Next.js 前端 | API Gateway |
-| `worker-ui` | 无公开端口 | UI/视觉测试执行队列 | Redis、API、OmniParser |
+| `worker-ui` | 无公开端口 | UI/视觉测试执行队列 | Redis、API、Midscene Runner |
 | `worker-api` | 无公开端口 | API 测试执行队列 | Redis、API |
 | `worker-turbo` | 无公开端口 | Turbo 性能任务队列 | Redis |
 | `worker-design` | 无公开端口 | Neural Design 需求解析队列 | Redis、ChromaDB、LLM Key |
@@ -74,7 +74,7 @@ flowchart LR
 | `milvus` | `19530`、`9091` | 缺陷知识库向量检索 | etcd、minio |
 | `etcd` | 内网 | Milvus 元数据 | 本地 volume |
 | `minio` | 内网 | Milvus 对象存储 | 本地 volume |
-| `omniparser` | `7861` | UI 视觉识别服务 | GPU 推荐 |
+| `midscene-runner` | `8787` | Visual UI 执行服务 | LLM Key |
 | `locust-master` | `8089` | Locust 控制台和 master | Locust workers |
 | `locust-worker` | 无公开端口 | 压测 worker 副本 | Locust master |
 | `prometheus` | `9090` | 指标采集 | `prometheus.yml` |
@@ -135,7 +135,7 @@ API 容器还会设置：
 - `CHROMADB_HOST=chromadb`
 - `CHROMADB_PORT=8000`（容器网络内部端口；宿主机调试端口仍是 `8001`）
 - `MILVUS_HOST=milvus`
-- `OMNIPARSER_URL=http://omniparser:8002`
+- `MIDSCENE_RUNNER_URL=http://midscene-runner:8787`
 
 ## Worker 队列
 
@@ -158,7 +158,6 @@ Compose 顶层声明的命名卷：
 - `redis_data`
 - `chromadb_data`
 - `milvus_data`
-- `omniparser_models`
 - `test_assets`
 - `recordings`
 - `reports`
@@ -173,7 +172,7 @@ Compose 顶层声明的命名卷：
 | 前端页面开发 | 本机 `cd frontend && npm run dev`，后端指向 `localhost:8000` |
 | 后端 API 开发 | 本机 `uvicorn app.main:app --reload --port 8000`，按需启动 Redis/Celery |
 | 完整链路联调 | `cd deploy && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build` |
-| 视觉 UI 调试 | 确认 OmniParser 可访问，GPU 环境优先 |
+| 视觉 UI 调试 | 确认 Midscene Runner 可访问，LLM Key 已配置 |
 | 性能压测 | 使用 Turbo API 或 Locust Web UI |
 
 ## Kubernetes
@@ -183,7 +182,7 @@ Kubernetes 清单位于 `kubernetes/chongming.yaml`。该清单仍需要单独�
 - Kubernetes 1.25+
 - 可用 StorageClass
 - Secret：数据库密码、LLM API Key 等
-- 如果启用 OmniParser GPU，集群需要 NVIDIA GPU Operator 或等效能力
+- Midscene Runner 需要可用的视觉模型 API Key
 
 基础命令：
 
@@ -220,7 +219,7 @@ docker compose -f docker-compose.yml exec api-gateway /bin/bash
 
 - 前端请求失败：检查 `NEXT_PUBLIC_API_URL`、CORS、API 是否监听 `8000`。
 - 执行任务一直 pending：检查 Celery 队列名、Redis、worker 是否消费正确队列。
-- 视觉用例失败：检查 `OMNIPARSER_URL`、OmniParser 容器日志、GPU/模型权重。
+- 视觉用例失败：检查 `MIDSCENE_RUNNER_URL`、Midscene Runner 容器日志、模型 API Key。
 - 缺陷检索失败：检查 Milvus、etcd、minio 三个服务状态。
 - 压测没有指标：检查 Locust master/worker、Turbo 生成的 test id 和 stats 路径。
 

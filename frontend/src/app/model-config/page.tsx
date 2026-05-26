@@ -46,12 +46,12 @@ const MODULE_NAMES: Record<string, string> = {
     "agent.left.red_teamer": "🔌左瞳-安全渗透师 (Red Teamer)",
     "agent.left.janitor": "🔌左瞳-数据清理工 (Janitor)",
 
-    // === 角色智能体挂载点 (Agent Mount Points) - UI执行引擎 (右瞳) ===
-    "agent.right.visual": "👁️右瞳-视觉交互专家 (Visual Expert)",
-    "agent.right.persona": "👁️右瞳-视觉意图拆解 (Persona)",
-    "agent.right.critic": "👁️右瞳-视觉审查官 (Critic)",
-    "agent.right.sherlock": "👁️右瞳-DOM推断专家 (Sherlock)",
-    "agent.right.healer": "👁️右瞳-交互纠偏师 (Healer)",
+    // === 角色智能体挂载点 (Agent Mount Points) - Visual UI / Midscene ===
+    "agent.right.visual": "Visual UI-视觉交互专家 (Visual Expert)",
+    "agent.right.persona": "Visual UI-视觉意图拆解 (Persona)",
+    "agent.right.critic": "Visual UI-视觉审查官 (Critic)",
+    "agent.right.sherlock": "Visual UI-DOM推断专家 (Sherlock)",
+    "agent.right.healer": "Visual UI-交互纠偏师 (Healer)",
 };
 
 const getModuleName = (module: string) => MODULE_NAMES[module] || module;

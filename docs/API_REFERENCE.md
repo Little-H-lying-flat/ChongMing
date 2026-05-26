@@ -4,7 +4,7 @@
 
 ChongMing (重明) 是一个下一代智能测试平台，核心能力包括：
 - **Neural Design**: 基于 LLM 的需求分析与用例生成。
-- **Right Pupil**: 视觉驱动的 UI 自动化引擎 (Visual Grounding)。
+- **Midscene Visual UI**: 视觉驱动的 UI 自动化执行能力。
 - **Left Pupil**: 协议驱动的 API 自动化引擎 (API-IR)。
 - **API Asset**: OpenAPI/Swagger 接口资产库，可生成 API Case IR v2 步骤。
 - **Turbo Engine**: 高并发性能压测引擎。
@@ -102,7 +102,7 @@ ChongMing (重明) 是一个下一代智能测试平台，核心能力包括：
 
 ---
 
-### Flow 2: Visual UI (右瞳引擎)
+### Flow 2: Visual UI (Midscene)
 
 #### 2.1 提交异步 UI 任务 (Run UI Task Async)
 **描述**: 将自然语言驱动的 UI 自动化任务投递到 Worker 队列，支持高并发。

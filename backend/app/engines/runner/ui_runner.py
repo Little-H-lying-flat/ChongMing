@@ -1,7 +1,7 @@
 """
 UI Runner.
 
-Responsible for executing low-level browser actions for Right Pupil.
+Responsible for executing low-level browser actions for Visual UI automation.
 """
 
 import asyncio

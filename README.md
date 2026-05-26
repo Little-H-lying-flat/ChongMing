@@ -1,5 +1,7 @@
 # 重明 (ChongMing)
 
+重明是一个 AI 原生自动化质量工程平台，把需求解析、接口资产、UI/API 自动化执行、性能压测、视觉回归、缺陷分析和模型治理串成一条可追踪的智能测试流水线。
+
 ## 当前版本
 
 - ChongMing 平台版本：v2.0.0
@@ -7,7 +9,75 @@
 - 前端应用版本：v0.1.1（`frontend/package.json`）
 - 当前能力状态：Smart Scan Phase 2 已支持将人工确认的 API / Visual UI 资产草稿保存为正式可编辑资产；Phase 2 不创建 Execution，不自动执行测试。
 
-重明是一个 AI 原生自动化质量工程平台，用一套前后端系统把需求解析、测试用例管理、UI/API 执行、性能压测、视觉回归、缺陷分析和模型治理串起来。当前代码采用前后端分离架构：前端是 Next.js 应用，后端是 FastAPI API 网关，异步执行依赖 Celery，核心测试能力下沉到 Services 和 Engines。
+## 项目一句话介绍
+
+面向测试工程、质量平台和 AI Agent 落地场景，重明用“AI 生成 + 人工确认 + 可执行资产沉淀”的方式，把从需求到测试执行、报告、回归治理的链路产品化。
+
+## 演示截图
+
+![Smart Scan Demo](docs/assets/smart-scan-demo.png)
+
+Smart Scan 支持从目标页面和 API 线索生成扫描 Campaign、AI 计划、人工复核项和资产草稿；当前 Phase 2 只保存正式资产，不自动创建执行记录。
+
+## 核心功能
+
+- **Neural Design 需求解析**：从 PRD、自然语言或文档中提取测试场景和用例草稿。
+- **Smart Scan 智能扫描**：统一管理 UI/API 线索、风险策略、人工复核和资产草稿确认。
+- **API Asset 接口资产库**：导入 OpenAPI/Swagger 或手工维护接口资产，并生成 API Case IR v2 step。
+- **Test Case 用例管理**：持久化 UI/API/HYBRID 用例，支撑回归执行和压测复用。
+- **Midscene 视觉 UI 自动化**：通过 Midscene Runner、Playwright 和自然语言步骤执行 UI 自动化。
+- **Left Pupil API 自动化**：解析接口依赖、发送请求、执行断言、提取变量。
+- **Turbo 性能压测**：把 API 用例转换成 Locust 压测配置，查看 RPS、失败率和 P95 等指标。
+- **Phoenix 回归治理**：把执行轨迹固化成脚本，管理基线、对比和自愈链路。
+- **Smart Ops 智能运维**：进行模型配置、Token 监控、缺陷根因分析和相似缺陷检索。
+
+## 项目亮点
+
+- **AI Native 测试闭环**：不是单点脚本工具，而是覆盖需求、设计、资产、执行、报告和治理的质量工程平台。
+- **双模态执行引擎**：UI 侧使用视觉自动化，API 侧使用结构化 IR 和依赖规划，统一由 Dispatcher 调度。
+- **安全确认边界清晰**：Smart Scan Phase 2 只生成和保存资产，真实执行留到显式授权后的执行阶段。
+- **资产可沉淀、可复用**：AI 生成结果不会停留在一次性文本，而会转成 API Auto / Visual UI 可编辑资产。
+- **工程化架构完整**：前后端分离、FastAPI 网关、Celery 异步任务、SQLAlchemy 数据模型、Docker Compose 部署和监控组件齐备。
+
+## 测试价值（给面试官看）
+
+- **提高测试设计效率**：把需求解析、风险识别和用例草稿生成前置，减少测试人员从 0 写用例的成本。
+- **降低自动化维护成本**：用 API Case IR、视觉步骤、资产库和回归基线承接 AI 输出，避免生成结果不可维护。
+- **增强执行可观测性**：Execution、Step Result、截图、报告和指标串联，方便定位失败原因和沉淀回归证据。
+- **支持多类型质量验证**：同一平台覆盖接口测试、UI 自动化、视觉回归、性能压测和缺陷分析。
+- **体现平台化测试思维**：关注的不只是“能跑脚本”，而是测试资产生命周期、风险控制、异步调度、可追踪报告和团队协作。
+
+## 快速启动
+
+### 后端
+
+推荐直接用仓库内置启动脚本，它会先拉起本地基础服务和 Midscene Runner，再启动 FastAPI：
+
+```bash
+python backend/run.py
+```
+
+如果只想单独启动后端进程，也可以在 `backend/` 目录下运行：
+
+```bash
+python run.py --no-reload
+```
+
+### 前端
+
+```bash
+cd frontend
+npm install
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api/v1 npm run dev
+```
+
+默认访问：
+
+- 前端：`http://localhost:3000`
+- 后端 API：`http://localhost:8000`
+- OpenAPI：`http://localhost:8000/docs`
+
+前端默认调用 `NEXT_PUBLIC_API_URL`；未配置时使用 `http://127.0.0.1:8000/api/v1`。
 
 ## 技术栈
 
@@ -16,10 +86,10 @@
 | 前端 | `frontend/src` | Next.js 16、React 19、TypeScript、Tailwind CSS、TanStack Query |
 | API 网关 | `backend/app/main.py`、`backend/app/api/v1` | FastAPI，统一挂载 `/api/v1` |
 | 业务服务 | `backend/app/services` | 用例、执行、环境、数据工厂、Neural Design、Phoenix、Smart Ops 等服务 |
-| 执行引擎 | `backend/app/engines` | Dispatcher、Right Pupil、Left Pupil、Turbo、Vision |
+| 执行引擎 | `backend/app/engines`、`backend/app/services/midscene_adapter.py` | Dispatcher、Midscene、Left Pupil、Turbo |
 | 异步任务 | `backend/app/worker.py`、`backend/app/tasks` | Celery worker、beat、任务队列和进度状态 |
 | 数据层 | `backend/app/models`、`backend/app/schemas` | SQLAlchemy 模型与 Pydantic 契约 |
-| 部署 | `deploy/docker-compose.yml` | API、前端、Worker、PostgreSQL、Redis、ChromaDB、Milvus、OmniParser、Locust、监控 |
+| 部署 | `deploy/docker-compose.yml` | API、前端、Worker、PostgreSQL、Redis、ChromaDB、Milvus、Midscene Runner、Locust、监控 |
 
 ## 项目结构
 
@@ -79,9 +149,9 @@ flowchart LR
 
     subgraph Engines[执行与智能引擎]
         Dispatcher[Dispatcher]
-        Right[RightPupilEngine UI]
+        Midscene[MidsceneAdapter UI]
         Left[LeftPupilEngine API]
-        Vision[Vision OmniClient SmartWaiter]
+        Vision[Midscene Runner]
         Turbo[TurboEngine Locust]
         AI[AI Client Manager]
     end
@@ -91,7 +161,7 @@ flowchart LR
         Redis[(Redis / Broker)]
         Chroma[(ChromaDB)]
         Milvus[(Milvus)]
-        Omni[OmniParser]
+        Midscene[Midscene Runner]
         Locust[Locust]
         FS[(screenshots reports traces)]
         Target[被测 Web/API]
@@ -117,12 +187,12 @@ flowchart LR
     ExecTask --> Execution
     ExecTask --> Env
     ExecTask --> Dispatcher
-    Dispatcher --> Right
+    Dispatcher --> Midscene
     Dispatcher --> Left
-    Right --> Vision
-    Vision --> Omni
+    Midscene --> Vision
+    Vision --> MidsceneRunner
     Left --> Target
-    Right --> Target
+    Midscene --> Target
     Turbo --> Locust
 
     TestCase --> DB
@@ -173,14 +243,13 @@ flowchart LR
 - 引擎入口：`backend/app/engines/dispatcher.py`
 - 作用：创建执行记录，调度 Celery 或本地后台任务，按用例类型分发到 UI/API 引擎并写回结果。
 
-### Right Pupil / 视觉 UI 自动化
+### Midscene / 视觉 UI 自动化
 
 - 前端入口：`frontend/src/app/visual-ui/page.tsx`、`frontend/src/app/visual-ui/scenario/[id]/page.tsx`
 - 后端入口：`backend/app/api/v1/endpoints/visual_ui.py`
-- 服务层：`backend/app/services/visual_ui_service.py`
-- 引擎：`backend/app/engines/right_pupil/`、`backend/app/engines/vision/`
-- 外部依赖：OmniParser、Playwright、被测 Web 页面。
-- 作用：通过视觉识别和自然语言步骤执行 UI 自动化。
+- 服务层：`backend/app/services/visual_ui_service.py`、`backend/app/services/midscene_adapter.py`
+- 外部依赖：Midscene Runner、Playwright、被测 Web 页面。
+- 作用：通过 Midscene 和自然语言步骤执行 UI 自动化。
 
 ### Left Pupil / API 自动化
 
@@ -253,8 +322,8 @@ OpenAPI/Swagger 文档或手工录入
   -> ExecutionService.create_execution 写入 PENDING
   -> 有 Celery worker 时 execute_test_cases.delay，否则 FastAPI BackgroundTasks 本地执行
   -> execute_test_cases 读取用例和环境变量，并标准化 API Case IR v2
-  -> Dispatcher 按 UI/API/HYBRID 分支执行
-  -> RightPupilEngine 调 OmniParser/Playwright，LeftPupilEngine 调目标 API
+  -> UI/HYBRID 用例交给 MidsceneAdapter，纯 API 用例交给 Dispatcher + LeftPupilEngine
+  -> Midscene Runner 执行浏览器视觉动作，LeftPupilEngine 调目标 API
   -> ExecutionService.create_step_result 写入步骤结果和截图引用
   -> ExecutionService.update_execution_status 写入最终状态
   -> 前端轮询 GET /api/v1/executions/{id} 和 GET /api/v1/executions/{id}/result
@@ -285,12 +354,16 @@ OpenAPI/Swagger 文档或手工录入
 
 ### 后端
 
+推荐直接用仓库内置启动脚本，它会先拉起本地基础服务和 Midscene Runner，再启动 FastAPI：
+
 ```bash
-cd backend
-python -m venv .venv
-source .venv/Scripts/activate
-pip install -e ".[dev]"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python backend/run.py
+```
+
+如果只想单独启动后端进程，也可以在 `backend/` 目录下运行：
+
+```bash
+python run.py --no-reload
 ```
 
 如需异步任务：
@@ -306,7 +379,7 @@ celery -A app.worker:celery beat -l INFO
 ```bash
 cd frontend
 npm install
-npm run dev
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000/api/v1 npm run dev
 ```
 
 默认访问：
@@ -326,7 +399,7 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-Compose 会启动 API、前端、多个 worker、PostgreSQL、Redis、ChromaDB、Milvus、OmniParser、Locust、Prometheus、Grafana 和 Nginx。详见 `deploy/README.md`。
+Compose 会启动 API、前端、多个 worker、PostgreSQL、Redis、ChromaDB、Milvus、Midscene Runner、Locust、Prometheus、Grafana 和 Nginx。详见 `deploy/README.md`。
 
 ## 常用校验
 

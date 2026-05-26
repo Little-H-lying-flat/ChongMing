@@ -8,13 +8,12 @@
 |---|---|---|---|
 | `module-dependency.mmd` | 模块依赖图 | 前端、API、服务层、任务层、引擎层、基础设施和外部系统 | `frontend/src`、`backend/app`、`deploy/docker-compose.yml` |
 | `sequence-testcase-execution-result.mmd` | 时序图 | 用例选择、执行创建、Celery/本地执行、Dispatcher 分支、结果持久化、前端查询 | `endpoints/executions.py`、`tasks/execution_tasks.py`、`services/execution_service.py` |
-| `sequence-health-omniparser.mmd` | 时序图 | 健康检查与 OmniParser 探针 | `endpoints/health.py`、`services/omniparser_health.py` |
+| `sequence-health-midscene.mmd` | 时序图 | 健康检查与 Midscene Runner 探针 | `endpoints/health.py`、`services/midscene_adapter.py` |
 | `sequence-neural-design-to-execution.mmd` | 时序图 | 需求解析生成场景并交给执行链路 | `endpoints/design.py`、`services/neural_design/`、`tasks/design_tasks.py` |
-| `sequence-dispatcher-branching.mmd` | 时序图 | Dispatcher 对 UI/API/HYBRID 步骤的分支执行 | `engines/dispatcher.py`、`engines/right_pupil/`、`engines/left_pupil/` |
+| `sequence-dispatcher-branching.mmd` | 时序图 | UI/HYBRID 通过 MidsceneAdapter 执行，API 通过 Dispatcher/LeftPupil 执行 | `tasks/execution_tasks.py`、`services/midscene_adapter.py`、`engines/dispatcher.py`、`engines/left_pupil/` |
 | `sequence-phoenix-compile-heal.mmd` | 时序图 | Phoenix 轨迹编译、脚本生成、自愈和回归治理 | `endpoints/phoenix.py`、`services/phoenix/`、`tasks/phoenix_tasks.py` |
 | `sequence-exception-timeout.mmd` | 异常时序图 | 步骤执行超时到失败状态落库 | `tasks/execution_tasks.py`、`services/execution_service.py` |
 | `sequence-exception-assertion-failure.mmd` | 异常时序图 | API 断言失败、错误信息和结果持久化 | `engines/left_pupil/`、`services/left_pupil/` |
-| `sequence-exception-self-heal-fallback.mmd` | 异常时序图 | UI 自愈失败后的兜底和终止 | `engines/right_pupil/agents/healer.py`、`engines/right_pupil/` |
 
 ## 当前主调用链
 
@@ -25,8 +24,8 @@ frontend/src/app/executions/page.tsx
   -> POST /api/v1/executions
   -> ExecutionService.create_execution
   -> execute_test_cases.delay 或 BackgroundTasks 本地执行
-  -> Dispatcher.execute
-  -> RightPupilEngine 或 LeftPupilEngine
+  -> UI/HYBRID: MidsceneAdapter
+  -> API: Dispatcher.execute -> LeftPupilEngine
   -> ExecutionService.create_step_result / update_execution_status
   -> GET /api/v1/executions/{id}/result
 ```
@@ -49,8 +48,8 @@ frontend/src/app/visual-ui/*
   -> /api/v1/visual-ui/cases
   -> VisualUIService
   -> /api/v1/executions
-  -> RightPupilEngine
-  -> Vision / OmniParser / Playwright
+  -> MidsceneAdapter
+  -> Midscene Runner / Playwright
 ```
 
 ### Turbo
@@ -69,8 +68,8 @@ frontend/src/app/performance 或 frontend/src/app/turbo
 
 1. 新增、删除或重命名 API 前缀。
 2. `ExecutionService`、Celery 调度或 `execute_test_cases` 的流程变化。
-3. `Dispatcher`、Right Pupil、Left Pupil、Turbo、Phoenix 的调用链变化。
-4. 健康检查、OmniParser 探针、向量库或外部服务依赖变化。
+3. `Dispatcher`、Midscene、Left Pupil、Turbo、Phoenix 的调用链变化。
+4. 健康检查、Midscene Runner 探针、向量库或外部服务依赖变化。
 5. 前端页面到后端端点的映射变化。
 
 ## 校验
@@ -92,7 +91,7 @@ python scripts/check_mermaid_diagrams.py
 
 ## Mermaid 编写约定
 
-- 节点名尽量使用真实模块名或文件名，例如 `ExecutionService`、`execute_test_cases`、`RightPupilEngine`。
+- 节点名尽量使用真实模块名或文件名，例如 `ExecutionService`、`execute_test_cases`、`MidsceneAdapter`。
 - 不在图里放过长业务文案，详细解释写到 README 或设计文档。
 - 外部系统统一放在 Infra/External 区域。
 - 如果图与代码不一致，以代码为准并立即修正文档。

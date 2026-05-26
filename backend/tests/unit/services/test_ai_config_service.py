@@ -26,7 +26,7 @@ async def test_ensure_schema_ready_creates_and_seeds_defaults(monkeypatch):
 
     modules = {record.module for record in records}
     assert len(records) >= len(DEFAULT_MODEL_MAPPING)
-    assert AIModule.AGENT_RIGHT_VISUAL.value in modules
+    assert AIModule.AGENT_NEURAL_UI_EXPERT.value in modules
     assert AIModule.AGENT_NEURAL_ADMIN.value in modules
 
     await engine.dispose()
@@ -42,11 +42,11 @@ async def test_get_model_config_updates_cache_timestamp(monkeypatch):
     AIConfigService._schema_ready = False
     AIConfigService._schema_lock = None
 
-    config = await AIConfigService.get_model_config(AIModule.AGENT_RIGHT_VISUAL)
+    config = await AIConfigService.get_model_config(AIModule.AGENT_NEURAL_UI_EXPERT)
 
-    assert config.model_id == DEFAULT_MODEL_MAPPING[AIModule.AGENT_RIGHT_VISUAL]
+    assert config.model_id == DEFAULT_MODEL_MAPPING[AIModule.AGENT_NEURAL_UI_EXPERT]
     assert AIConfigService._last_cache_update > 0
-    assert AIConfigService._config_cache[AIModule.AGENT_RIGHT_VISUAL.value].model_id == config.model_id
+    assert AIConfigService._config_cache[AIModule.AGENT_NEURAL_UI_EXPERT.value].model_id == config.model_id
 
     await engine.dispose()
 

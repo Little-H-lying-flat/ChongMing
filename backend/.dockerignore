@@ -16,9 +16,6 @@ logs
 turbo_workspace
 turbo_data
 scripts/recordings
-omniparser/models
-omniparser/weights
-omniparser/.cache
 .import_linter_cache
 .vscode
 .idea

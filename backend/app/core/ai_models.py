@@ -225,7 +225,7 @@ class AIModule(str, Enum):
     AGENT_LEFT_RED_TEAMER = "agent.left.red_teamer"
     AGENT_LEFT_JANITOR = "agent.left.janitor"
     
-    # 3. Right Pupil (UI Flow)
+    # 3. Legacy Visual UI modules (kept for existing records)
     AGENT_RIGHT_VISUAL = "agent.right.visual"
     AGENT_RIGHT_PERSONA = "agent.right.persona"
     AGENT_RIGHT_CRITIC = "agent.right.critic"
@@ -255,13 +255,6 @@ DEFAULT_MODEL_MAPPING = {
     AIModule.AGENT_LEFT_PERSONA: "gpt-5.5",
     AIModule.AGENT_LEFT_RED_TEAMER: "gpt-5.5",
     AIModule.AGENT_LEFT_JANITOR: "gpt-5.5",
-
-    # 3. Right Pupil (UI Flow)
-    AIModule.AGENT_RIGHT_VISUAL: "gpt-5.5",
-    AIModule.AGENT_RIGHT_PERSONA: "gpt-5.5",
-    AIModule.AGENT_RIGHT_CRITIC: "gpt-5.5",
-    AIModule.AGENT_RIGHT_SHERLOCK: "gpt-5.5",
-    AIModule.AGENT_RIGHT_HEALER: "gpt-5.5",
 }
 
 
@@ -272,7 +265,7 @@ ENV_MODEL_MAPPING = {
     AIModule.AGENT_NEURAL_MERGER: "MODEL_NEURAL_SCENARIO",
     AIModule.AGENT_NEURAL_API_EXPERT: "MODEL_PHOENIX_CODEGEN",
     AIModule.AGENT_LEFT_SHERLOCK: "MODEL_LEFT_PUPIL_CHAIN",
-    AIModule.AGENT_RIGHT_VISUAL: "MODEL_RIGHT_PUPIL_VL",
+    AIModule.AGENT_NEURAL_UI_EXPERT: "MODEL_VISUAL_UI_DRAFT",
 }
 
 

@@ -48,10 +48,10 @@ flowchart LR
         SData["DataFactory/DataPool/DataTemplate"]
         SDesign["services/neural_design"]
         SVisual["VisualUIService"]
+        SMidscene["MidsceneAdapter"]
         SLeft["services/left_pupil"]
         SPhoenix["services/phoenix"]
         SSmart["services/smart_ops"]
-        OmniHealth["OmniParser health service"]
     end
 
     subgraph TASK[Async Task Layer]
@@ -64,13 +64,10 @@ flowchart LR
 
     subgraph ENG[Engines]
         Dispatcher["engines/dispatcher.py"]
-        Right["RightPupilEngine"]
-        RightAgents["right_pupil agents"]
         Left["LeftPupilEngine"]
         LeftAgents["left_pupil agents"]
-        Vision["vision OmniClient\nSmartWaiter DOM SoM"]
         Turbo["TurboEngine\ncompiler runner synthesizer"]
-        Runner["runner/tc_loader.py\nrunner/ui_runner.py"]
+        Runner["runner/tc_loader.py"]
     end
 
     subgraph DATA[Data Models]
@@ -84,7 +81,7 @@ flowchart LR
         Broker[(Celery Broker)]
         Chroma[(ChromaDB)]
         Milvus[(Milvus)]
-        Omni["OmniParser service"]
+        MidsceneRunner["Midscene Runner"]
         Locust["Locust master/workers"]
         FS[(data/screenshots reports traces)]
         Target["Target Web/API"]
@@ -114,7 +111,7 @@ flowchart LR
     APIRouter --> EPDashboard
     APIRouter --> EPTasks
 
-    EPHealth --> OmniHealth
+    EPHealth --> MidsceneRunner
     EPHealth --> DBSession
     EPHealth --> Redis
     EPTestCases --> STestCase
@@ -131,6 +128,7 @@ flowchart LR
     EPEnvData --> SEnv
     EPEnvData --> SData
     EPDashboard --> SExecution
+    EPDashboard --> MidsceneRunner
     EPTasks --> Celery
 
     Config --> DBSession
@@ -150,12 +148,13 @@ flowchart LR
     SDesign --> AIClient
     SDesign --> Chroma
     SVisual --> DB
+    SMidscene --> MidsceneRunner
+    SMidscene --> Target
     SLeft --> Chroma
     SPhoenix --> AIClient
     SPhoenix --> FS
     SSmart --> AIClient
     SSmart --> Milvus
-    OmniHealth --> Omni
 
     Celery --> Broker
     Celery --> Redis
@@ -166,27 +165,23 @@ flowchart LR
     TExec --> SExecution
     TExec --> SEnv
     TExec --> Runner
+    TExec --> SMidscene
     TExec --> Dispatcher
     TDesign --> SDesign
     TPhoenix --> SPhoenix
     TScheduled --> SExecution
 
-    Dispatcher --> Right
     Dispatcher --> Left
-    Right --> RightAgents
-    Right --> Vision
-    Right --> Target
     Left --> LeftAgents
     Left --> Target
-    Vision --> Omni
     Turbo --> Locust
     Turbo --> STestCase
 
     class FEOverview,FEDesign,FEExec,FEVisual,FEAPI,FETurbo,FEPhoenix,FESmart,FEServices front;
     class APIRouter,EPHealth,EPTestCases,EPExecutions,EPDesign,EPVisual,EPApiEngine,EPTurbo,EPPhoenix,EPSmart,EPEnvData,EPDashboard,EPTasks api;
     class Config,DBSession,AIClient,Logging service;
-    class STestCase,SExecution,SEnv,SData,SDesign,SVisual,SLeft,SPhoenix,SSmart,OmniHealth service;
+    class STestCase,SExecution,SEnv,SData,SDesign,SVisual,SMidscene,SLeft,SPhoenix,SSmart service;
     class Celery,TExec,TDesign,TPhoenix,TScheduled task;
-    class Dispatcher,Right,RightAgents,Left,LeftAgents,Vision,Turbo,Runner engine;
+    class Dispatcher,Left,LeftAgents,Turbo,Runner engine;
     class Models,Schemas service;
-    class DB,Redis,Broker,Chroma,Milvus,Omni,Locust,FS,Target,LLM infra;
+    class DB,Redis,Broker,Chroma,Milvus,MidsceneRunner,Locust,FS,Target,LLM infra;

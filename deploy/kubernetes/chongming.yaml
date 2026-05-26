@@ -29,7 +29,9 @@ data:
   CHROMADB_PORT: "8000"
   MILVUS_HOST: "milvus"
   MILVUS_PORT: "19530"
-  OMNIPARSER_URL: "http://omniparser:7861"
+  MIDSCENE_RUNNER_URL: "http://midscene-runner:8787"
+  MIDSCENE_TIMEOUT_SECONDS: "120"
+  MIDSCENE_DRY_RUN: "0"
   LOG_LEVEL: "INFO"
 
 ---
@@ -616,62 +618,62 @@ spec:
   type: ClusterIP
 
 ---
-# ==================== OmniParser ====================
+# ==================== Midscene Runner ====================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: omniparser
+  name: midscene-runner
   namespace: chongming
   labels:
-    app: omniparser
+    app: midscene-runner
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: omniparser
+      app: midscene-runner
   template:
     metadata:
       labels:
-        app: omniparser
+        app: midscene-runner
     spec:
       containers:
-        - name: omniparser
-          image: chongming/omniparser:latest
+        - name: midscene-runner
+          image: node:20-alpine
+          command: ["sh", "-c", "npm install -g @midscene/cli && midscene-runner --host 0.0.0.0 --port 8787"]
           ports:
-            - containerPort: 7861
-          volumeMounts:
-            - name: omniparser-models
-              mountPath: /app/models
+            - containerPort: 8787
+          env:
+            - name: MIDSCENE_MODEL_NAME
+              value: "qwen-vl-max-latest"
+            - name: MIDSCENE_MODEL_FAMILY
+              value: "qwen2.5-vl"
+            - name: MIDSCENE_MODEL_BASE_URL
+              value: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            - name: MIDSCENE_MODEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: chongming-secrets
+                  key: QWEN_API_KEY
           resources:
             requests:
-              cpu: "2000m"
-              memory: "4Gi"
-              nvidia.com/gpu: "1"
+              cpu: "500m"
+              memory: "512Mi"
             limits:
-              cpu: "4000m"
-              memory: "8Gi"
-              nvidia.com/gpu: "1"
-      volumes:
-        - name: omniparser-models
-          persistentVolumeClaim:
-            claimName: omniparser-models-pvc
-      tolerations:
-        - key: "nvidia.com/gpu"
-          operator: "Exists"
-          effect: "NoSchedule"
+              cpu: "2000m"
+              memory: "2Gi"
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: omniparser
+  name: midscene-runner
   namespace: chongming
 spec:
   selector:
-    app: omniparser
+    app: midscene-runner
   ports:
-    - port: 7861
-      targetPort: 7861
+    - port: 8787
+      targetPort: 8787
   type: ClusterIP
 
 ---
@@ -781,20 +783,6 @@ spec:
   resources:
     requests:
       storage: 100Gi
-
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: omniparser-models-pvc
-  namespace: chongming
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: standard
-  resources:
-    requests:
-      storage: 20Gi
 
 ---
 # ==================== Ingress ====================

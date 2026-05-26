@@ -1,3 +1,5 @@
+Retired/Superseded note：本文可能包含 RightPupil/OmniParser 旧链路内容；旧链路已移除，当前 Visual UI 执行以 Midscene Runner 和 MidsceneAdapter 为准。
+
 重明 (ChongMing) 详细设计说明书：报告可视化模块 (Report Visualization Module)
 所属层级：输出层 (Output Layer) - 报告与分析
 版本：v1.0

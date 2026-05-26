@@ -65,7 +65,7 @@ async def submit_task(client, i):
         # Actually /api/v1/executions/ui/run/async in stress_test_ui.py seems to be the one.
         
         # We interpret the previous script's endpoint. 
-        # But wait, looking at `app.api.v1.api`: executing module might be under `right_pupil` or `executions`.
+        # But wait, looking at `app.api.v1.api`: execution module might be under `executions`.
         # Let's assume a generic valid endpoint for testing. 
         # Inspecting `backend/app/api/v1/endpoints/executions.py` would confirm.
         # But for now, let's hit `POST /api/v1/executions/adhoc` or similar if it exists.

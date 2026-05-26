@@ -15,7 +15,7 @@ async def main():
     print("Testing invoke_vision...")
     try:
         res = await ai_manager.invoke_vision(
-            module=AIModule.RIGHT_PUPIL_GROUNDING,
+            module=AIModule.AGENT_NEURAL_UI_EXPERT,
             prompt="Describe this image",
             image_url="https://dashscope.oss-cn-beijing.aliyuncs.com/images/dog_and_girl.jpeg"
         )

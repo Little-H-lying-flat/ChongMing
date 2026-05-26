@@ -10,10 +10,10 @@ sequenceDiagram
     participant C as Celery or BackgroundTasks
     participant T as execute_test_cases
     participant LDR as TestCaseLoader or TestCase table
+    participant MID as MidsceneAdapter
     participant D as Dispatcher
-    participant RP as RightPupilEngine
     participant LP as LeftPupilEngine
-    participant OP as OmniParser
+    participant RUN as Midscene Runner
     participant TARGET as Target Web/API
     participant FS as data/screenshots
 
@@ -66,23 +66,23 @@ sequenceDiagram
         LDR->>DB: Select TestCase when needed
         DB-->>LDR: TestCase record
         LDR-->>T: TCIR
-        T->>D: execute(tc_ir, execution_id, initial_context)
 
-        alt UI or HYBRID step
-            D->>RP: execute UI step
-            RP->>TARGET: Open page, interact, capture screenshot
-            RP->>OP: Parse screenshot or labeled image
-            OP-->>RP: Elements and visual layout
-            RP-->>D: Step result with screenshots and trace
-        else API step
-            D->>LP: execute API step
+        alt UI or HYBRID case
+            T->>MID: execute(tc_ir, initial_context)
+            MID->>RUN: Run Midscene YAML/steps
+            RUN->>TARGET: Open page, interact, capture evidence
+            RUN-->>MID: Trace, screenshots, step status
+            MID-->>T: Test case result
+        else API-only case
+            T->>D: execute(tc_ir, execution_id, initial_context)
+            D->>LP: execute(api_ir, context)
             LP->>TARGET: HTTP request
             TARGET-->>LP: HTTP response
             LP->>LP: Assert response and extract variables
             LP-->>D: Step result and variable_trace
+            D-->>T: Test case result
         end
 
-        D-->>T: Test case result
         T->>SVC: create_step_result(execution_id, tc_id, status, result)
         SVC->>FS: Offload large base64 screenshots
         SVC->>DB: Insert ExecutionStep

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.services.omniparser_health import probe_omniparser_health
+import httpx
 
 router = APIRouter()
 
@@ -28,6 +28,15 @@ class HealthResponse(BaseModel):
     services: dict
 
 
+async def check_midscene_runner() -> str:
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get(f"{settings.MIDSCENE_RUNNER_URL.rstrip('/')}/health")
+            return "ok" if response.status_code == 200 else "down"
+    except Exception:
+        return "down"
+
+
 @router.get("", response_model=HealthResponse)
 async def health_check(
     db: AsyncSession = Depends(get_db),
@@ -35,7 +44,7 @@ async def health_check(
     """
     健康检查（并行 + 缓存）
 
-    - DB / Celery / OmniParser 三项并行检查
+    - DB / Celery / Midscene Runner 三项并行检查
     - 结果缓存 5 秒，避免频繁重查
     """
     import asyncio
@@ -82,16 +91,13 @@ async def health_check(
             services["celery"] = "down"
             services["redis"] = "unknown"
 
-    async def check_omniparser():
-        if not settings.OMNIPARSER_ENABLED:
-            services["omniparser"] = "skipped"
-            return
-        services["omniparser"] = await probe_omniparser_health(settings.OMNIPARSER_URL)
+    async def check_midscene():
+        services["midscene"] = await check_midscene_runner()
 
     await asyncio.gather(
         check_db(),
         check_celery(),
-        check_omniparser(),
+        check_midscene(),
         return_exceptions=True,
     )
 

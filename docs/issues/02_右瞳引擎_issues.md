@@ -1,4 +1,6 @@
-# 右瞳引擎 (Right Pupil Engine) 开发任务
+# 右瞳引擎 (Right Pupil Engine) 开发任务（已退役）
+
+> Retired/Superseded：RightPupil/OmniParser 旧 UI 执行链路已移除，当前 Visual UI 执行以 Midscene Runner 和 `MidsceneAdapter` 为准。本文件仅保留历史任务背景，不代表当前实现。
 
 ## Epic: 右瞳引擎 UI 测试实现
 

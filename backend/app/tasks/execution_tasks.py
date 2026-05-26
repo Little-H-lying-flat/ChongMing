@@ -39,7 +39,7 @@ def execute_test_cases(
         config = config or {}
         parallel = config.get("parallel", True)
         max_workers = config.get("max_workers", 3)
-        engine = config.get("engine", "right_pupil")
+        engine = config.get("engine", "midscene")
 
         # Use dynamic payload if available
         cases_source = "Dynamic" if dynamic_payload else "DB"
@@ -127,50 +127,34 @@ def execute_test_cases(
                     return {"tc_id": tc_id, "status": "error", "error": "TC Not Found"}
                 
                 result = None
-                ui_session_started = False
 
                 try:
-                    if engine == "midscene":
+                    dataset_steps = tc_ir.steps if isinstance(tc_ir.steps, list) else []
+                    mode_str = getattr(tc_ir.mode, "value", str(tc_ir.mode))
+                    ui_needed = mode_str in ("UI", "HYBRID", "ExecutionMode.UI", "ExecutionMode.HYBRID")
+
+                    if not ui_needed:
+                        for s in dataset_steps:
+                            s_type = s.get("step_type") if isinstance(s, dict) else getattr(s, "step_type", None)
+                            if s_type == "UI":
+                                ui_needed = True
+                                break
+
+                    if ui_needed:
                         from app.services.midscene_adapter import MidsceneAdapter
 
-                        logger.info(f"[{tc_id}] Executing via MidsceneAdapter...")
+                        logger.info(f"[{tc_id}] Executing UI case via MidsceneAdapter...")
                         result = await MidsceneAdapter().execute(tc_ir, initial_context=initial_context)
                     else:
                         from app.engines.dispatcher import Dispatcher
-                        from app.engines.right_pupil import RightPupilEngine
                         from app.engines.left_pupil import LeftPupilEngine
 
-                        # Initialize Engines (Fresh Environment per TC)
-                        right_pupil = RightPupilEngine()
                         left_pupil = LeftPupilEngine()
                         dispatcher = Dispatcher()
-                        dispatcher.attach_engines(right_pupil, left_pupil)
+                        dispatcher.attach_engines(left_pupil=left_pupil)
 
-                        # Lazy Initialization: CHECK IF UI ENGINE IS NEEDED (STRICT)
-                        dataset_steps = tc_ir.steps if isinstance(tc_ir.steps, list) else []
-
-                        mode_str = getattr(tc_ir.mode, "value", str(tc_ir.mode))
-                        ui_needed = mode_str in ("UI", "HYBRID", "ExecutionMode.UI", "ExecutionMode.HYBRID")
-
-                        if not ui_needed:
-                            for s in dataset_steps:
-                                # Handle both dict and object (attribute) access
-                                s_type = s.get("step_type") if isinstance(s, dict) else getattr(s, "step_type", None)
-
-                                # Strict matching: ONLY if step_type is explicitly "UI"
-                                if s_type == "UI":
-                                    ui_needed = True
-                                    break
-
-                        if ui_needed:
-                            logger.info(f"[{tc_id}] Initializing RightPupilEngine (UI Steps Detected)...")
-                            await right_pupil.start_session(headless=True)
-                            ui_session_started = True
-                        else:
-                            logger.info(f"[{tc_id}] Skipping UI Engine (Pure API / No UI Steps)")
-
-                        async with left_pupil: # Context manager for HTTP client
-                            logger.info(f"[{tc_id}] Executing...")
+                        async with left_pupil:
+                            logger.info(f"[{tc_id}] Executing API case via Dispatcher...")
                             result = await dispatcher.execute(tc_ir, execution_id, initial_context=initial_context)
 
                 except Exception as e:
@@ -178,11 +162,7 @@ def execute_test_cases(
                     traceback.print_exc()
                     await _safe_create_step(tc_id, ExecutionStatus.ERROR, {}, 0.0, str(e))
                     return {"tc_id": tc_id, "status": "error", "error": str(e)}
-                finally:
-                    # Cleanup only if started
-                    if ui_session_started:
-                        await right_pupil.stop_session()
-                    
+
                 # Map result status to Enum
                 status_map = {
                     "passed": ExecutionStatus.PASSED,
@@ -381,25 +361,32 @@ def execute_test_cases(
 
 @shared_task(name="app.tasks.execution_tasks.execute_adhoc_task")
 def execute_adhoc_task(prompt: str, url: str):
-    """
-    执行 Ad-hoc UI 任务
-    """
+    """执行 Ad-hoc UI 任务。"""
     import asyncio
-    from app.engines.right_pupil import RightPupilEngine
+    from app.schemas.execution import ExecutionMode, TCIR
+    from app.services.midscene_adapter import MidsceneAdapter
 
-    logger.info(f"Start Ad-hoc Task: {prompt} on {url}")
-    
+    logger.info(f"Start Midscene Ad-hoc Task: {prompt} on {url}")
+
     async def run():
-        engine = RightPupilEngine()
-        logs = await engine.run_task(prompt, url)
-        return logs
+        tc_ir = TCIR(
+            id="ADHOC_MIDSCENE_UI",
+            name="Ad-hoc Midscene UI Task",
+            mode=ExecutionMode.UI,
+            steps=[
+                {"step_type": "UI", "action": "goto", "url": url, "value": url, "description": f"打开页面 {url}"},
+                {"step_type": "UI", "action": "assert", "description": prompt, "target": prompt},
+            ],
+        )
+        result = await MidsceneAdapter().execute(tc_ir)
+        return [step.details or {} for step in result.step_results]
 
     try:
         try:
             loop = asyncio.get_event_loop()
         except RuntimeError:
             loop = asyncio.new_event_loop()
-            
+
         import nest_asyncio
         nest_asyncio.apply()
         logs = loop.run_until_complete(run())

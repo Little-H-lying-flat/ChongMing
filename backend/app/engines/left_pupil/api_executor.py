@@ -296,15 +296,6 @@ class APIExecutor:
         sherlock = APISherlockAgent("接口诊断专家_Sherlock", llm_config)
         admin = autogen.UserProxyAgent("Admin", human_input_mode="NEVER", code_execution_config=False, max_consecutive_auto_reply=1)
         
-        from app.engines.right_pupil.agents.librarian import search_knowledge_base
-        autogen.agentchat.register_function(
-            search_knowledge_base,
-            caller=sherlock,
-            executor=admin,
-            name="search_knowledge_base",
-            description="Search the Swagger/OpenAPI documentation and historical bug contexts in the knowledge base."
-        )
-        
         import dataclasses
         prompt = f"""
         Original API Intent: {json.dumps(dataclasses.asdict(state['api_ir']), ensure_ascii=False)}
@@ -398,22 +389,6 @@ class APIExecutor:
         admin = autogen.UserProxyAgent("Admin", system_message="Wait for Healer to return strictly the JSON.", human_input_mode="NEVER", code_execution_config=False)
         healer = APIHealerAgent("自愈修复师_Healer", build_cfg(healer_cfg))
         persona = DataPersonaAgent("数据拟态师_Persona", build_cfg(persona_cfg))
-        
-        from app.engines.right_pupil.agents.librarian import search_knowledge_base
-        autogen.agentchat.register_function(
-            search_knowledge_base,
-            caller=healer,
-            executor=admin,
-            name="search_knowledge_base",
-            description="Search the Swagger/OpenAPI schema documentation from the knowledge base to correct payloads."
-        )
-        autogen.agentchat.register_function(
-            search_knowledge_base,
-            caller=persona,
-            executor=admin,
-            name="search_knowledge_base",
-            description="Search the database constraints or required mock data rules from the knowledge base."
-        )
         
         groupchat = autogen.GroupChat(
             agents=[admin, persona, healer],

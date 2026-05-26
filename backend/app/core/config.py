@@ -64,8 +64,7 @@ class Settings(BaseSettings):
     MODEL_NEURAL_SCENARIO: str = "qwen3-max"
     MODEL_NEURAL_CRITIC: str = "qwen3-max"
 
-    MODEL_RIGHT_PUPIL_PLANNER: str = "qwen-plus"
-    MODEL_RIGHT_PUPIL_VL: str = "qwen-vl-plus"
+    MODEL_VISUAL_UI_DRAFT: str = "qwen-plus"
 
     MODEL_LEFT_PUPIL_CHAIN: str = "qwen-plus"
     MODEL_LEFT_PUPIL_PARAM: str = "qwen-turbo"
@@ -83,11 +82,6 @@ class Settings(BaseSettings):
     # Milvus
     MILVUS_HOST: str = "localhost"
     MILVUS_PORT: str = "19530"
-
-    # OmniParser
-    OMNIPARSER_URL: str = "http://localhost:7861"
-    OMNIPARSER_ENABLED: bool = False
-    MOCK_OMNIPARSER: bool = False
 
     # Midscene Runner
     MIDSCENE_RUNNER_URL: str = "http://127.0.0.1:8787"

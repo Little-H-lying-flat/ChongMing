@@ -31,18 +31,19 @@ async def example_neural_layer():
     print(f"Token 消耗: {response.usage}")
 
 
-async def example_right_pupil_vision():
-    """右瞳引擎示例 - 视觉元素定位"""
+async def example_visual_ui_draft():
+    """Visual UI 示例 - 用例草稿生成"""
     manager = get_ai_manager()
-    
-    # 使用视觉模型定位页面元素
-    response = await manager.invoke_vision(
-        module=AIModule.RIGHT_PUPIL_GROUNDING,
-        prompt="请找到页面中的'登录'按钮，返回其位置描述和可能的选择器。",
-        image_path="screenshots/login_page.png",
+
+    response = await manager.invoke(
+        module=AIModule.AGENT_NEURAL_UI_EXPERT,
+        messages=[
+            Message(role="system", content="你是 UI 自动化测试用例设计助手。"),
+            Message(role="user", content="为登录页生成一个验证登录按钮可见的 UI 测试草稿。"),
+        ],
     )
-    
-    print(f"视觉定位结果:\n{response.content}")
+
+    print(f"Visual UI 草稿结果:\n{response.content}")
 
 
 async def example_phoenix_codegen():
@@ -146,21 +147,20 @@ class IntentParser:
         return self._parse_response(response.content)
 '''
 
-# 示例 2: 右瞳引擎 vision_planner.py
+# 示例 2: Visual UI draft_generator.py
 '''
-from app.core.ai_client import get_ai_manager, AIModule
+from app.core.ai_client import get_ai_manager, Message, AIModule
 
-class VisionPlanner:
+class VisualUIDraftGenerator:
     def __init__(self):
         self.ai = get_ai_manager()
-    
-    async def locate_element(self, screenshot_path: str, target: str) -> dict:
-        response = await self.ai.invoke_vision(
-            module=AIModule.AGENT_RIGHT_VISUAL,
-            prompt=f"找到页面中的 '{target}'，返回坐标和选择器",
-            image_path=screenshot_path,
+
+    async def generate(self, prompt: str) -> str:
+        response = await self.ai.invoke(
+            module=AIModule.AGENT_NEURAL_UI_EXPERT,
+            messages=[Message(role="user", content=prompt)],
         )
-        return self._parse_location(response.content)
+        return response.content
 '''
 
 # 示例 3: 缺陷分析 root_cause.py

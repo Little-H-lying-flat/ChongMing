@@ -8,12 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Any, Dict
 from loguru import logger
-import base64
-from urllib.parse import urlparse
 
-
-
-from app.engines.right_pupil import RightPupilEngine
 from app.engines.left_pupil import LeftPupilEngine
 
 # Import schemas from new location
@@ -22,7 +17,6 @@ from app.schemas.execution import (
     TCIR,
     StepResult,
     ExecutionResult,
-    AUIIR,
     APIIR as SchemaAPIIR
 )
 from app.engines.left_pupil import APIIR as EngineAPIIR, ExecutionResult as APIExecutionResult
@@ -35,13 +29,12 @@ class Dispatcher:
     
     职责:
     1. 解析 TC-IR 的执行模式
-    2. 将步骤路由到对应引擎 (UI → 右瞳, API → 左瞳)
+    2. 将步骤路由到对应引擎 (UI → Midscene, API → 左瞳)
     3. 管理执行上下文
     4. 收集执行轨迹
     """
     
     def __init__(self):
-        self.right_pupil: Optional[RightPupilEngine] = None
         self.left_pupil: Optional[LeftPupilEngine] = None
         self._trace_log: List[dict] = []
         
@@ -50,147 +43,11 @@ class Dispatcher:
     
     def attach_engines(
         self,
-        right_pupil: Optional[RightPupilEngine] = None,
         left_pupil: Optional[LeftPupilEngine] = None,
     ):
         """附加执行引擎"""
-        self.right_pupil = right_pupil
         self.left_pupil = left_pupil
 
-    @staticmethod
-    def _is_selector_target(target: Any) -> bool:
-        if not isinstance(target, str):
-            return False
-
-        normalized = target.strip()
-        if not normalized or normalized in {"browser", "window", "document", "page"}:
-            return False
-        if normalized.startswith(("http://", "https://")):
-            return False
-        if normalized.startswith(("#", ".", "[", "/", "(")):
-            return True
-
-        return any(marker in normalized for marker in ("[", "]", "=", "#", ".", ">", ":"))
-
-    @staticmethod
-    def _is_direct_assert_path(target: Any) -> bool:
-        return isinstance(target, str) and target.strip() in {"location.pathname", "location.href"}
-
-    def _build_direct_ui_action(
-        self,
-        *,
-        action_name: str,
-        target: Any,
-        value: Any,
-        url: Optional[str],
-    ) -> Optional[AUIIR]:
-        if action_name in {"goto", "navigate", "open", "visit"} and url:
-            return AUIIR(action_type="navigate", params={"url": url})
-
-        if not self._is_selector_target(target):
-            return None
-
-        selector = str(target).strip()
-        target_payload = {"strategy": "dom", "value": selector, "description": selector}
-
-        if action_name in {"click", "tap", "submit"}:
-            return AUIIR(action_type="click", target=target_payload)
-        if action_name in {"type", "input", "fill", "enter"} and isinstance(value, str) and value.strip():
-            return AUIIR(
-                action_type="type",
-                target=target_payload,
-                params={"text": value.strip()},
-            )
-        if action_name in {"wait", "wait_for", "wait_visible"}:
-            return AUIIR(
-                action_type="wait",
-                target=target_payload,
-                params={"timeout_ms": 5000},
-            )
-        if action_name in {"assert", "verify", "expect"}:
-            if isinstance(value, str) and value.strip():
-                return AUIIR(
-                    action_type="assert_text",
-                    target=target_payload,
-                    params={"text": value.strip()},
-                )
-            return AUIIR(action_type="assert_visible", target=target_payload)
-        return None
-
-    async def _capture_page_screenshot_b64(self) -> Optional[str]:
-        page = getattr(self.right_pupil, "page", None) if self.right_pupil else None
-        if not page:
-            return None
-        try:
-            screenshot_bytes = await page.screenshot(type="png", full_page=True)
-            return base64.b64encode(screenshot_bytes).decode("utf-8")
-        except Exception as exc:
-            logger.warning(f"Failed to capture direct UI screenshot: {exc}")
-            return None
-
-    async def _execute_direct_assert_path(self, target: str, expected: Any, description: str) -> dict:
-        page = getattr(self.right_pupil, "page", None) if self.right_pupil else None
-        if not page:
-            raise RuntimeError("RightPupil page is unavailable for direct path assertion")
-
-        current_url = page.url or ""
-        actual = urlparse(current_url).path if target == "location.pathname" else current_url
-        if str(actual) != str(expected):
-            raise AssertionError(f"Expected {target}={expected}, got {actual}")
-
-        screenshot_after = await self._capture_page_screenshot_b64()
-        page_title = await page.title()
-        screenshot_after_uri = f"data:image/png;base64,{screenshot_after}" if screenshot_after else None
-        return {
-            "success": True,
-            "error": None,
-            "screenshot": screenshot_after_uri,
-            "details": {
-                "step_name": description,
-                "step_type": "UI",
-                "action_taken": "assert_path",
-                "target_description": target,
-                "screenshot_before": None,
-                "screenshot_after": screenshot_after_uri,
-                "page_url": current_url,
-                "page_title": page_title,
-                "strategy": "direct_assert",
-            },
-        }
-
-    async def _execute_direct_ui_action(
-        self,
-        *,
-        action: AUIIR,
-        description: str,
-        target: Any,
-    ) -> dict:
-        screenshot_before = await self._capture_page_screenshot_b64()
-        result = await self.right_pupil.execute(action)
-        screenshot_after = getattr(result, "screenshot_after", None) or await self._capture_page_screenshot_b64()
-        page = getattr(self.right_pupil, "page", None)
-        page_url = page.url if page else ""
-        page_title = await page.title() if page else ""
-        screenshot_before_uri = f"data:image/png;base64,{screenshot_before}" if screenshot_before else None
-        screenshot_after_uri = f"data:image/png;base64,{screenshot_after}" if screenshot_after else None
-
-        return {
-            "success": getattr(result, "success", False),
-            "error": getattr(result, "error", None),
-            "screenshot": screenshot_after_uri,
-            "details": {
-                "step_name": description,
-                "step_type": "UI",
-                "action_taken": action.action_type,
-                "target_description": str(target or getattr(action.target, "value", "") or ""),
-                "screenshot_before": screenshot_before_uri,
-                "screenshot_after": screenshot_after_uri,
-                "page_url": page_url,
-                "page_title": page_title,
-                "strategy": getattr(action.target, "strategy", None) or "global",
-            },
-        }
-    
     async def execute(self, tc_ir: TCIR, execution_id: Optional[str] = None, initial_context: Optional[Dict[str, Any]] = None) -> ExecutionResult:
         """
         执行测试用例
@@ -354,114 +211,10 @@ class Dispatcher:
         # 使用全知中枢路由
         engine_type = await self.master_router.route(step_dict)
         
-        if engine_type == "RIGHT_PUPIL":
-            if not self.right_pupil:
-                raise RuntimeError("右瞳引擎未初始化")
-            
-            description_raw = step_dict.get("description") or step_dict.get("name") or "UI Step"
-            description = render_string(description_raw, context or {}) if isinstance(description_raw, str) else description_raw
-            url = step_dict.get("url") or None
-            if isinstance(url, str):
-                url = render_string(url, context or {})
-            action_name = str(step_dict.get("action") or step_dict.get("method") or "").strip().lower()
-            target = step_dict.get("target")
-            if isinstance(target, str):
-                target = render_string(target, context or {})
-            raw_value = step_dict.get("value")
-            value = render_string(raw_value, context or {}) if isinstance(raw_value, str) else raw_value
-            # 空字符串也视为 None
-            if url and not url.strip():
-                url = None
-            # Local UI fallback steps store the navigation target in `value`.
-            if (
-                not url
-                and isinstance(value, str)
-                and value.strip()
-                and action_name in {"goto", "navigate", "open", "visit"}
-                and (value.startswith("http://") or value.startswith("https://"))
-            ):
-                url = value.strip()
-                
-            # Fallback: 如果没有 url 但 target 是一个 URL 字符串 (常见于从非标准 IR 转换的情况)
-            if not url and isinstance(target, str) and (target.startswith("http://") or target.startswith("https://")):
-                url = target
-            if (
-                action_name in {"type", "input", "fill", "enter"}
-                and isinstance(value, str)
-                and ("${" in value or "{{" in value)
-            ):
-                raise ValueError(f"Unresolved execution variable in UI step value: {value}")
-            if action_name in {"type", "input", "fill", "enter"} and isinstance(value, str) and value.strip():
-                description = f"{description}：{value.strip()}"
-            elif action_name in {"assert_text", "verify_text", "expect_text"} and isinstance(value, str) and value.strip():
-                description = f"{description}（期望值：{value.strip()}）"
+        if engine_type == "MIDSCENE":
+            raise RuntimeError("UI steps must be executed through MidsceneAdapter before Dispatcher")
 
-            direct_action = self._build_direct_ui_action(
-                action_name=action_name,
-                target=target,
-                value=value,
-                url=url,
-            )
-            if direct_action:
-                logger.info(
-                    f"⚡ [Dispatcher] Direct UI step via selector/global action: {action_name}, "
-                    f"target={target}, url={url}"
-                )
-                return await self._execute_direct_ui_action(
-                    action=direct_action,
-                    description=description,
-                    target=target or url,
-                )
-
-            if (
-                action_name in {"assert", "verify", "expect"}
-                and self._is_direct_assert_path(target)
-                and isinstance(value, str)
-                and value.strip()
-            ):
-                logger.info(f"⚡ [Dispatcher] Direct UI assert path: target={target}, expected={value}")
-                return await self._execute_direct_assert_path(str(target), value.strip(), description)
-
-            logger.info(f"👁️ [Dispatcher] UI 步骤 → AI Agent: {description}, URL: {url}")
-
-            # 调用单步 AI 执行
-            ui_result = await self.right_pupil.execute_step(description, url or "", execution_id or "")
-            
-            # 构建截图 data URI
-            screenshot_data_uri = None
-            raw_ss = ui_result.get("screenshot_after")
-            if raw_ss:
-                if not raw_ss.startswith("data:"):
-                    screenshot_data_uri = f"data:image/png;base64,{raw_ss}"
-                else:
-                    screenshot_data_uri = raw_ss
-            
-            screenshot_before_uri = None
-            raw_ss_before = ui_result.get("screenshot_before")
-            if raw_ss_before:
-                if not raw_ss_before.startswith("data:"):
-                    screenshot_before_uri = f"data:image/png;base64,{raw_ss_before}"
-                else:
-                    screenshot_before_uri = raw_ss_before
-            
-            return {
-                "success": ui_result.get("success", False),
-                "error": ui_result.get("error"),
-                "screenshot": screenshot_data_uri,
-                "details": {
-                    "step_name": description,
-                    "step_type": "UI",
-                    "action_taken": ui_result.get("action_taken"),
-                    "target_description": ui_result.get("target_description"),
-                    "screenshot_before": screenshot_before_uri,
-                    "screenshot_after": screenshot_data_uri,
-                    "page_url": ui_result.get("page_url"),
-                    "page_title": ui_result.get("page_title"),
-                    "strategy": ui_result.get("strategy", "ai_vision"),
-                },
-            }
-        
-        elif engine_type == "LEFT_PUPIL":
+        if engine_type == "LEFT_PUPIL":
             if not self.left_pupil:
                 raise RuntimeError("左瞳引擎未初始化")
             

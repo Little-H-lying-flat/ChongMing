@@ -21,8 +21,9 @@ x-backend-env: &backend-env
   CHROMADB_PORT: 8000
   MILVUS_HOST: milvus
   MILVUS_PORT: 19530
-  OMNIPARSER_URL: http://omniparser:8002
-  OMNIPARSER_ENABLED: ${OMNIPARSER_ENABLED:-false}
+  MIDSCENE_RUNNER_URL: ${MIDSCENE_RUNNER_URL:-http://midscene-runner:8787}
+  MIDSCENE_TIMEOUT_SECONDS: ${MIDSCENE_TIMEOUT_SECONDS:-120}
+  MIDSCENE_DRY_RUN: ${MIDSCENE_DRY_RUN:-0}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
 # ==================== 卷配置 ====================
@@ -31,7 +32,6 @@ volumes:
   redis_data:
   chromadb_data:
   milvus_data:
-  omniparser_models:
   test_assets:
   recordings:
   reports:
@@ -109,6 +109,7 @@ services:
       - redis
       - postgres
       - api-gateway
+      - midscene-runner
     networks:
       - chongming-net
 
@@ -305,38 +306,20 @@ services:
 
   # ========== AI 服务 ==========
 
-  # OmniParser (视觉识别)
-  omniparser:
-    profiles:
-      - omniparser
-    build:
-      context: ../backend/omniparser
-      dockerfile: Dockerfile
-    image: chongming/omniparser:latest
-    container_name: chongming-omniparser
+  # Midscene Runner (视觉 UI 执行)
+  midscene-runner:
+    image: node:20-alpine
+    container_name: chongming-midscene-runner
     restart: unless-stopped
-    dns:
-      - 8.8.8.8
-      - 223.5.5.5
+    working_dir: /app
+    command: sh -c "npm install -g @midscene/cli && midscene-runner --host 0.0.0.0 --port 8787"
     ports:
-      - "7861:8002"
-    volumes:
-      - omniparser_models:/app/weights
+      - "8787:8787"
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
-      - CUDA_LAUNCH_BLOCKING=1
-      - TORCH_USE_CUDA_DSA=1
-    shm_size: '4gb'
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-        reservations:
-          memory: 4G
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [ gpu ]
+      - MIDSCENE_MODEL_NAME=${MIDSCENE_MODEL_NAME:-qwen-vl-max-latest}
+      - MIDSCENE_MODEL_FAMILY=${MIDSCENE_MODEL_FAMILY:-qwen2.5-vl}
+      - MIDSCENE_MODEL_API_KEY=${MIDSCENE_MODEL_API_KEY:-}
+      - MIDSCENE_MODEL_BASE_URL=${MIDSCENE_MODEL_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
     networks:
       - chongming-net
 

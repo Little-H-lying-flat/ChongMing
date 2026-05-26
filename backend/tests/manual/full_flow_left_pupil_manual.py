@@ -96,10 +96,9 @@ async def run_left_pupil_full_flow():
         print(f"📚 [Mock] Tool Called: search_knowledge_base(query='{query}')")
         return "The correct API endpoint for creating a product is `/products/add`. There is no `add_malformed_url`."
         
-    with patch('app.engines.right_pupil.agents.librarian.search_knowledge_base', new=mock_search_knowledge_base):
+    with patch('app.services.left_pupil.planner.search_knowledge_base', new=mock_search_knowledge_base):
         executor = APIExecutor(timeout=15.0)
-        
-        # We no longer need 'with patch' so just flat indentation
+
         async with executor:
             # Login Step
             print(f"\n▶️ Executing Step 1: {planned_irs[0].method} {planned_irs[0].url}")

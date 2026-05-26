@@ -292,7 +292,7 @@ visual_ws_manager = VisualWSManager()
 @router.websocket("/ws/{execution_id}")
 async def visual_live_trace_ws(websocket: WebSocket, execution_id: str):
     """
-    WebSocket 端点，前端用来实时接收 RightPupil Engine 执行过程中的带框截图 (Labeled Image)
+    WebSocket 端点，前端用来实时接收 Visual UI / Midscene 执行过程中的事件
     """
     await visual_ws_manager.connect(websocket, execution_id)
     try:

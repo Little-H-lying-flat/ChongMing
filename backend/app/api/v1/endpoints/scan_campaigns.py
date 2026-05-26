@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,6 +13,8 @@ from app.schemas.scan_campaign import (
     AssetDraftResponse,
     AssetPromotionListResponse,
     AssetPromotionResponse,
+    ConfirmScanCampaignExecutionRequest,
+    ConfirmScanCampaignExecutionResponse,
     GenerateAssetDraftsRequest,
     GenerateAssetDraftsResponse,
     GeneratePlanRequest,
@@ -26,7 +28,10 @@ from app.schemas.scan_campaign import (
     ScanCampaignPlanResponse,
     ScanCampaignResponse,
     ScanCampaignUpdate,
+    SmartScanExecutionSummaryResponse,
+    SmartScanReportResponse,
 )
+from app.api.v1.endpoints.executions import ExecutionRequest, create_and_dispatch_execution
 from app.services.scan_campaign_service import (
     ScanCampaignConflictError,
     ScanCampaignNotFoundError,
@@ -260,6 +265,97 @@ async def promote_scan_campaign_asset_drafts(
         skipped=[PromoteAssetDraftResult(**item) for item in result["skipped"]],
         failed=[PromoteAssetDraftResult(**item) for item in result["failed"]],
         execution_created=bool(result["execution_created"]),
+    )
+
+
+@router.get(
+    "/{campaign_id}/plans/{plan_id}/execution-summary",
+    response_model=SmartScanExecutionSummaryResponse,
+)
+async def get_scan_campaign_execution_summary(
+    campaign_id: str,
+    plan_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        return SmartScanExecutionSummaryResponse(**await service.get_execution_summary(campaign_id, plan_id))
+    except ScanCampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get(
+    "/{campaign_id}/plans/{plan_id}/report",
+    response_model=SmartScanReportResponse,
+)
+async def get_scan_campaign_report(
+    campaign_id: str,
+    plan_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        return SmartScanReportResponse(**await service.build_smart_scan_report(campaign_id, plan_id))
+    except ScanCampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post(
+    "/{campaign_id}/plans/{plan_id}/confirm-execution",
+    response_model=ConfirmScanCampaignExecutionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def confirm_scan_campaign_execution(
+    campaign_id: str,
+    plan_id: str,
+    payload: ConfirmScanCampaignExecutionRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    service = _service(db)
+    try:
+        prepared = await service.build_phase3_execution_payload(
+            campaign_id,
+            plan_id,
+            promotion_ids=payload.promotion_ids,
+            confirmation=payload.confirmation,
+            mode=payload.mode,
+            engine=payload.engine,
+            parallel=payload.parallel,
+            max_workers=payload.max_workers,
+            env=payload.env,
+        )
+        execution = await create_and_dispatch_execution(
+            ExecutionRequest(
+                tc_ids=prepared["tc_ids"],
+                mode=payload.mode,
+                engine=payload.engine,
+                parallel=payload.parallel,
+                max_workers=payload.max_workers,
+                env=payload.env,
+                dynamic_payload=prepared["dynamic_payload"],
+            ),
+            background_tasks,
+            db,
+            config_overrides=prepared["config_overrides"],
+        )
+    except ScanCampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ScanCampaignConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ScanCampaignValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return ConfirmScanCampaignExecutionResponse(
+        execution_created=True,
+        execution_id=execution.execution_id,
+        status=execution.status,
+        total_cases=execution.total_cases,
+        dashboard_url=execution.dashboard_url,
+        selected_promotions=prepared["selected_promotions"],
+        tc_ids=prepared["tc_ids"],
+        dynamic_payload_count=len(prepared["dynamic_payload"]),
+        skipped=prepared["skipped"],
     )
 
 

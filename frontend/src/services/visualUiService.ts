@@ -48,7 +48,7 @@ interface VisualExecutionStep {
 export interface VisualExecutionPayload {
     tc_ids: string[];
     mode: 'normal';
-    engine: 'right_pupil' | 'midscene';
+    engine: 'midscene';
     parallel: false;
     dynamic_payload: Array<{
         id: string;
@@ -82,7 +82,7 @@ export const buildVisualExecutionPayload = (visualCase: Pick<VisualUseCase, 'id'
     return {
         tc_ids: [visualCase.id],
         mode: 'normal',
-        engine: 'right_pupil',
+        engine: 'midscene',
         parallel: false,
         dynamic_payload: [{
             id: visualCase.id,

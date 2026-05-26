@@ -244,7 +244,7 @@ export default function VisualUIPage() {
         if (isExecuting) return;
 
         setIsExecuting(true);
-        toast.success("准备调度引擎... (Preparing engine...)", { description: "正在推送到 Midscene 视觉执行器 (Pushing to Midscene visual executor)" });
+        toast.success("准备调度引擎... (Preparing engine...)", { description: "正在推送到统一的 Midscene 视觉执行器 (Pushing to the unified Midscene visual executor)" });
         try {
             const execRes = await visualUiService.executeAdhoc(buildVisualExecutionPayload({
                 id: activeCaseId,

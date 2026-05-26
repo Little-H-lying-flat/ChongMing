@@ -40,7 +40,6 @@ Imports flow **top-down only**. A module may import from any layer at or below i
 
 | Exception | Reason |
 |-----------|--------|
-| `services.phoenix.visual_comparator` → `engines.vision.omni_client` | Future AI-VRT feature; OmniClient calls are currently commented out. |
 
 ## Enforcement
 

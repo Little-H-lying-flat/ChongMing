@@ -1,0 +1,27 @@
+sequenceDiagram
+    autonumber
+    participant FE as Frontend VisionStatus
+    participant API as /api/v1/health
+    participant DB as Database
+    participant R as Redis/Broker
+    participant MS as Midscene Runner /health
+
+    FE->>API: GET /health
+    alt cache hit
+        API-->>FE: cached response
+    else cache miss
+        par DB probe
+            API->>DB: SELECT 1
+            DB-->>API: ok/down
+        and Celery/Redis probe
+            API->>R: ping broker redis
+            R-->>API: ok/down
+        and Midscene probe
+            API->>MS: GET /health
+            MS-->>API: 200 -> ok / else down
+        end
+        API->>API: aggregate service states
+        API-->>FE: healthy/degraded + services.midscene
+    end
+
+    FE->>FE: render Midscene visual executor status
